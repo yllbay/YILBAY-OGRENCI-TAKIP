@@ -1,0 +1,3 @@
+v0.4.1
+- Program kapandıktan ve RAPOR_GONDER ZIP oluşturulduktan sonra eski PROGRAMI_CALISTIR.bat konsol penceresini otomatik kapatan tek-seferlik başlatıcı migrasyonu eklendi.
+- Kalıcı ana paketin yeniden indirilmesi gerekmez.
