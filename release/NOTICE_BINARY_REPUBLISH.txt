@@ -1,0 +1,1 @@
+v0.4.1 binary republish is being corrected using Git blob base64 encoding.
