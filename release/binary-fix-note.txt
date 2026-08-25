@@ -1,1 +1,0 @@
-v0.4.1 binary package is stored as a Git binary blob; this note marks the repair commit.
