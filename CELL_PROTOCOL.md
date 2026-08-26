@@ -80,6 +80,7 @@ Bir güncellemede CI şunları zorunlu kontrol eder:
 10. SHA-256 paket doğrulaması.
 11. Responsive UI sözleşmesi: farklı viewport genişlik/yüksekliklerinde ana içerik ve modal taşma koruması.
 12. DPI/ölçek uyumluluğu: arayüz sabit fiziksel piksel varsayımı yapmamalıdır.
+13. Ödev değerlendirmesinde cevap anahtarı kanıt sözleşmesi: cevap anahtarı bulunamadı veya belirsizse otomatik sonuç kesinleştirilemez.
 
 Bunlardan biri başarısızsa `release/latest.json` güncellenmez.
 
@@ -93,6 +94,7 @@ Bunlardan biri başarısızsa `release/latest.json` güncellenmez.
 - Ana yerleşimi yalnız sabit piksel genişlik/yükseklik varsayımına bağlamak yasaktır.
 - Kullanıcının ekran çözünürlüğü veya Windows DPI ölçeklendirmesi nedeniyle erişilemeyen buton, modal veya ana içerik bırakmak yasaktır.
 - YILBAY ana uygulama penceresini kiosk/F11 tipi gerçek fullscreen modunda zorla açmak yasaktır.
+- Cevap anahtarı kanıtı olmadan AI'nin doğru/yanlış sayısını kesin sonuç gibi otomatik kaydetmesi yasaktır.
 
 ## 8. Ekran çözünürlüğü / DPI / viewport uyumluluk protokolü
 YILBAY, çalıştırıldığı cihazın kullanılabilir ekran alanına otomatik uyum sağlamalıdır.
@@ -119,9 +121,30 @@ Kalıcı `PROGRAMI_CALISTIR.bat` çalıştırıldığında:
 - Maksimize açılış responsive tasarımın yerine geçmez; uygulama her çözünürlükte ayrıca uyumlu olmalıdır.
 - PowerShell yalnız Node bootstrap'ı başlatmak için kullanılır; `ExecutionPolicy Bypass` veya PowerShell script tabanlı ana çalışma yolu kullanılmaz.
 
-## 10. Sürüm politikası
+## 10. PDF içi cevap anahtarı protokolü
+Bir kaynak PDF'nin cevap anahtarı ayrı dosya olmak zorunda değildir. Ödev analiz motoru şu kaynakları desteklemelidir:
+- öğretmenin elle girdiği cevap anahtarı,
+- ayrı Drive cevap anahtarı PDF'si (`__CEVAP.pdf`),
+- testin bulunduğu aynı sayfanın üst veya alt kısmındaki cevap anahtarı,
+- testten sonraki sayfanın üst veya alt kısmındaki cevap anahtarı,
+- kaynak PDF'nin son sayfalarında bulunan cevap anahtarı,
+- son sayfalarda test adlarıyla toplu verilen cevap anahtarları.
+
+Zorunlu güvenlik kuralları:
+- Ayrı/manuel anahtar varsa öncelikli kesin referanstır.
+- Ayrı anahtar yoksa kaynak PDF içinde cevap anahtarı aranır.
+- Toplu cevap anahtarında test başlığı/kaynak başlığı ile doğru blok eşleştirilmelidir.
+- AI her analizde `answerKeyFound`, `answerKeySource`, `answerKeyConfidence` ve kısa `answerKeyEvidence` döndürmelidir.
+- Geçerli gömülü kaynak tipleri: `embedded_same_page`, `embedded_adjacent_page`, `embedded_end_pages`.
+- `answerKeySource=none` veya `ambiguous` ise sonuç öğretmen kontrolüne gider.
+- Gömülü cevap anahtarı güveni 0.75'in altındaysa otomatik kesinleştirme yapılmaz.
+- Öğrencinin kendi işaretleri cevap anahtarı olarak yorumlanamaz.
+- Cevap anahtarı arama ve cevap anahtarı kanıt doğrulama davranışları ayrı mikro-hücreler olmalıdır.
+
+## 11. Sürüm politikası
 - v0.8.0: modül-seviyesi hücresel mimari geçişi.
 - **v0.8.1: her üst-seviye işlevi ayrı dosyaya ayıran mikro-hücre mimarisi.**
 - v0.8.1 sonrasında bütün yeni geliştirmeler doğrudan mikro-hücre protokolüne göre yapılır.
 - v0.9.5 ve sonrası: ekran çözünürlüğü/DPI/viewport uyumluluğu kalıcı UI sözleşmesidir.
 - v0.9.6 ve sonrası: YILBAY ana penceresi kiosk/fullscreen değil, normal Windows çerçeveli maksimize pencere olarak açılır.
+- v0.9.8 ve sonrası: PDF içindeki gömülü/toplu cevap anahtarları güven kanıtı ile desteklenir.
