@@ -3,6 +3,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { parse } from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
 await import(pathToFileURL(path.resolve('release_build/v0.11.0/frontfix_v0110.mjs')).href);
+await import(pathToFileURL(path.resolve('release_build/v0.11.0/backfix_v0110.mjs')).href);
 const ROOT='/tmp/yilbay0110';
 const cellsRoot=path.join(ROOT,'cells','micro');
 function slug(s){return String(s||'statement').replace(/[^A-Za-z0-9_$-]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase()||'statement'}
