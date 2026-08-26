@@ -1,65 +1,95 @@
-# YILBAY Hücresel Geliştirme Protokolü
+# YILBAY Mikro-Hücresel Geliştirme Protokolü
 
 Bu protokol proje için zorunlu geliştirme standardıdır.
 
-## 1. Temel kural
-Her bağımsız davranış veya işlev kendi geliştirme hücresinde tutulur. Bir değişiklik yalnızca ilgili hücrede yapılır. Başka hücreler, değişiklik için zorunlu bir arayüz sözleşmesi değişmediği sürece düzenlenmez.
+## 1. Değişmez temel kural
+**Her bağımsız kullanıcı işlevi / davranışı = ayrı geliştirme dosyası = ayrı mikro-hücre.**
 
-## 2. Hücre özellikleri
-Her hücre:
-- tek sorumluluk taşır,
-- benzersiz bir hücre kimliğine sahiptir,
-- bağımlılıklarını manifestte açıklar,
-- kendi sözdizimi/statik testinden geçer,
-- tam uygulama smoke testinden bağımsız olarak da doğrulanabilir,
-- başka hücrenin iç durumuna gizli şekilde bağlanamaz.
+Bir işlev değiştirildiğinde yalnızca o işlevin hücresi değiştirilir. İlgisiz bir işlevin kaynak dosyasına dokunulmaz. Yeni modül ilk günden mikro-hücrelere ayrılarak oluşturulur.
 
-## 3. Geliştirme ve runtime ayrımı
-`source/current/cells/` gerçek geliştirme kaynağıdır.
+Örnekler:
+- öğrenci ekleme ayrı hücre,
+- öğrenci düzenleme ayrı hücre,
+- öğrenci silme ayrı hücre,
+- PDF büyütme ayrı hücre,
+- PDF küçültme ayrı hücre,
+- PDF döndürme ayrı hücre,
+- ödev dosyası seçme ayrı hücre,
+- AI ödev analizi ayrı hücre,
+- öğretmen onayı ayrı hücre,
+- tekrar sinyali ayrı hücre,
+- YouTube arama ayrı hücre,
+- OpenAI bağlantı testi ayrı hücre.
 
-Dağıtılan `app/public/app.js` ve `app/server.js`, hücrelerin sabit sırada otomatik birleştirilmiş runtime bundle'larıdır. Runtime bundle doğrudan elle düzenlenmez.
+## 2. Mikro-hücre özellikleri
+Her mikro-hücre:
+- tek bir üst-seviye davranış/sorumluluk taşır,
+- benzersiz dosya adına sahiptir,
+- bağımlılıklarını ortak sözleşmeler üzerinden kullanır,
+- tek başına sözdizimi testinden geçer,
+- bundle oluşturma sırasında sabit sırada yüklenir,
+- başka hücrenin iç uygulamasını kopyalamaz,
+- başka hücreyi güncellemek zorunda bırakacak gizli yan etki oluşturmamalıdır.
 
-Bir özellik değiştirildiğinde yalnızca ilgili hücre düzenlenir; CI hücrelerden bundle üretir, test eder ve paketler.
+## 3. Ortak çekirdek istisnası
+Salt ortak altyapı tanımları (`core/store`, ortak UI yardımcıları, API istemci tabanı, tasarım tokenları) ortak çekirdek hücrelerinde tutulabilir. Ancak kullanıcıya ait ayrı eylemler ortak çekirdek içine gömülemez.
 
-## 4. Hücre sınıfları
-- `frontend/core`: veri deposu, ortak UI, bootstrap
-- `frontend/pages`: ekranlar
-- `frontend/features`: buton/işlem davranışları
-- `frontend/services`: API istemcileri
-- `backend/core`: HTTP/runtime
-- `backend/services`: OpenAI, maliyet, planlayıcı, homework vision, YouTube
-- `backend/routes`: endpoint yönlendirme
-- `design-system`: ortak font, renk, spacing, button/table/form standartları
+## 4. Geliştirme ve runtime ayrımı
+`source/current/cells/micro/` gerçek JavaScript geliştirme kaynağıdır.
 
-## 5. Yeni özellik protokolü
-Yeni modül doğrudan monolitik dosyaya eklenmez.
+- `cells/micro/frontend/`: ön yüz mikro-hücreleri
+- `cells/micro/backend/`: arka uç mikro-hücreleri
+- `cells/micro-cell-manifest.json`: yükleme sırası ve hücre envanteri
+- `cells/design-system/`: ortak saf görsel sistem
 
-Örnek:
-- PDF küçültme: `cells/frontend/features/pdf/zoom-out.cell.js`
-- PDF büyütme: `cells/frontend/features/pdf/zoom-in.cell.js`
-- PDF sayfa döndürme: `cells/frontend/features/pdf/rotate.cell.js`
+Dağıtılan:
+- `app/public/app.js`
+- `app/server.js`
 
-Her yeni özellik kendi hücresi + manifest kaydı + hücre testi ile oluşturulur.
+dosyaları **elle düzenlenmez**. Bunlar mikro-hücrelerin manifest sırasıyla otomatik birleştirilmiş runtime bundle'larıdır.
+
+## 5. Yeni modül protokolü
+Yeni bir modül önce işlev envanterine ayrılır, sonra her işlev ayrı hücre olarak yazılır.
+
+Örnek PDF modülü:
+```
+cells/micro/frontend/pdf/
+  zoom-in.cell.js
+  zoom-out.cell.js
+  rotate-left.cell.js
+  rotate-right.cell.js
+  crop.cell.js
+  next-page.cell.js
+  previous-page.cell.js
+  selection.cell.js
+```
+
+Tek bir `pdf.cell.js` içine bütün davranışların yazılması yasaktır.
 
 ## 6. Değişiklik izolasyonu
-Bir hücre değiştirildiğinde CI şunları zorunlu kontrol eder:
-1. Hücre sözdizimi.
-2. Hücre manifest bütünlüğü.
-3. Bundle yeniden üretimi.
-4. Tam uygulama statik testleri.
-5. Gerçek `/health` smoke testi.
-6. Güvenlik kontrolleri.
-7. SHA-256 paket doğrulaması.
+Bir güncellemede CI şunları zorunlu kontrol eder:
+1. Değiştirilen mikro-hücrenin sözdizimi.
+2. Tüm mikro-hücrelerin sözdizimi.
+3. Her JS mikro-hücresinde tek üst-seviye davranış sözleşmesi.
+4. Mikro-hücre manifest bütünlüğü.
+5. Runtime bundle'ın yalnızca manifestten yeniden üretilmesi.
+6. Tam uygulama statik testleri.
+7. Gerçek `/health` smoke testi.
+8. Kritik API endpoint smoke testleri.
+9. Güvenlik kontrolleri.
+10. SHA-256 paket doğrulaması.
 
-Bu kontroller geçmeden `release/latest.json` güncellenmez.
+Bunlardan biri başarısızsa `release/latest.json` güncellenmez.
 
 ## 7. Yasaklar
-- Yeni büyük monolitik dosya oluşturmak yasaktır.
+- Yeni monolitik özellik dosyası oluşturmak yasaktır.
+- Bir dosyada ilgisiz iki kullanıcı işlevi birleştirmek yasaktır.
 - İlgisiz hücreyi aynı özellik değişikliğinde düzenlemek yasaktır.
-- Hücreler arası kopyala-yapıştır iş mantığı yasaktır.
-- Runtime bundle'ı elle düzenlemek yasaktır.
+- Hücreler arası iş mantığı kopyalamak yasaktır.
+- Runtime bundle'ı doğrudan elle düzenlemek yasaktır.
 - Test geçmeden release yayınlamak yasaktır.
 
 ## 8. Sürüm politikası
-Hücresel mimariye geçiş sürümü: `v0.8.0`.
-Bundan sonraki bütün geliştirmeler bu protokole göre yapılacaktır.
+- v0.8.0: modül-seviyesi hücresel mimari geçişi.
+- **v0.8.1: her üst-seviye işlevi ayrı dosyaya ayıran mikro-hücre mimarisi.**
+- v0.8.1 sonrasında bütün yeni geliştirmeler doğrudan mikro-hücre protokolüne göre yapılır.
