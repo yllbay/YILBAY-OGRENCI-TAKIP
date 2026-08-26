@@ -1,5 +1,3 @@
-
-
 function readSecrets(){
   const stored=readStoredSecrets();
   const envKey=String(process.env.OPENAI_API_KEY||"").trim();
@@ -9,3 +7,5 @@ function readSecrets(){
   else if(manual){ openaiApiKey=manual; openaiApiSource="manual"; }
   return {...stored,openaiApiKey,openaiApiSource,credentialTarget:OPENAI_CREDENTIAL_TARGET,credentialDiagnostic:{method:"disabled-environment-mode",found:false,userMatch:false,targetMatched:false}};
 }
+
+

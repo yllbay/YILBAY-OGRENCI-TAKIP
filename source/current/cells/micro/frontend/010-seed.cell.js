@@ -1,5 +1,3 @@
-
-
 const seed={
  students:[{id:1,name:"Bilgehan Özdurak",grade:"12",target:"YKS",registeredAt:"2026-08-26",courseEndDate:"2027-06-01",weeklyStudyDays:6,dailyMinutes:120,aiAutoPlan:true,courses:["TYT Matematik","Problemler","Türkçe"],levels:{"TYT Matematik":"Orta","Problemler":"Orta-Zor","Türkçe":"Orta"}}],
  curriculum:{
@@ -20,3 +18,5 @@ const seed={
  ],
  threshold:70
 };
+
+

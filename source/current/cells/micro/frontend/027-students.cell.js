@@ -1,0 +1,5 @@
+function students(){
+ const actions=`<button class="btn primary" onclick="studentModal()">+ Yeni Öğrenci</button>`;
+ const rows=db.students.map(s=>`<tr><td><button class="navlink" onclick="openProfile(${s.id})">${s.name}</button><div class="cell-sub">${s.target||"Hedef belirtilmedi"}</div></td><td>${s.grade||"—"}</td><td>${(s.courses||[]).length}</td><td>${(s.courses||[]).map(c=>`<span class="badge neutral">${c}: ${s.levels?.[c]||"Orta"}</span>`).join(" ")||"—"}</td><td><div class="toolbar-group"><button class="btn ghost small" onclick="editStudent(${s.id})">Düzenle</button><button class="btn danger small" onclick="deleteStudent(${s.id})">Sil</button></div></td></tr>`).join("");
+ shell(`${pageHead("Öğrenciler","Öğrenci profillerini, ders seçimlerini ve kaynak seviyelerini yönetin.",actions)}${db.students.length?tableWrap(`<table><thead><tr><th>Öğrenci</th><th>Sınıf</th><th>Ders Sayısı</th><th>Ders / Seviye</th><th>İşlemler</th></tr></thead><tbody>${rows}</tbody></table>`):emptyState("Henüz öğrenci yok","Yeni öğrenci ekleyerek koçluk takibini başlatın.")}`,'students')
+}

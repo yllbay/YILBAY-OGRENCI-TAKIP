@@ -1,5 +1,3 @@
-
-
 function load(){try{
  const current=localStorage.getItem(STORAGE);
  if(current) return normalizeDb(JSON.parse(current));
@@ -21,3 +19,5 @@ function load(){try{
  if(old){const migrated=normalizeDb(JSON.parse(old)); localStorage.setItem(STORAGE,JSON.stringify(migrated)); return migrated;}
  return normalizeDb(structuredClone(seed))
 }catch{return normalizeDb(structuredClone(seed))}}
+
+

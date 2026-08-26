@@ -1,5 +1,3 @@
-
-
 function normalizeDb(x){
  x.assignments??=[];
  x.weeklyPlans??={};
@@ -10,3 +8,5 @@ function normalizeDb(x){
  x.threshold??=70;
  return x
 }
+
+

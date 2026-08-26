@@ -1,5 +1,3 @@
-
-
 function writeSecrets(next){
   const clean={
     openaiApiKey:String(next.openaiApiKey||"").trim(),
@@ -11,3 +9,5 @@ function writeSecrets(next){
   fs.writeFileSync(secretFile,JSON.stringify(clean,null,2),"utf8");
   return clean;
 }
+
+

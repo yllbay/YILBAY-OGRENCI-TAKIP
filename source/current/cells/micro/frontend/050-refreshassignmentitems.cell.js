@@ -1,0 +1,1 @@
+window.refreshAssignmentItems=()=>{const k=q("akind").value,items=k==="PDF Kaynak"?db.resources:db.exams;q("aitem").innerHTML=items.map(x=>`<option value="${x.id}">${x.title} — ${x.course} / ${x.topic}</option>`).join("")}
