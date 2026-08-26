@@ -1,0 +1,1 @@
+window.deleteAssignment=id=>{const x=db.assignments.find(a=>Number(a.id)===Number(id));if(!x||!confirm('Bu atama listeden silinsin mi? Akademik sonuçlar ve AI analiz geçmişi korunur.'))return;db.assignments=db.assignments.filter(a=>Number(a.id)!==Number(id));save();assignments()}
