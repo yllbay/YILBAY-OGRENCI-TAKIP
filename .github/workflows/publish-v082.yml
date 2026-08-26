@@ -61,21 +61,18 @@ jobs:
           const m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
           if(m.version!=='0.9.9'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
           for(const e of [...m.frontend,...m.backend]){const s=fs.readFileSync(root+'/'+e.file,'utf8');const a=parse(s,{ecmaVersion:'latest',sourceType:'script'});if(a.body.length!==1||a.body[0].type!==e.nodeType)throw new Error(e.file)}
-          const modal=m.frontend.find(x=>x.name==='assignmentModal');
-          const refresh=m.frontend.find(x=>x.name==='refreshAssignmentItems');
-          const add=m.frontend.find(x=>x.name==='addAssignment');
+          const modal=m.frontend.find(x=>x.name==='assignmentModal'),refresh=m.frontend.find(x=>x.name==='refreshAssignmentItems'),add=m.frontend.find(x=>x.name==='addAssignment');
           if(!modal||!refresh||!add)throw new Error('assignment cells missing');
           const db={students:[{id:1,name:'Test'}],resources:[{id:11,title:'PDF Test',course:'LGS Matematik',topic:'Mutlak Değer'}],exams:[],assignments:[]};
-          const els={};let html='';
-          const ctx={db,window:{},q:id=>els[id],modal:s=>{html=s;els.akind={value:'PDF Kaynak'};els.aitem={innerHTML:''};els.astudent={value:'1'}},alert:m=>{throw new Error('alert '+m)},Date,save:()=>{},closeModal:()=>{},assignments:()=>{}};vm.createContext(ctx);
+          const els={};const ctx={db,q:id=>els[id],modal:s=>{els.akind={value:'PDF Kaynak'};els.aitem={innerHTML:''};els.astudent={value:'1'}},alert:m=>{throw new Error('alert '+m)},Date,save:()=>{},closeModal:()=>{},assignments:()=>{}};ctx.window=ctx;vm.createContext(ctx);
           vm.runInContext(fs.readFileSync(root+'/'+refresh.file,'utf8'),ctx);
           vm.runInContext(fs.readFileSync(root+'/'+modal.file,'utf8'),ctx);
           vm.runInContext(fs.readFileSync(root+'/'+add.file,'utf8'),ctx);
-          ctx.window.assignmentModal();
+          ctx.assignmentModal();
           if(!els.aitem.innerHTML.includes('PDF Test')||!els.aitem.innerHTML.includes('value="11"'))throw new Error('PDF list not initialized');
-          els.aitem.value='11';ctx.window.addAssignment();
+          els.aitem.value='11';ctx.addAssignment();
           if(db.assignments.length!==1||db.assignments[0].sourceId!==11||db.assignments[0].kind!=='PDF Kaynak')throw new Error('PDF assignment failed');
-          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
+          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
           if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||b!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
           const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('launch regression');
           console.log('PDF ASSIGNMENT OK',m.counts);
