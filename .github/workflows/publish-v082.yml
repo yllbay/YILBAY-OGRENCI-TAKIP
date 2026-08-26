@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.10.3/**'
+      - 'release_build/v0.10.4/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,24 +20,23 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.10.2 source
+      - name: Copy verified v0.10.3 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay0103 /tmp/microtools
-          cp -a source/current /tmp/yilbay0103
-          test "$(cat /tmp/yilbay0103/app/VERSION | tr -d '\r\n')" = "0.10.2"
+          rm -rf /tmp/yilbay0104 /tmp/microtools
+          cp -a source/current /tmp/yilbay0104
+          test "$(cat /tmp/yilbay0104/app/VERSION | tr -d '\r\n')" = "0.10.3"
 
-      - name: Patch deep homework reasoning and source routing
+      - name: Patch assignment question scope
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.3/patch_cells_v0103.mjs
-          grep -q 'function resolveStudentHomeworkFile' /tmp/yilbay0103/app/server.js
-          grep -q 'function homeworkReasoningInstruction' /tmp/yilbay0103/app/server.js
-          grep -q 'EL YAZISI ÇÖZÜM ANALİZİ PROTOKOLÜ' /tmp/yilbay0103/app/server.js
-          grep -q 'homeworkSource' /tmp/yilbay0103/app/public/app.js
-          grep -q 'Çözüm Yaklaşımı ve Hatalar' /tmp/yilbay0103/app/public/app.js
+          node release_build/v0.10.4/patch_cells_v0104.mjs
+          grep -q 'function homeworkAssignmentScopeInstruction' /tmp/yilbay0104/app/server.js
+          grep -q 'function validateHomeworkAssignmentScope' /tmp/yilbay0104/app/server.js
+          grep -q 'matchedQuestionNumbers' /tmp/yilbay0104/app/server.js
+          grep -q 'Atama Soru Kapsamı' /tmp/yilbay0104/app/public/app.js
 
       - name: Install AST parser
         shell: bash
@@ -50,43 +49,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.3/microcellularize.mjs
+          node release_build/v0.10.4/microcellularize.mjs
 
-      - name: Strict homework routing and reasoning tests
+      - name: Strict assignment scope tests
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import fs from 'fs';import vm from 'vm';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay0103',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.version!=='0.10.3'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
+          const root='/tmp/yilbay0104',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
+          if(m.version!=='0.10.4'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
           for(const e of [...m.frontend,...m.backend]){const s=fs.readFileSync(root+'/'+e.file,'utf8'),a=parse(s,{ecmaVersion:'latest',sourceType:'script'});if(a.body.length!==1||a.body[0].type!==e.nodeType)throw new Error(e.file)}
-          const resolver=m.backend.find(x=>x.name==='resolveStudentHomeworkFile'),reason=m.backend.find(x=>x.name==='homeworkReasoningInstruction'),toggle=m.frontend.find(x=>x.name==='toggleHomeworkSource'),driveId=m.frontend.find(x=>x.name==='driveFileIdFromInput');
-          if(!resolver||!reason||!toggle||!driveId)throw new Error('new micro cells missing');
-          let driveCalls=0;const ctx={driveDownloadAnalysisFile:async id=>{driveCalls++;return {base64:'DRIVE',mimeType:'application/pdf'}}};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+resolver.file,'utf8'),ctx);
-          let r=await ctx.resolveStudentHomeworkFile({studentFileSource:'local',fileData:'LOCAL',mimeType:'application/pdf',fileName:'x.pdf'});if(r.source!=='local'||r.base64!=='LOCAL'||r.driveUsed||driveCalls!==0)throw new Error('local route touched Drive');
-          r=await ctx.resolveStudentHomeworkFile({studentFileSource:'drive',studentDriveFileId:'abc123456789'});if(r.source!=='drive'||!r.driveUsed||driveCalls!==1)throw new Error('drive route failed');
-          const rctx={};vm.createContext(rctx);vm.runInContext(fs.readFileSync(root+'/'+reason.file,'utf8'),rctx);const txt=rctx.homeworkReasoningInstruction();for(const k of ['firstErrorStep','errorCategory','betterApproach','learningObjective','reasoningProfile'])if(!txt.includes(k))throw new Error('reasoning contract '+k);
-          const didctx={};vm.createContext(didctx);vm.runInContext(fs.readFileSync(root+'/'+driveId.file,'utf8'),didctx);if(didctx.driveFileIdFromInput('https://drive.google.com/file/d/ABCdef_123456789/view')!=='ABCdef_123456789')throw new Error('drive link parse');
+          const ins=m.backend.find(x=>x.name==='homeworkAssignmentScopeInstruction'),val=m.backend.find(x=>x.name==='validateHomeworkAssignmentScope');if(!ins||!val)throw new Error('scope cells missing');
+          const ctx={};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+ins.file,'utf8'),ctx);vm.runInContext(fs.readFileSync(root+'/'+val.file,'utf8'),ctx);
+          const txt=ctx.homeworkAssignmentScopeInstruction();for(const k of ['basılı/orijinal soru numaralarını','matchedQuestionNumbers','kırpma sırası'])if(!txt.includes(k))throw new Error('instruction '+k);
+          let r=ctx.validateHomeworkAssignmentScope({assignmentMatchFound:true,assignmentMatchConfidence:.9,matchedQuestionNumbers:[1,2,3,4],needsTeacherReview:false,autoFinalize:true},4);if(!r.assignmentMatchFound||r.needsTeacherReview||r.matchedQuestionCount!==4)throw new Error('valid scope');
+          r=ctx.validateHomeworkAssignmentScope({assignmentMatchFound:true,assignmentMatchConfidence:.9,matchedQuestionNumbers:[1,2,2,3],needsTeacherReview:false,autoFinalize:true},4);if(r.assignmentMatchFound||!r.needsTeacherReview||r.assignmentScopeDuplicateCount!==1)throw new Error('duplicate guard');
+          r=ctx.validateHomeworkAssignmentScope({assignmentMatchFound:true,assignmentMatchConfidence:.9,matchedQuestionNumbers:Array.from({length:42},(_,i)=>i+1),needsTeacherReview:false,autoFinalize:true},20);if(r.assignmentMatchFound||!r.needsTeacherReview||r.assignmentScopeCountVerified)throw new Error('42 vs 20 guard');
           const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||b!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
-          if(!b.includes('studentFileSource==="drive"&&resourceContext?.driveFileId')||!b.includes('studentFileSource==="drive"&&resourceContext?.answerKeyDriveFileId'))throw new Error('live Drive gate missing');
-          if(!f.includes('Bu bilgisayardan')||!f.includes('Google Drive')||!f.includes('Çözüm Yaklaşımı ve Hatalar'))throw new Error('frontend contract');
+          if(!b.includes('studentFileSource==="drive"&&resourceContext?.driveFileId'))throw new Error('local Drive gate regression');
+          if(!b.includes('firstErrorStep')||!b.includes('reasoningProfile'))throw new Error('deep reasoning regression');
           const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('launcher regression');
-          console.log('DEEP HOMEWORK ROUTING OK',m.counts);
+          console.log('ASSIGNMENT SCOPE OK',m.counts);
           NODE
-          node --check /tmp/yilbay0103/app/public/app.js
-          node --check /tmp/yilbay0103/app/server.js
-          node /tmp/yilbay0103/app/tests.js
+          node --check /tmp/yilbay0104/app/public/app.js
+          node --check /tmp/yilbay0104/app/server.js
+          node /tmp/yilbay0104/app/tests.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay0103/app/server.js >/tmp/v0103_server.log 2>/tmp/v0103_server.err &
+          PORT=43127 node /tmp/yilbay0104/app/server.js >/tmp/v0104_server.log 2>/tmp/v0104_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0103_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
-          grep -q '"version":"0.10.3"' /tmp/v0103_health.json
+          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0104_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
+          grep -q '"version":"0.10.4"' /tmp/v0104_health.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -95,14 +93,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.10.3.zip
-          (cd /tmp/yilbay0103 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.3.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.10.3.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.10.4.zip
+          (cd /tmp/yilbay0104 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.4.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.10.4.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
-          {"version":"0.10.3","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.3.zip","sha256":"$SHA"}
+          {"version":"0.10.4","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.4.zip","sha256":"$SHA"}
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay0103 source/current
+          cp -a /tmp/yilbay0104 source/current
 
       - name: Commit verified release
         shell: bash
@@ -110,6 +108,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.10.3.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.10.3 deep homework analysis [skip ci]'
+          git add release/YILBAY_APP_v0.10.4.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.10.4 assignment scope [skip ci]'
           git push origin main
