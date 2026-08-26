@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_staging/v0.6.2/**'
       - '.github/workflows/publish-v062.yml'
 
 permissions:
@@ -19,84 +18,141 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify and normalize staged parts
+      - name: Build v0.6.2 from verified v0.6.1
         shell: bash
         run: |
           set -euo pipefail
+          test -f release/YILBAY_APP_v0.6.1.zip
+          rm -rf /tmp/yilbay062
+          mkdir -p /tmp/yilbay062/src
+          unzip -q release/YILBAY_APP_v0.6.1.zip -d /tmp/yilbay062/src
           python - <<'PY'
           from pathlib import Path
-          import hashlib
-          root=Path('release_staging/v0.6.2')
-          expected={
-            'part00.txt':'dbf29fc445be999cde7b877fc96be6fcd4a1df919fbd9e4e7c2a0c8e8116f317',
-            'part01.txt':'aa6e9fce85257a3d5d71586ffc9edb43ef31d224d083b08c4436c97f3a1ff9bf',
-            'part02.txt':'9cb8379cb199820cf360a5c0d6a465a1457f29bf50faf6d612a8cecc24186c17',
-            'part03.txt':'18bef8f8692cfa5e054ee70824848b767ca363cf6c2857cb7653403c9e76638c',
-            'part04.txt':'1080d4981c93f15120eaf6d763ff20edcff1742f6b581826bd91b1f45c510c58'
-          }
-          def sha(b): return hashlib.sha256(b).hexdigest()
-          for name,want in expected.items():
-            p=root/name
-            b=p.read_bytes()
-            if sha(b)==want:
-              print(name,'OK',len(b)); continue
-            fixed=None
-            if len(b)>0:
-              for i in range(len(b)):
-                c=b[:i]+b[i+1:]
-                if sha(c)==want:
-                  fixed=c; print(name,'AUTO_REPAIRED_REMOVE_INDEX',i); break
-            if fixed is None:
-              raise SystemExit(f'{name} hash mismatch and no safe one-byte repair matched')
-            p.write_bytes(fixed)
+          root=Path('/tmp/yilbay062/src')
+          server=root/'app/server.js'
+          s=server.read_text(encoding='utf-8')
+          old='''function readSecrets(){\n  try{return JSON.parse(fs.readFileSync(secretFile,"utf8"))}catch{return {}}\n}\n'''
+          new=r'''const OPENAI_CREDENTIAL_TARGET="YILBAY-OPENAI-API-HOME";
+const OPENAI_CREDENTIAL_USERNAME="YILBAY-DEVELOPMENT-HOME";
+let credentialCache={at:0,value:null};
+function readStoredSecrets(){
+  try{return JSON.parse(fs.readFileSync(secretFile,"utf8"))}catch{return {}}
+}
+function readWindowsCredential(target=OPENAI_CREDENTIAL_TARGET){
+  if(process.platform!=="win32") return null;
+  const now=Date.now();
+  if(now-credentialCache.at<30000) return credentialCache.value;
+  const ps=`$ErrorActionPreference='Stop'
+$src=@'
+using System;
+using System.Runtime.InteropServices;
+public static class YilbayCredNative {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public struct CREDENTIAL {
+    public UInt32 Flags; public UInt32 Type; public IntPtr TargetName; public IntPtr Comment;
+    public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+    public UInt32 CredentialBlobSize; public IntPtr CredentialBlob; public UInt32 Persist;
+    public UInt32 AttributeCount; public IntPtr Attributes; public IntPtr TargetAlias; public IntPtr UserName;
+  }
+  [DllImport("advapi32.dll", EntryPoint="CredReadW", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern bool CredRead(string target, UInt32 type, UInt32 reservedFlag, out IntPtr credentialPtr);
+  [DllImport("advapi32.dll", SetLastError=true)]
+  public static extern void CredFree(IntPtr credentialPtr);
+}
+'@
+Add-Type -TypeDefinition $src -ErrorAction SilentlyContinue
+$p=[IntPtr]::Zero
+if(-not [YilbayCredNative]::CredRead('${target.replace(/'/g,"''")}',1,0,[ref]$p)){ exit 3 }
+try {
+  $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[type][YilbayCredNative+CREDENTIAL])
+  $user=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.UserName)
+  $bytes=New-Object byte[] $c.CredentialBlobSize
+  if($c.CredentialBlobSize -gt 0){ [Runtime.InteropServices.Marshal]::Copy($c.CredentialBlob,$bytes,0,$c.CredentialBlobSize) }
+  $secret=[Text.Encoding]::Unicode.GetString($bytes).Trim([char]0)
+  [pscustomobject]@{username=$user;secret=$secret} | ConvertTo-Json -Compress
+} finally { [YilbayCredNative]::CredFree($p) }`;
+  try{
+    const encoded=Buffer.from(ps,"utf16le").toString("base64");
+    const out=cp.execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-EncodedCommand",encoded],{encoding:"utf8",windowsHide:true,timeout:5000,stdio:["ignore","pipe","ignore"]}).trim();
+    const parsed=JSON.parse(out||"null");
+    const value=parsed&&parsed.secret?{username:String(parsed.username||""),secret:String(parsed.secret||"")} : null;
+    credentialCache={at:now,value};
+    return value;
+  }catch{
+    credentialCache={at:now,value:null};
+    return null;
+  }
+}
+function readSecrets(){
+  const stored=readStoredSecrets();
+  const cred=readWindowsCredential();
+  const envKey=String(process.env.OPENAI_API_KEY||"").trim();
+  const manual=String(stored.openaiApiKey||"").trim();
+  let openaiApiKey="",openaiApiSource="none";
+  if(cred?.secret && (!OPENAI_CREDENTIAL_USERNAME || cred.username===OPENAI_CREDENTIAL_USERNAME)){
+    openaiApiKey=cred.secret; openaiApiSource="windows-credential-manager";
+  }else if(envKey){ openaiApiKey=envKey; openaiApiSource="environment"; }
+  else if(manual){ openaiApiKey=manual; openaiApiSource="manual"; }
+  return {...stored,openaiApiKey,openaiApiSource,credentialTarget:OPENAI_CREDENTIAL_TARGET};
+}
+'''
+          if old not in s: raise SystemExit('readSecrets anchor missing')
+          s=s.replace(old,new,1)
+          s=s.replace('openai:{configured:!!s.openaiApiKey,model:s.openaiModel||"gpt-5.6-luna"}', 'openai:{configured:!!s.openaiApiKey,model:s.openaiModel||"gpt-5.6-luna",source:s.openaiApiSource||"none",credentialTarget:OPENAI_CREDENTIAL_TARGET}',1)
+          s=s.replace('version:"0.6.1"','version:"0.6.2"',1)
+          s=s.replace('b=await readJson(req,128*1024),old=readSecrets()','b=await readJson(req,128*1024),old=readStoredSecrets()',1)
+          s=s.replace('READY 0.6.1','READY 0.6.2',1)
+          server.write_text(s,encoding='utf-8')
+
+          app=root/'app/public/app.js'
+          a=app.read_text(encoding='utf-8')
+          a=a.replace('const STORAGE="yilbay_mvp_061";', 'const STORAGE="yilbay_mvp_062";\nconst PREV_STORAGE_061="yilbay_mvp_061";',1)
+          anchor=''' const current=localStorage.getItem(STORAGE);\n if(current) return normalizeDb(JSON.parse(current));\n'''
+          repl=anchor+''' const p61=localStorage.getItem(PREV_STORAGE_061);\n if(p61){const migrated=normalizeDb(JSON.parse(p61));localStorage.setItem(STORAGE,JSON.stringify(migrated));return migrated;}\n'''
+          if anchor not in a: raise SystemExit('storage migration anchor missing')
+          a=a.replace(anchor,repl,1)
+          oldcard='''<div class="card integration-card"><div class="integration-head"><div><div class="cell-title">OpenAI</div><div class="cell-sub">Planlama + ödev vision analizi</div></div><span class="badge ${s.openai.configured?"good":"mid"}">${s.openai.configured?"Bağlı":"Anahtar gerekli"}</span></div><div class="integration-meta">Model: <b>${s.openai.model}</b></div></div>'''
+          newcard='''<div class="card integration-card"><div class="integration-head"><div><div class="cell-title">OpenAI</div><div class="cell-sub">Planlama + ödev vision analizi</div></div><span class="badge ${s.openai.configured?"good":"mid"}">${s.openai.configured?"Bağlı":"Anahtar gerekli"}</span></div><div class="integration-meta">Model: <b>${s.openai.model}</b><br>Kaynak: <b>${s.openai.source==="windows-credential-manager"?"Windows Kimlik Bilgileri Yöneticisi":s.openai.source==="environment"?"Ortam değişkeni":s.openai.source==="manual"?"Manuel ayar":"Yok"}</b>${s.openai.source==="windows-credential-manager"?` · ${s.openai.credentialTarget}`:""}</div></div>'''
+          if oldcard not in a: raise SystemExit('integration card anchor missing')
+          a=a.replace(oldcard,newcard,1)
+          app.write_text(a,encoding='utf-8')
+
+          (root/'VERSION').write_text('0.6.2\n',encoding='utf-8')
+          (root/'README.md').write_text('''# YILBAY Öğrenci Takip — v0.6.2\n\n- OpenAI API anahtarı Windows Kimlik Bilgileri Yöneticisi Genel Kimlik Bilgisi kaydından otomatik okunur.\n- Hedef: `YILBAY-OPENAI-API-HOME`\n- Beklenen kullanıcı adı: `YILBAY-DEVELOPMENT-HOME`\n- Parola alanındaki değer yalnızca bellekte OpenAI API anahtarı olarak kullanılır.\n- Anahtar `api_secrets.json`, log veya rapor ZIP dosyasına kopyalanmaz.\n- Öncelik: Windows Credential Manager → `OPENAI_API_KEY` → manuel ayar.\n- Entegrasyon ekranında anahtarın kaynağı gösterilir; anahtarın kendisi gösterilmez.\n''',encoding='utf-8')
           PY
 
-      - name: Rebuild exact ZIP from staged base64
+      - name: Validate patched application
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release /tmp/yilbay062
-          cat release_staging/v0.6.2/part00.txt \
-              release_staging/v0.6.2/part01.txt \
-              release_staging/v0.6.2/part02.txt \
-              release_staging/v0.6.2/part03.txt \
-              release_staging/v0.6.2/part04.txt > /tmp/yilbay062/package.b64
-          base64 --decode /tmp/yilbay062/package.b64 > release/YILBAY_APP_v0.6.2.zip
+          grep -q 'YILBAY-OPENAI-API-HOME' /tmp/yilbay062/src/app/server.js
+          grep -q 'YILBAY-DEVELOPMENT-HOME' /tmp/yilbay062/src/app/server.js
+          grep -q 'windows-credential-manager' /tmp/yilbay062/src/app/server.js
+          node --check /tmp/yilbay062/src/app/server.js
+          node --check /tmp/yilbay062/src/app/public/app.js
+          node /tmp/yilbay062/src/app/tests.js
 
-      - name: Verify SHA256
+      - name: Build ZIP and calculate SHA256
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED='bd982fcfc33f586569ad2045936a0ca380949ba8f026cf0852bc0101d20d02f1'
-          ACTUAL="$(sha256sum release/YILBAY_APP_v0.6.2.zip | awk '{print $1}')"
-          echo "Expected: $EXPECTED"
-          echo "Actual:   $ACTUAL"
-          test "$ACTUAL" = "$EXPECTED"
-
-      - name: Validate ZIP and application code
-        shell: bash
-        run: |
-          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.6.2.zip
+          cd /tmp/yilbay062/src
+          zip -q -r "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.6.2.zip" .
+          cd "$GITHUB_WORKSPACE"
           unzip -t release/YILBAY_APP_v0.6.2.zip
-          rm -rf /tmp/yilbay062/extract
-          mkdir -p /tmp/yilbay062/extract
-          unzip -q release/YILBAY_APP_v0.6.2.zip -d /tmp/yilbay062/extract
-          test -f /tmp/yilbay062/extract/app/server.js
-          test -f /tmp/yilbay062/extract/app/public/app.js
-          grep -q 'YILBAY-OPENAI-API-HOME' /tmp/yilbay062/extract/app/server.js
-          grep -q 'windows-credential-manager' /tmp/yilbay062/extract/app/server.js
-          node --check /tmp/yilbay062/extract/app/server.js
-          node --check /tmp/yilbay062/extract/app/public/app.js
-          node /tmp/yilbay062/extract/app/tests.js
+          SHA="$(sha256sum release/YILBAY_APP_v0.6.2.zip | awk '{print $1}')"
+          echo "V062_SHA=$SHA" >> "$GITHUB_ENV"
+          echo "v0.6.2 SHA256: $SHA"
 
       - name: Write updater manifest
         shell: bash
         run: |
-          cat > release/latest.json <<'JSON'
+          cat > release/latest.json <<JSON
           {
             "version": "0.6.2",
             "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.6.2.zip",
-            "sha256": "bd982fcfc33f586569ad2045936a0ca380949ba8f026cf0852bc0101d20d02f1"
+            "sha256": "$V062_SHA"
           }
           JSON
 
@@ -107,9 +163,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add release/YILBAY_APP_v0.6.2.zip release/latest.json
-          if git diff --cached --quiet; then
-            echo 'Release already published.'
-            exit 0
-          fi
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Publish verified v0.6.2 release [skip ci]'
           git push origin main
