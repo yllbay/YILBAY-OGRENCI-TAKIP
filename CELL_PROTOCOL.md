@@ -92,6 +92,7 @@ Bunlardan biri başarısızsa `release/latest.json` güncellenmez.
 - Test geçmeden release yayınlamak yasaktır.
 - Ana yerleşimi yalnız sabit piksel genişlik/yükseklik varsayımına bağlamak yasaktır.
 - Kullanıcının ekran çözünürlüğü veya Windows DPI ölçeklendirmesi nedeniyle erişilemeyen buton, modal veya ana içerik bırakmak yasaktır.
+- YILBAY ana uygulama penceresini kiosk/F11 tipi gerçek fullscreen modunda zorla açmak yasaktır.
 
 ## 8. Ekran çözünürlüğü / DPI / viewport uyumluluk protokolü
 YILBAY, çalıştırıldığı cihazın kullanılabilir ekran alanına otomatik uyum sağlamalıdır.
@@ -106,14 +107,16 @@ Zorunlu kurallar:
 - Tablolar veri kaybetmeden kendi kapsayıcısı içinde yatay kayabilmelidir; tüm sayfanın kontrolsüz yatay taşması engellenmelidir.
 - Modal pencereler viewport dışına taşmamalı; içerikleri kendi içinde kaydırılabilmelidir.
 - Buton ve form alanları erişilebilir minimum tıklama alanını korumalıdır.
-- Ekran boyutu çalışma sırasında değişirse (tam ekran, pencere boyutu, ekran taşıma, DPI değişimi) viewport profili yeniden hesaplanmalıdır.
+- Ekran boyutu çalışma sırasında değişirse (pencere boyutu, ekran taşıma, DPI değişimi) viewport profili yeniden hesaplanmalıdır.
 - Viewport profilini hesaplamak ve resize olayını dinlemek ayrı mikro-hücreler olmalıdır.
 
 ## 9. Başlatma görünümü protokolü
 Kalıcı `PROGRAMI_CALISTIR.bat` çalıştırıldığında:
 - PowerShell/başlatıcı penceresi maksimize açılır.
-- YILBAY uygulama penceresi tam ekran/maksimize açılır.
-- Tam ekran açılış responsive tasarımın yerine geçmez; uygulama her çözünürlükte ayrıca uyumlu olmalıdır.
+- YILBAY uygulama penceresi **normal Windows pencere çerçevesi korunarak maksimize** açılır.
+- YILBAY uygulamasında başlık çubuğu ve Windows görev çubuğu görünür kalmalıdır.
+- `--start-maximized` kullanılabilir; `--start-fullscreen`, F11 veya kiosk davranışı kullanılmaz.
+- Maksimize açılış responsive tasarımın yerine geçmez; uygulama her çözünürlükte ayrıca uyumlu olmalıdır.
 - PowerShell yalnız Node bootstrap'ı başlatmak için kullanılır; `ExecutionPolicy Bypass` veya PowerShell script tabanlı ana çalışma yolu kullanılmaz.
 
 ## 10. Sürüm politikası
@@ -121,3 +124,4 @@ Kalıcı `PROGRAMI_CALISTIR.bat` çalıştırıldığında:
 - **v0.8.1: her üst-seviye işlevi ayrı dosyaya ayıran mikro-hücre mimarisi.**
 - v0.8.1 sonrasında bütün yeni geliştirmeler doğrudan mikro-hücre protokolüne göre yapılır.
 - v0.9.5 ve sonrası: ekran çözünürlüğü/DPI/viewport uyumluluğu kalıcı UI sözleşmesidir.
+- v0.9.6 ve sonrası: YILBAY ana penceresi kiosk/fullscreen değil, normal Windows çerçeveli maksimize pencere olarak açılır.
