@@ -1,0 +1,123 @@
+name: Publish v0.8.2 AST micro-cell architecture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release_build/v0.8.2/**'
+      - '.github/workflows/publish-v082.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Copy verified v0.8.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/yilbay082 /tmp/microtools
+          cp -a source/current /tmp/yilbay082
+          test -s /tmp/yilbay082/app/public/app.js
+          test -s /tmp/yilbay082/app/server.js
+
+      - name: Install build-only AST parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/microtools
+          npm install --prefix /tmp/microtools --no-audit --no-fund acorn@8
+
+      - name: AST split every top-level behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          node release_build/v0.8.2/microcellularize.mjs
+          cat /tmp/yilbay082/cells/micro-cell-manifest.json
+
+      - name: Strict micro-cell contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'fs';
+          import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
+          const root='/tmp/yilbay082';
+          const m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
+          if(m.protocol!=='micro-cell-v2-ast') throw new Error('wrong protocol');
+          if(m.version!=='0.8.2') throw new Error('wrong version');
+          if(m.counts.frontend<45) throw new Error('frontend under-split: '+m.counts.frontend);
+          if(m.counts.backend<25) throw new Error('backend under-split: '+m.counts.backend);
+          for(const entry of [...m.frontend,...m.backend]){
+            const src=fs.readFileSync(root+'/'+entry.file,'utf8');
+            const ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});
+            if(ast.body.length!==1) throw new Error(entry.file+' has '+ast.body.length+' top-level nodes');
+            if(ast.body[0].type!==entry.nodeType) throw new Error(entry.file+' node type mismatch');
+          }
+          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
+          const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
+          if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')) throw new Error('frontend bundle mismatch');
+          if(b!==fs.readFileSync(root+'/app/server.js','utf8')) throw new Error('backend bundle mismatch');
+          console.log('STRICT MICRO CELLS',m.counts);
+          NODE
+          while IFS= read -r f; do node --check "/tmp/yilbay082/$f"; done < <(node -e "const m=require('/tmp/yilbay082/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
+          node --check /tmp/yilbay082/app/public/app.js
+          node --check /tmp/yilbay082/app/server.js
+          node /tmp/yilbay082/app/tests.js
+          ! grep -qi 'powershell.exe' /tmp/yilbay082/app/server.js
+
+      - name: Runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=43127 node /tmp/yilbay082/app/server.js >/tmp/v082_server.log 2>/tmp/v082_server.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          OK=0
+          for i in $(seq 1 30); do
+            CODE=$(curl -sS -o /tmp/v082_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
+            sleep 0.5
+          done
+          cat /tmp/v082_health.json || true
+          cat /tmp/v082_server.err || true
+          test "$OK" = "1"
+          grep -q '"version":"0.8.2"' /tmp/v082_health.json
+          curl -fsS http://127.0.0.1:43127/api/integrations/status >/tmp/v082_integrations.json
+          curl -fsS http://127.0.0.1:43127/api/ai/costs >/tmp/v082_costs.json
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+
+      - name: Build verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.8.2.zip
+          (cd /tmp/yilbay082 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.8.2.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.8.2.zip | awk '{print $1}')
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.8.2",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.8.2.zip",
+            "sha256": "$SHA"
+          }
+          JSON
+          rm -rf source/current
+          cp -a /tmp/yilbay082 source/current
+
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.8.2.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.8.2 AST micro-cells [skip ci]'
+          git push origin main
