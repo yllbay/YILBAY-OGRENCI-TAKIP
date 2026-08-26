@@ -10,6 +10,14 @@ s=server.read_text(encoding='utf-8')
 a=a.replace('0.8.2','0.9.0')
 s=s.replace('0.8.2','0.9.0')
 
+# Idempotent UI completion: show the Drive filename metadata convention to the user.
+if 'DERS__KONU__SEVIYE__BASLIK.pdf' not in a:
+    marker='<span class="muted">Salt-okunur bağlantı</span>'
+    if marker not in a:
+        raise SystemExit('Drive panel heading marker missing')
+    helper='<span class="muted">Salt-okunur bağlantı · Dosya adı: DERS__KONU__SEVIYE__BASLIK.pdf</span>'
+    a=a.replace(marker,helper,1)
+
 frontend_required=[
     'id="drivePanel"',
     'window.connectGoogleDrive=',
