@@ -1,0 +1,1 @@
+window.toggleHomeworkSource=()=>{const src=q("homeworkSource")?.value||"local";const l=q("homeworkLocalWrap"),d=q("homeworkDriveWrap");if(l)l.style.display=src==="local"?"":"none";if(d)d.style.display=src==="drive"?"":"none"}

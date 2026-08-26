@@ -1,0 +1,1 @@
+function driveFileIdFromInput(v){const s=String(v||'').trim();if(!s)return null;const m=s.match(/\/d\/([A-Za-z0-9_-]{10,})/)||s.match(/[?&]id=([A-Za-z0-9_-]{10,})/);return m?m[1]:(/^[A-Za-z0-9_-]{10,}$/.test(s)?s:null)}
