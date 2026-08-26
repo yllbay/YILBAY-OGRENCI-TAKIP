@@ -1,6 +1,6 @@
 {
   "protocol": "micro-cell-v2-ast",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "rule": "one-Program.body-node-per-cell",
   "frontend": [
     {
@@ -606,11 +606,32 @@
       "end": 56813
     },
     {
-      "file": "cells/micro/frontend/087-frontend-statement-87.cell.js",
-      "nodeType": "ExpressionStatement",
-      "name": "frontend-statement-87",
+      "file": "cells/micro/frontend/087-applyviewportprofile.cell.js",
+      "nodeType": "FunctionDeclaration",
+      "name": "applyViewportProfile",
       "start": 56815,
-      "end": 56827
+      "end": 57407
+    },
+    {
+      "file": "cells/micro/frontend/088-window-addeventlistener.cell.js",
+      "nodeType": "ExpressionStatement",
+      "name": "window-addEventListener",
+      "start": 57408,
+      "end": 57477
+    },
+    {
+      "file": "cells/micro/frontend/089-frontend-statement-89.cell.js",
+      "nodeType": "ExpressionStatement",
+      "name": "frontend-statement-89",
+      "start": 57478,
+      "end": 57500
+    },
+    {
+      "file": "cells/micro/frontend/090-frontend-statement-90.cell.js",
+      "nodeType": "ExpressionStatement",
+      "name": "frontend-statement-90",
+      "start": 57501,
+      "end": 57513
     }
   ],
   "backend": [
@@ -945,9 +966,9 @@
     }
   ],
   "counts": {
-    "frontend": 87,
+    "frontend": 90,
     "backend": 47,
-    "totalJs": 134
+    "totalJs": 137
   },
   "designSystem": [
     "cells/design-system/00-design-system.cell.css"
