@@ -1,0 +1,79 @@
+name: Publish v0.7.0 AI coaching planner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release_build/v0.7.0/**'
+      - '.github/workflows/publish-v070.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Copy verified current source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/yilbay070
+          cp -a source/current /tmp/yilbay070
+          test -f /tmp/yilbay070/app/server.js
+      - name: Apply v0.7.0 patch
+        shell: bash
+        run: python release_build/v0.7.0/patch_v070.py
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check /tmp/yilbay070/app/server.js
+          node --check /tmp/yilbay070/app/public/app.js
+          node /tmp/yilbay070/app/tests.js
+          ! grep -qi 'powershell.exe' /tmp/yilbay070/app/server.js
+      - name: Mandatory runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=43127 node /tmp/yilbay070/app/server.js >/tmp/v070_server.log 2>/tmp/v070_server.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:43127/health >/tmp/v070_health.json; then break; fi
+            sleep 0.5
+          done
+          cat /tmp/v070_health.json
+          grep -q '"version":"0.7.0"' /tmp/v070_health.json
+          curl -fsS http://127.0.0.1:43127/api/integrations/status >/tmp/v070_integrations.json
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+      - name: Build release and sync source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.7.0.zip
+          (cd /tmp/yilbay070 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.7.0.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.7.0.zip | awk '{print $1}')
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.7.0",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.7.0.zip",
+            "sha256": "$SHA"
+          }
+          JSON
+          rm -rf source/current
+          cp -a /tmp/yilbay070 source/current
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.7.0.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.7.0 AI coaching planner [skip ci]'
+          git push origin main
