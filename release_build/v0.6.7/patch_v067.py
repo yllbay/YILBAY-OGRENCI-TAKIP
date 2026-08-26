@@ -1,12 +1,11 @@
 from pathlib import Path
-import re, shutil
+import os, shutil
 root=Path('/tmp/yilbay067/src')
 server=root/'app/server.js'
 appjs=root/'app/public/app.js'
 version=root/'VERSION'
 text=server.read_text(encoding='utf-8')
 text=text.replace('0.6.5','0.6.7')
-# install Node bootstrap on Windows without invoking PowerShell
 migration=r'''
 (function installNodeBootstrap(){
   if(process.platform!=="win32") return;
@@ -33,5 +32,6 @@ if appjs.exists():
     appjs.write_text(s,encoding='utf-8')
 version.write_text('0.6.7\n',encoding='utf-8')
 (root/'app/bootstrap').mkdir(parents=True,exist_ok=True)
-shutil.copy2('/github/workspace/release_build/v0.6.7/orchestrator_node.js',root/'app/bootstrap/orchestrator_node.js')
+workspace=Path(os.environ['GITHUB_WORKSPACE'])
+shutil.copy2(workspace/'release_build/v0.6.7/orchestrator_node.js',root/'app/bootstrap/orchestrator_node.js')
 print('patched v0.6.7')
