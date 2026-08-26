@@ -2,6 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
 const ROOT='/tmp/yilbay094';
+const serverPath=path.join(ROOT,'app','server.js');
+let serverSource=fs.readFileSync(serverPath,'utf8');
+serverSource=serverSource.replaceAll('%~dp0bootstrap\\orchestrator_node.js','%~dp0bootstrap/orchestrator_node.js');
+fs.writeFileSync(serverPath,serverSource,'utf8');
 const cellsRoot=path.join(ROOT,'cells','micro');
 function slug(s){return String(s||'statement').replace(/[^A-Za-z0-9_$-]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase()||'statement'}
 function nodeName(node,idx,side){if(node.type==='FunctionDeclaration')return node.id?.name||`function-${idx}`;if(node.type==='VariableDeclaration'){const names=node.declarations.map(d=>d.id?.name).filter(Boolean);return names.length===1?names[0]:`core-vars-${idx}`}if(node.type==='ExpressionStatement'){const e=node.expression;if(e?.type==='AssignmentExpression'){const l=e.left;if(l?.type==='MemberExpression'&&l.object?.name==='window')return l.computed?(l.property?.value||`window-action-${idx}`):(l.property?.name||`window-action-${idx}`);if(l?.type==='Identifier')return l.name}if(e?.type==='CallExpression'){const c=e.callee;if(c?.type==='MemberExpression'&&c.object?.type==='CallExpression')return `server-listen-${idx}`;if(c?.type==='MemberExpression')return `${c.object?.name||'call'}-${c.property?.name||idx}`}}return `${side}-statement-${idx}`}
