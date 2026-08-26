@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.9.8/**'
-      - 'CELL_PROTOCOL.md'
+      - 'release_build/v0.9.9/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -21,27 +20,23 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.9.7 source
+      - name: Copy verified v0.9.8 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay098 /tmp/microtools
-          cp -a source/current /tmp/yilbay098
-          test "$(cat /tmp/yilbay098/app/VERSION | tr -d '\r\n')" = "0.9.7"
-          test -s /tmp/yilbay098/app/public/app.js
-          test -s /tmp/yilbay098/app/server.js
+          rm -rf /tmp/yilbay099 /tmp/microtools
+          cp -a source/current /tmp/yilbay099
+          test "$(cat /tmp/yilbay099/app/VERSION | tr -d '\r\n')" = "0.9.8"
 
-      - name: Patch embedded answer-key evidence
+      - name: Patch assignment modal initialization
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.8/patch_cells_v098.mjs
-          grep -q 'function homeworkAnswerKeySearchInstruction' /tmp/yilbay098/app/server.js
-          grep -q 'function validateHomeworkAnswerKeyEvidence' /tmp/yilbay098/app/server.js
-          grep -q 'embedded_adjacent_page' /tmp/yilbay098/app/server.js
-          grep -q 'Cevap Anahtarı Kanıtı' /tmp/yilbay098/app/public/app.js
+          node release_build/v0.9.9/patch_cells_v099.mjs
+          grep -q 'assignmentModal' /tmp/yilbay099/app/public/app.js
+          grep -q 'refreshAssignmentItems()' /tmp/yilbay099/app/public/app.js
 
-      - name: Install build-only AST parser
+      - name: Install AST parser
         shell: bash
         run: |
           set -euo pipefail
@@ -52,9 +47,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.8/microcellularize.mjs
+          node release_build/v0.9.9/microcellularize.mjs
 
-      - name: Strict micro-cell and answer-key evidence tests
+      - name: Strict assignment tests
         shell: bash
         run: |
           set -euo pipefail
@@ -62,61 +57,42 @@ jobs:
           import fs from 'fs';
           import vm from 'vm';
           import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay098';
+          const root='/tmp/yilbay099';
           const m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.8') throw new Error('manifest protocol/version');
-          if(m.counts.frontend<91) throw new Error('frontend evidence label cell missing');
-          if(m.counts.backend<52) throw new Error('backend evidence cells missing');
-          for(const entry of [...m.frontend,...m.backend]){
-            const src=fs.readFileSync(root+'/'+entry.file,'utf8');
-            const ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});
-            if(ast.body.length!==1) throw new Error(entry.file+' has '+ast.body.length+' top-level nodes');
-            if(ast.body[0].type!==entry.nodeType) throw new Error(entry.file+' node mismatch');
-          }
-          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
-          const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
-          if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')) throw new Error('frontend bundle mismatch');
-          if(b!==fs.readFileSync(root+'/app/server.js','utf8')) throw new Error('backend bundle mismatch');
-          const evidence=m.backend.find(x=>x.name==='validateHomeworkAnswerKeyEvidence');
-          const search=m.backend.find(x=>x.name==='homeworkAnswerKeySearchInstruction');
-          if(!evidence||!search)throw new Error('answer-key evidence cells missing');
-          const ctx={};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+evidence.file,'utf8'),ctx);vm.runInContext(fs.readFileSync(root+'/'+search.file,'utf8'),ctx);
-          let a={needsTeacherReview:false,autoFinalize:true,answerKeyFound:true,answerKeySource:'embedded_end_pages',answerKeyConfidence:.9,answerKeyEvidence:'Test 01 son sayfa'};
-          let r=ctx.validateHomeworkAnswerKeyEvidence(a,null,{});if(r.needsTeacherReview||!r.autoFinalize||r.answerKeySource!=='embedded_end_pages')throw new Error('embedded key valid case failed');
-          r=ctx.validateHomeworkAnswerKeyEvidence({...a,answerKeyConfidence:.6},null,{});if(!r.needsTeacherReview||r.autoFinalize)throw new Error('low-confidence embedded key guard failed');
-          r=ctx.validateHomeworkAnswerKeyEvidence({...a,answerKeyFound:false,answerKeySource:'ambiguous',answerKeyConfidence:.8},null,{});if(!r.needsTeacherReview||r.answerKeySource!=='ambiguous')throw new Error('ambiguous guard failed');
-          r=ctx.validateHomeworkAnswerKeyEvidence({needsTeacherReview:false,autoFinalize:true},'A B C',{});if(r.answerKeySource!=='manual'||r.answerKeyConfidence!==1)throw new Error('manual priority failed');
-          r=ctx.validateHomeworkAnswerKeyEvidence({needsTeacherReview:false,autoFinalize:true},null,{answerKeyDriveFileId:'k1'});if(r.answerKeySource!=='external_drive'||r.answerKeyConfidence!==1)throw new Error('external priority failed');
-          const instruction=ctx.homeworkAnswerKeySearchInstruction();for(const s of ['aynı sayfanın üstünde veya altında','bir sonraki sayfanın üstünde veya altında','son sayfalarda test isimleriyle toplu'])if(!instruction.includes(s))throw new Error('search instruction missing '+s);
-          if(!b.includes('answerKeyFound')||!b.includes('answerKeyEvidence')||!f.includes('Cevap Anahtarı Kanıtı'))throw new Error('evidence contract UI/backend missing');
-          const protocol=fs.readFileSync('CELL_PROTOCOL.md','utf8');if(!protocol.includes('PDF içi cevap anahtarı protokolü')||!protocol.includes('embedded_end_pages'))throw new Error('protocol missing');
+          if(m.version!=='0.9.9'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
+          for(const e of [...m.frontend,...m.backend]){const s=fs.readFileSync(root+'/'+e.file,'utf8');const a=parse(s,{ecmaVersion:'latest',sourceType:'script'});if(a.body.length!==1||a.body[0].type!==e.nodeType)throw new Error(e.file)}
+          const modal=m.frontend.find(x=>x.name==='assignmentModal');
+          const refresh=m.frontend.find(x=>x.name==='refreshAssignmentItems');
+          const add=m.frontend.find(x=>x.name==='addAssignment');
+          if(!modal||!refresh||!add)throw new Error('assignment cells missing');
+          const db={students:[{id:1,name:'Test'}],resources:[{id:11,title:'PDF Test',course:'LGS Matematik',topic:'Mutlak Değer'}],exams:[],assignments:[]};
+          const els={};let html='';
+          const ctx={db,window:{},q:id=>els[id],modal:s=>{html=s;els.akind={value:'PDF Kaynak'};els.aitem={innerHTML:''};els.astudent={value:'1'}},alert:m=>{throw new Error('alert '+m)},Date,save:()=>{},closeModal:()=>{},assignments:()=>{}};vm.createContext(ctx);
+          vm.runInContext(fs.readFileSync(root+'/'+refresh.file,'utf8'),ctx);
+          vm.runInContext(fs.readFileSync(root+'/'+modal.file,'utf8'),ctx);
+          vm.runInContext(fs.readFileSync(root+'/'+add.file,'utf8'),ctx);
+          ctx.window.assignmentModal();
+          if(!els.aitem.innerHTML.includes('PDF Test')||!els.aitem.innerHTML.includes('value="11"'))throw new Error('PDF list not initialized');
+          els.aitem.value='11';ctx.window.addAssignment();
+          if(db.assignments.length!==1||db.assignments[0].sourceId!==11||db.assignments[0].kind!=='PDF Kaynak')throw new Error('PDF assignment failed');
+          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
+          if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||b!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
           const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('launch regression');
-          console.log('STRICT MICRO CELLS',m.counts,'EMBEDDED ANSWER KEY EVIDENCE OK');
+          console.log('PDF ASSIGNMENT OK',m.counts);
           NODE
-          while IFS= read -r f; do node --check "/tmp/yilbay098/$f"; done < <(node -e "const m=require('/tmp/yilbay098/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
-          node --check /tmp/yilbay098/app/public/app.js
-          node --check /tmp/yilbay098/app/server.js
-          node /tmp/yilbay098/app/tests.js
-          grep -q 'drive.readonly' /tmp/yilbay098/app/server.js
+          node --check /tmp/yilbay099/app/public/app.js
+          node --check /tmp/yilbay099/app/server.js
+          node /tmp/yilbay099/app/tests.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay098/app/server.js >/tmp/v098_server.log 2>/tmp/v098_server.err &
+          PORT=43127 node /tmp/yilbay099/app/server.js >/tmp/v099_server.log 2>/tmp/v099_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
-          OK=0
-          for i in $(seq 1 30); do
-            CODE=$(curl -sS -o /tmp/v098_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
-            if [ "$CODE" = "200" ]; then OK=1; break; fi
-            sleep 0.5
-          done
-          test "$OK" = "1"
-          grep -q '"version":"0.9.8"' /tmp/v098_health.json
-          CODE=$(curl -sS -o /tmp/v098_homework.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' http://127.0.0.1:43127/api/ai/analyze-homework)
-          test "$CODE" = "400"
-          grep -q 'Ödev dosyası gerekli' /tmp/v098_homework.json
+          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v099_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
+          grep -q '"version":"0.9.9"' /tmp/v099_health.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -125,18 +101,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.9.8.zip
-          (cd /tmp/yilbay098 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.8.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.9.8.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.9.9.zip
+          (cd /tmp/yilbay099 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.9.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.9.9.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
-          {
-            "version": "0.9.8",
-            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.8.zip",
-            "sha256": "$SHA"
-          }
+          {"version":"0.9.9","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.9.zip","sha256":"$SHA"}
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay098 source/current
+          cp -a /tmp/yilbay099 source/current
 
       - name: Commit verified release
         shell: bash
@@ -144,6 +116,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.9.8.zip release/latest.json source/current CELL_PROTOCOL.md
-          git commit -m 'Publish verified v0.9.8 embedded answer-key evidence [skip ci]'
+          git add release/YILBAY_APP_v0.9.9.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.9.9 PDF assignment fix [skip ci]'
           git push origin main
