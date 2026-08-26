@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.6/patch_cells_v0106.mjs
+          node release_build/v0.10.6/patch_cells_v0106b.mjs
           grep -q 'LUNA MALİYET-OPTİMİZE ÖDEV ANALİZ PROTOKOLÜ' /tmp/yilbay0106/app/server.js
           grep -q 'function sanitizeHomeworkReportPayload' /tmp/yilbay0106/app/server.js
           grep -q 'function buildHomeworkReportHtml' /tmp/yilbay0106/app/server.js
@@ -62,22 +62,22 @@ jobs:
           import fs from 'fs';import path from 'path';import os from 'os';import vm from 'vm';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
           const root='/tmp/yilbay0106',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
           if(m.version!=='0.10.6'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
-          for(const e of [...m.frontend,...m.backend]){const s=fs.readFileSync(root+'/'+e.file,'utf8'),a=parse(s,{ecmaVersion:'latest',sourceType:'script'});if(a.body.length!==1||a.body[0].type!==e.nodeType)throw new Error(e.file)}
-          const names=n=>m.backend.find(x=>x.name===n);
-          for(const n of ['lunaHomeworkDirectInstruction','normalizeQuestionNumberList','sanitizeHomeworkReportPayload','reportHtmlEscape','buildHomeworkReportHtml','findHomeworkPdfBrowser','generateHomeworkReportPdf','handleHomeworkReportPdf','handleHomeworkReportDownload'])if(!names(n))throw new Error('missing cell '+n);
-          const promptCtx={};vm.createContext(promptCtx);vm.runInContext(fs.readFileSync(root+'/'+names('lunaHomeworkDirectInstruction').file,'utf8'),promptCtx);const txt=promptCtx.lunaHomeworkDirectInstruction();
+          for(const e of [...m.frontend,...m.backend]){const s=fs.readFileSync(root+'/'+e.file,'utf8'),ast=parse(s,{ecmaVersion:'latest',sourceType:'script'});if(ast.body.length!==1||ast.body[0].type!==e.nodeType)throw new Error(e.file)}
+          const cell=n=>m.backend.find(x=>x.name===n);
+          for(const n of ['lunaHomeworkDirectInstruction','normalizeQuestionNumberList','sanitizeHomeworkReportPayload','reportHtmlEscape','buildHomeworkReportHtml','findHomeworkPdfBrowser','generateHomeworkReportPdf','handleHomeworkReportPdf','handleHomeworkReportDownload'])if(!cell(n))throw new Error('missing cell '+n);
+          const promptCtx={};vm.createContext(promptCtx);vm.runInContext(fs.readFileSync(root+'/'+cell('lunaHomeworkDirectInstruction').file,'utf8'),promptCtx);const txt=promptCtx.lunaHomeworkDirectInstruction();
           for(const k of ['DOĞRU sorular için çözüm açıklaması','BOŞ sorular için neden tahmini','YALNIZ WRONG sorular','reasoningProfile yalnız WRONG'])if(!txt.includes(k))throw new Error('compact prompt '+k);
-          const handle=fs.readFileSync(root+'/'+names('handleHomework').file,'utf8');if(!handle.includes('reasoning:"low"')||handle.includes('reasoning:"medium"'))throw new Error('homework reasoning is not low');if(!handle.includes('direct_luna_wrong_only'))throw new Error('architecture marker');
+          const handle=fs.readFileSync(root+'/'+cell('handleHomework').file,'utf8');if(!handle.includes('reasoning:"low"')||handle.includes('reasoning:"medium"'))throw new Error('homework reasoning is not low');if(!handle.includes('direct_luna_wrong_only'))throw new Error('architecture marker');
           const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'yilbaypdf-')),fakeBrowser=path.join(tmp,'browser.exe');fs.writeFileSync(fakeBrowser,'x');
           const pdfCells=['reportText','reportNums','sanitizeHomeworkReportPayload','reportHtmlEscape','buildHomeworkReportHtml','findHomeworkPdfBrowser','generateHomeworkReportPdf'];
           const fakeProcess={env:{YILBAY_BROWSER_PATH:fakeBrowser}};
           const fakeCp={spawnSync:(exe,args)=>{const p=args.find(x=>String(x).startsWith('--print-to-pdf='))?.slice('--print-to-pdf='.length);if(p)fs.writeFileSync(p,'%PDF-1.4\n'+('0'.repeat(1500)));return {status:0,stdout:'',stderr:''}}};
-          const pctx={fs,path,runtime:tmp,process:fakeProcess,cp:fakeCp,Math,Date,encodeURI};vm.createContext(pctx);for(const n of pdfCells)vm.runInContext(fs.readFileSync(root+'/'+names(n).file,'utf8'),pctx);
+          const pctx={fs,path,runtime:tmp,process:fakeProcess,cp:fakeCp,Math,Date,encodeURI};vm.createContext(pctx);for(const n of pdfCells)vm.runInContext(fs.readFileSync(root+'/'+cell(n).file,'utf8'),pctx);
           const safe=pctx.sanitizeHomeworkReportPayload({fileData:'SECRETBASE64',student:{name:'Ali <Test>'},assignment:{title:'Ödev',course:'Matematik',topic:'Problemler'},analysis:{totalQuestions:10,correct:7,wrong:2,blank:1,scorePercent:70,correctQuestionNumbers:[1,2,3,4,5,6,7],blankQuestionNumbers:[10],items:[{question:8,status:'wrong',studentAnswer:'B',correctAnswer:'C',errorCategory:'conceptual',firstErrorStep:'oran',learningObjective:'oran-orantı',approach:'denklem',betterApproach:'oran kur',stepsSummary:['a','b']},{question:9,status:'correct',note:'BU DETAY RAPORA GİRMEMELİ'}],reasoningProfile:{recurringErrors:['oran'],summary:'Kısa özet'}},costTry:.2});
           const serialized=JSON.stringify(safe);if(serialized.includes('SECRETBASE64')||serialized.includes('BU DETAY'))throw new Error('report sanitizer leak');if(safe.analysis.items.length!==1||safe.analysis.items[0].question!==8)throw new Error('wrong-only sanitizer');
           const html=pctx.buildHomeworkReportHtml(safe);for(const k of ['Ödev Analiz Karnesi','Yanlış Sorular – Özet Tablo','Pedagojik Karne','Ali &lt;Test&gt;'])if(!html.includes(k))throw new Error('report html '+k);
           const pdf=pctx.generateHomeworkReportPdf(safe);if(!pdf.downloadUrl.startsWith('/api/reports/homework-pdf/')||pdf.size<1000)throw new Error('pdf generation contract');
-          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||b!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
+          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),be=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||be!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
           if(!f.includes('PDF Karnesini İndir')||!f.includes('Yanlış Soruların Ayrıntılı Analizi'))throw new Error('frontend report contract');
           const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('2.1.3-node')||!boot.includes('YILBAY_BROWSER_PATH:browser')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('bootstrap/browser regression');
           console.log('WRONG-ONLY + PDF REPORT OK',m.counts,pdf.size);
