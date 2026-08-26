@@ -1,0 +1,2 @@
+async function handleDriveIndex(req,res){const result=await driveListPdfIndex(),items=result.items||[];return json(res,200,{ok:true,items,matchedCount:items.filter(x=>x.matched).length,unmatchedCount:items.filter(x=>!x.matched).length,answerKeyCount:result.answerKeyCount||0,pairedAnswerKeyCount:result.pairedAnswerKeyCount||0,ambiguousAnswerKeyCount:result.ambiguousAnswerKeyCount||0,unpairedAnswerKeyCount:result.unpairedAnswerKeyCount||0})}
+
