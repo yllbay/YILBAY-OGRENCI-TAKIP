@@ -1,0 +1,1 @@
+function validateHomeworkQuestionCount(analysis,expected){const n=Math.max(0,Math.round(Number(expected)||0));if(!n)return analysis;if(Number(analysis.totalQuestions)!==n)return {...analysis,needsTeacherReview:true,autoFinalize:false,questionCountMismatch:true,expectedQuestionCount:n};return {...analysis,expectedQuestionCount:n,questionCountMismatch:false}}

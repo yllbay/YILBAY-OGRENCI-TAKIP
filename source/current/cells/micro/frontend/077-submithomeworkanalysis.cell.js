@@ -3,8 +3,8 @@ window.submitHomeworkAnalysis=async id=>{
  if(file.size>14*1024*1024)return alert("Bu sürümde dosya en fazla 14 MB olabilir.");
  const btn=document.querySelector(".modal-actions .btn.primary");if(btn){btn.disabled=true;btn.textContent="AI tarıyor…"}
  try{
-  const fileData=await fileToBase64(file),answerKey=q("answerKey").value.trim()||null;
-  const data=await apiJson("/api/ai/analyze-homework",{fileData,mimeType:file.type||"application/pdf",fileName:file.name,assignment:{id:a.id,studentId:a.studentId,course:a.course,topic:a.topic,title:a.title},answerKey});
+  const fileData=await fileToBase64(file),answerKey=q("answerKey").value.trim()||null,resourceContext=assignmentResourceContext(a);
+  const data=await apiJson("/api/ai/analyze-homework",{fileData,mimeType:file.type||"application/pdf",fileName:file.name,assignment:{id:a.id,studentId:a.studentId,course:a.course,topic:a.topic,title:a.title},answerKey,resourceContext});
   const an=data.analysis||{},score=Math.round(Number(an.scorePercent)||0),reviewRequired=!!an.needsTeacherReview||data.autoFinalize===false;
   db.homeworkAnalyses.push({id:Date.now(),assignmentId:a.id,studentId:a.studentId,course:a.course,topic:a.topic,date:new Date().toISOString().slice(0,10),fileName:file.name,fileSize:file.size,mimeType:file.type||"application/pdf",costTry:Number(data.cost?.try||0),...an});
   a.completedAt=new Date().toISOString().slice(0,10);a.score=score;a.aiConfidence=Number(an.confidence||0);
@@ -25,6 +25,6 @@ window.submitHomeworkAnalysis=async id=>{
  finally{if(btn){btn.disabled=false;btn.textContent="Dosyayı Tara"}}
 }
 
-/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.9.3 */
+/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.9.4 */
 
 /* CELL:130-ui-runtime | layer:frontend | generated-from:v0.7.2 */

@@ -335,9 +335,11 @@ function normalizeHomeworkAnalysis(x={}){
 }
 
 
+async function driveDownloadAnalysisFile(fileId){if(!fileId)return null;const token=await driveRefreshAccessToken();const u='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?alt=media';const r=await fetch(u,{headers:{Authorization:'Bearer '+token}});if(!r.ok){let j={};try{j=await r.json()}catch{}throw new Error(j.error?.message||('Drive dosyası indirilemedi HTTP '+r.status))}const b=Buffer.from(await r.arrayBuffer());if(b.length>14*1024*1024)throw new Error('Drive analiz dosyası 14 MB sınırını aşıyor');return {base64:b.toString('base64'),mimeType:r.headers.get('content-type')||'application/pdf',size:b.length}}
+function validateHomeworkQuestionCount(analysis,expected){const n=Math.max(0,Math.round(Number(expected)||0));if(!n)return analysis;if(Number(analysis.totalQuestions)!==n)return {...analysis,needsTeacherReview:true,autoFinalize:false,questionCountMismatch:true,expectedQuestionCount:n};return {...analysis,expectedQuestionCount:n,questionCountMismatch:false}}
 async function handleHomework(req,res){
   const body=await readJson(req,18*1024*1024);
-  const {fileData,mimeType="application/pdf",fileName="odev.pdf",assignment,answerKey=null}=body;
+  const {fileData,mimeType="application/pdf",fileName="odev.pdf",assignment,answerKey=null,resourceContext=null}=body;
   if(!fileData) return json(res,400,{ok:false,error:"Ödev dosyası gerekli"});
   if(!integrationStatus().openai.configured) return json(res,400,{ok:false,error:"Ödev analizi için OpenAI API anahtarı gerekli"});
   const instructions=`Sen bir öğrenci ödevi değerlendirme motorusun. Yüklenen PDF/görselde öğrencinin işaretlerini, boş bıraktığı soruları ve mümkünse çözüm yollarını incele.
@@ -347,12 +349,12 @@ Kesin göremediğin işaret veya çözüm için tahmin yürütme. Soruların/iş
 confidence 0 ile 1 arasında olmalı. confidence 0.65 altındaysa sonuç öğretmen onayı gerektirmelidir.
 Sadece JSON döndür:
 {"totalQuestions":number,"correct":number,"wrong":number,"blank":number,"scorePercent":number,"confidence":number,"items":[{"question":number,"status":"correct|wrong|blank|uncertain","studentAnswer":"string|null","correctAnswer":"string|null","errorType":"string|null","note":"string|null"}],"weaknesses":["..."],"recommendRepeat":boolean,"summary":"..."}`;
-  const content=[
-    {type:"input_text",text:JSON.stringify({assignment,answerKey})},
-    {type:"input_file",filename:fileName,file_data:`data:${mimeType};base64,${fileData}`}
-  ];
+  const content=[{type:"input_text",text:JSON.stringify({assignment,answerKey,resourceContext})}];
+  if(resourceContext?.driveFileId){const src=await driveDownloadAnalysisFile(resourceContext.driveFileId);content.push({type:"input_text",text:"KAYNAK PDF - öğrencinin çözdüğü asıl soru dokümanı"},{type:"input_file",filename:"kaynak.pdf",file_data:`data:${src.mimeType};base64,${src.base64}`})}
+  if(resourceContext?.answerKeyDriveFileId){const key=await driveDownloadAnalysisFile(resourceContext.answerKeyDriveFileId);content.push({type:"input_text",text:"CEVAP ANAHTARI - kesin referans olarak kullan"},{type:"input_file",filename:"cevap_anahtari.pdf",file_data:`data:${key.mimeType};base64,${key.base64}`})}
+  content.push({type:"input_text",text:"ÖĞRENCİ ÇÖZÜM DOSYASI - değerlendirilecek çalışma"},{type:"input_file",filename:fileName,file_data:`data:${mimeType};base64,${fileData}`});
   const ai=await openaiRequest({instructions,input:[{role:"user",content}],reasoning:"medium"});
-  const parsed=normalizeHomeworkAnalysis(parseJsonText(ai.text));
+  const parsed=validateHomeworkQuestionCount(normalizeHomeworkAnalysis(parseJsonText(ai.text)),resourceContext?.questionCount);
   const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});
   return json(res,200,{ok:true,analysis:parsed,autoFinalize:parsed.autoFinalize,usage:ai.data?.usage||null,cost});
 }
@@ -396,10 +398,12 @@ async function handleDriveOauthStart(req,res){const st=readStoredSecrets();if(!(
 async function handleDriveOauthCallback(u,res){const st=readStoredSecrets();if(!u.searchParams.get("code")||u.searchParams.get("state")!==st.driveOauthState){res.writeHead(400,{"Content-Type":"text/html; charset=utf-8"});return res.end("<h2>Google Drive yetkilendirmesi doğrulanamadı.</h2>")}const body=new URLSearchParams({code:u.searchParams.get("code"),client_id:st.driveClientId,client_secret:st.driveClientSecret,redirect_uri:driveRedirectUri(),grant_type:"authorization_code"});const r=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});const j=await r.json().catch(()=>({}));if(!r.ok){res.writeHead(400,{"Content-Type":"text/html; charset=utf-8"});return res.end("<h2>Google Drive bağlantısı tamamlanamadı.</h2>")}driveTokenSavePatch({driveRefreshToken:j.refresh_token||st.driveRefreshToken||"",driveAccessToken:j.access_token||"",driveAccessTokenExpiresAt:Date.now()+Math.max(60,Number(j.expires_in||3600))*1000,driveOauthState:""});res.writeHead(200,{"Content-Type":"text/html; charset=utf-8"});res.end("<h2>Google Drive bağlandı.</h2><p>Bu pencereyi kapatıp YILBAY uygulamasına dönebilirsiniz.</p>")}
 async function handleDriveIndex(req,res){const items=await driveListPdfIndex();return json(res,200,{ok:true,items,matchedCount:items.filter(x=>x.matched).length,unmatchedCount:items.filter(x=>!x.matched).length})}
 
+function installLaunchPreferences(){if(process.platform!=='win32')return {skipped:true};const src=path.join(__dirname,'bootstrap','orchestrator_node.js'),dstDir=path.join(root,'bootstrap'),dst=path.join(dstDir,'orchestrator_node.js');fs.mkdirSync(dstDir,{recursive:true});if(fs.existsSync(src))fs.copyFileSync(src,dst);const bat='@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\nstart "YILBAY" /MAX powershell.exe -NoLogo -NoProfile -Command "node \'%~dp0bootstrap/orchestrator_node.js\'"\r\nexit /b 0\r\n';fs.writeFileSync(path.join(root,'PROGRAMI_CALISTIR.bat'),bat,'utf8');return {installed:true}}
+installLaunchPreferences()
 http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.9.3",integrations:integrationStatus()});
+    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.9.4",integrations:integrationStatus()});
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
     if(u.pathname==="/api/drive/status"&&req.method==="GET"){const d=integrationStatus().drive;return json(res,200,{ok:true,...d})}
