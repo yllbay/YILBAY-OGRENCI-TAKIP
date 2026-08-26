@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.9.5/**'
+      - 'release_build/v0.9.6/**'
       - 'CELL_PROTOCOL.md'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
@@ -21,26 +21,25 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.9.4 source
+      - name: Copy verified v0.9.5 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay095 /tmp/microtools
-          cp -a source/current /tmp/yilbay095
-          test "$(cat /tmp/yilbay095/app/VERSION | tr -d '\r\n')" = "0.9.4"
-          test -s /tmp/yilbay095/app/public/app.js
-          test -s /tmp/yilbay095/app/server.js
-          test -s /tmp/yilbay095/cells/design-system/00-design-system.cell.css
+          rm -rf /tmp/yilbay096 /tmp/microtools
+          cp -a source/current /tmp/yilbay096
+          test "$(cat /tmp/yilbay096/app/VERSION | tr -d '\r\n')" = "0.9.5"
+          test -s /tmp/yilbay096/app/public/app.js
+          test -s /tmp/yilbay096/app/server.js
+          test -s /tmp/yilbay096/app/bootstrap/orchestrator_node.js
 
-      - name: Patch adaptive viewport cells
+      - name: Patch maximized window launcher
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.5/patch_cells_v095.mjs
-          grep -q 'function applyViewportProfile' /tmp/yilbay095/app/public/app.js
-          grep -q "addEventListener('resize',applyViewportProfile" /tmp/yilbay095/app/public/app.js
-          grep -q '100dvh' /tmp/yilbay095/app/public/styles.css
-          grep -q 'CELL:adaptive-viewport' /tmp/yilbay095/cells/design-system/00-design-system.cell.css
+          node release_build/v0.9.6/patch_cells_v096.mjs
+          grep -q -- '--start-maximized' /tmp/yilbay096/app/bootstrap/orchestrator_node.js
+          ! grep -q -- '--start-fullscreen' /tmp/yilbay096/app/bootstrap/orchestrator_node.js
+          grep -q '2.1.1-node' /tmp/yilbay096/app/bootstrap/orchestrator_node.js
 
       - name: Install build-only AST parser
         shell: bash
@@ -53,21 +52,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.5/microcellularize.mjs
+          node release_build/v0.9.6/microcellularize.mjs
 
-      - name: Strict micro-cell and responsive UI tests
+      - name: Strict micro-cell and launch contract tests
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import fs from 'fs';
-          import vm from 'vm';
           import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay095';
+          const root='/tmp/yilbay096';
           const m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.5') throw new Error('manifest protocol/version');
-          if(m.counts.frontend<90) throw new Error('viewport cells missing: '+m.counts.frontend);
-          if(m.counts.backend<47) throw new Error('backend cells missing: '+m.counts.backend);
+          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.6') throw new Error('manifest protocol/version');
           for(const entry of [...m.frontend,...m.backend]){
             const src=fs.readFileSync(root+'/'+entry.file,'utf8');
             const ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});
@@ -78,51 +74,43 @@ jobs:
           const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
           if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')) throw new Error('frontend bundle mismatch');
           if(b!==fs.readFileSync(root+'/app/server.js','utf8')) throw new Error('backend bundle mismatch');
-          const profile=m.frontend.find(x=>x.name==='applyViewportProfile');
-          if(!profile) throw new Error('applyViewportProfile cell missing');
-          const styleMap={};const rootEl={dataset:{},style:{setProperty:(k,v)=>styleMap[k]=v}};
-          const ctx={window:{innerWidth:1920,innerHeight:1080,devicePixelRatio:1.25},document:{documentElement:rootEl}};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+profile.file,'utf8'),ctx);
-          let p=ctx.applyViewportProfile();if(p.density!=='normal'||p.width!==1920||p.height!==1080||p.dpr!==1.25)throw new Error('1080p profile failed '+JSON.stringify(p));
-          ctx.window.innerWidth=1366;ctx.window.innerHeight=768;ctx.window.devicePixelRatio=1.5;p=ctx.applyViewportProfile();if(p.density!=='compact'||p.dpr!==1.5)throw new Error('1366x768/DPI profile failed '+JSON.stringify(p));
-          ctx.window.innerWidth=700;ctx.window.innerHeight=900;p=ctx.applyViewportProfile();if(p.density!=='narrow')throw new Error('narrow profile failed');
-          if(styleMap['--viewport-w']!=='700px'||styleMap['--viewport-h']!=='900px')throw new Error('viewport CSS vars missing');
+          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');
+          if(!boot.includes('--start-maximized')) throw new Error('start-maximized missing');
+          if(boot.includes('--start-fullscreen')) throw new Error('start-fullscreen forbidden');
+          if(!boot.includes('2.1.1-node')) throw new Error('bootstrap version missing');
           const css=fs.readFileSync(root+'/app/public/styles.css','utf8');
-          for(const token of ['100dvh','clamp(','minmax(','overflow-x:hidden',"data-ui-density='compact'",'@media(max-height:720px)','@media(max-width:760px)']) if(!css.includes(token)) throw new Error('responsive CSS token missing '+token);
-          if(!css.includes('.table-wrap{width:100%;max-width:100%;overflow:auto'))throw new Error('table overflow guard missing');
-          if(!css.includes('max-height:calc(100dvh'))throw new Error('modal viewport guard missing');
+          for(const token of ['100dvh','clamp(','minmax(','overflow-x:hidden']) if(!css.includes(token)) throw new Error('responsive CSS regression '+token);
           const protocol=fs.readFileSync('CELL_PROTOCOL.md','utf8');
-          if(!protocol.includes('Ekran çözünürlüğü / DPI / viewport uyumluluk protokolü')||!protocol.includes('1366×768'))throw new Error('permanent responsive protocol missing');
-          console.log('STRICT MICRO CELLS',m.counts,'RESPONSIVE UI OK');
+          if(!protocol.includes('normal Windows pencere çerçevesi korunarak maksimize')||!protocol.includes('`--start-fullscreen`, F11 veya kiosk davranışı kullanılmaz')) throw new Error('maximized launch protocol missing');
+          console.log('STRICT MICRO CELLS',m.counts,'MAXIMIZED WINDOW CONTRACT OK');
           NODE
-          while IFS= read -r f; do node --check "/tmp/yilbay095/$f"; done < <(node -e "const m=require('/tmp/yilbay095/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
-          node --check /tmp/yilbay095/app/public/app.js
-          node --check /tmp/yilbay095/app/server.js
-          node --check /tmp/yilbay095/app/bootstrap/orchestrator_node.js
-          node /tmp/yilbay095/app/tests.js
-          grep -q -- '--start-fullscreen' /tmp/yilbay095/app/bootstrap/orchestrator_node.js
-          grep -q 'drive.readonly' /tmp/yilbay095/app/server.js
-          grep -q 'resourceContext?.answerKeyDriveFileId' /tmp/yilbay095/app/server.js
+          while IFS= read -r f; do node --check "/tmp/yilbay096/$f"; done < <(node -e "const m=require('/tmp/yilbay096/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
+          node --check /tmp/yilbay096/app/public/app.js
+          node --check /tmp/yilbay096/app/server.js
+          node --check /tmp/yilbay096/app/bootstrap/orchestrator_node.js
+          node /tmp/yilbay096/app/tests.js
+          ! grep -qi 'ExecutionPolicy.*Bypass' /tmp/yilbay096/app/bootstrap/orchestrator_node.js
+          grep -q 'drive.readonly' /tmp/yilbay096/app/server.js
+          grep -q 'resourceContext?.answerKeyDriveFileId' /tmp/yilbay096/app/server.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay095/app/server.js >/tmp/v095_server.log 2>/tmp/v095_server.err &
+          PORT=43127 node /tmp/yilbay096/app/server.js >/tmp/v096_server.log 2>/tmp/v096_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
           OK=0
           for i in $(seq 1 30); do
-            CODE=$(curl -sS -o /tmp/v095_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            CODE=$(curl -sS -o /tmp/v096_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
             if [ "$CODE" = "200" ]; then OK=1; break; fi
             sleep 0.5
           done
           test "$OK" = "1"
-          cat /tmp/v095_health.json
-          grep -q '"version":"0.9.5"' /tmp/v095_health.json
-          curl -fsS http://127.0.0.1:43127/styles.css >/tmp/v095_styles.css
-          grep -q '100dvh' /tmp/v095_styles.css
-          curl -fsS http://127.0.0.1:43127/app.js >/tmp/v095_app.js
-          grep -q 'applyViewportProfile' /tmp/v095_app.js
+          cat /tmp/v096_health.json
+          grep -q '"version":"0.9.6"' /tmp/v096_health.json
+          curl -fsS http://127.0.0.1:43127/styles.css >/tmp/v096_styles.css
+          grep -q '100dvh' /tmp/v096_styles.css
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -131,18 +119,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.9.5.zip
-          (cd /tmp/yilbay095 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.5.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.9.5.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.9.6.zip
+          (cd /tmp/yilbay096 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.6.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.9.6.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
           {
-            "version": "0.9.5",
-            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.5.zip",
+            "version": "0.9.6",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.6.zip",
             "sha256": "$SHA"
           }
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay095 source/current
+          cp -a /tmp/yilbay096 source/current
 
       - name: Commit verified release
         shell: bash
@@ -150,6 +138,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.9.5.zip release/latest.json source/current CELL_PROTOCOL.md
-          git commit -m 'Publish verified v0.9.5 adaptive resolution UI [skip ci]'
+          git add release/YILBAY_APP_v0.9.6.zip release/latest.json source/current CELL_PROTOCOL.md
+          git commit -m 'Publish verified v0.9.6 maximized window launcher [skip ci]'
           git push origin main
