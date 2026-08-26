@@ -1,0 +1,79 @@
+name: Publish v0.6.8 BOM-safe Node bootstrap
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release_build/v0.6.8/**'
+      - '.github/workflows/publish-v068.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Extract stable v0.6.7 base
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/yilbay068 && mkdir -p /tmp/yilbay068/src
+          unzip -q release/YILBAY_APP_v0.6.7.zip -d /tmp/yilbay068/src
+      - name: Apply BOM-safe bootstrap patch
+        run: python release_build/v0.6.8/patch_v068.py
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check /tmp/yilbay068/src/app/server.js
+          node --check /tmp/yilbay068/src/app/public/app.js
+          node --check /tmp/yilbay068/src/app/bootstrap/orchestrator_node.js
+          node /tmp/yilbay068/src/app/tests.js
+          grep -q 'function parseJson' /tmp/yilbay068/src/app/bootstrap/orchestrator_node.js
+          grep -q 'replace(/\^\\uFEFF/' /tmp/yilbay068/src/app/bootstrap/orchestrator_node.js
+      - name: Mandatory runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/yilbay068/src/app
+          PORT=43129 node server.js >/tmp/yilbay068/server.log 2>/tmp/yilbay068/server.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:43129/health >/tmp/yilbay068/health.json; then break; fi
+            sleep 0.5
+          done
+          grep -q '0.6.8' /tmp/yilbay068/health.json
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+      - name: Build ZIP and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.6.8.zip
+          cd /tmp/yilbay068/src
+          zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.6.8.zip" .
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum release/YILBAY_APP_v0.6.8.zip | awk '{print $1}')
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.6.8",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.6.8.zip",
+            "sha256": "$SHA"
+          }
+          JSON
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.6.8.zip release/latest.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Publish verified v0.6.8 release [skip ci]'
+          git push origin main
