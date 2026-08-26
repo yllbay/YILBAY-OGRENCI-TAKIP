@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.9.3/**'
+      - 'release_build/v0.9.4/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,25 +20,27 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.9.2 source
+      - name: Copy verified v0.9.3 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay093 /tmp/microtools
-          cp -a source/current /tmp/yilbay093
-          test "$(cat /tmp/yilbay093/app/VERSION | tr -d '\r\n')" = "0.9.2"
-          test -s /tmp/yilbay093/app/public/app.js
-          test -s /tmp/yilbay093/app/server.js
-          test -s /tmp/yilbay093/cells/micro-cell-manifest.json
+          rm -rf /tmp/yilbay094 /tmp/microtools
+          cp -a source/current /tmp/yilbay094
+          test "$(cat /tmp/yilbay094/app/VERSION | tr -d '\r\n')" = "0.9.3"
+          test -s /tmp/yilbay094/app/public/app.js
+          test -s /tmp/yilbay094/app/server.js
+          test -s /tmp/yilbay094/app/bootstrap/orchestrator_node.js
 
-      - name: Patch resource metadata cells
+      - name: Patch fullscreen launcher and homework context
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.3/patch_cells_v093.mjs
-          grep -q 'function parseDriveResourceFilename' /tmp/yilbay093/app/server.js
-          grep -q 'resourceEditModal' /tmp/yilbay093/app/public/app.js
-          grep -q 'answerKeyDriveFileId' /tmp/yilbay093/app/public/app.js
+          node release_build/v0.9.4/patch_cells_v094.mjs
+          grep -q -- '--start-fullscreen' /tmp/yilbay094/app/bootstrap/orchestrator_node.js
+          grep -q 'function assignmentResourceContext' /tmp/yilbay094/app/public/app.js
+          grep -q 'function driveDownloadAnalysisFile' /tmp/yilbay094/app/server.js
+          grep -q 'function installLaunchPreferences' /tmp/yilbay094/app/server.js
+          grep -q 'validateHomeworkQuestionCount' /tmp/yilbay094/app/server.js
 
       - name: Install build-only AST parser
         shell: bash
@@ -51,9 +53,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.3/microcellularize.mjs
+          node release_build/v0.9.4/microcellularize.mjs
 
-      - name: Strict micro-cell and metadata tests
+      - name: Strict micro-cell and feature tests
         shell: bash
         run: |
           set -euo pipefail
@@ -61,69 +63,63 @@ jobs:
           import fs from 'fs';
           import vm from 'vm';
           import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay093';
+          const root='/tmp/yilbay094';
           const m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.3') throw new Error('manifest protocol/version');
-          if(m.counts.frontend<86) throw new Error('resource metadata frontend cells missing: '+m.counts.frontend);
-          if(m.counts.backend<43) throw new Error('resource filename parser cell missing: '+m.counts.backend);
+          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.4') throw new Error('manifest protocol/version');
+          if(m.counts.frontend<87) throw new Error('assignment resource context cell missing: '+m.counts.frontend);
+          if(m.counts.backend<47) throw new Error('backend feature cells missing: '+m.counts.backend);
           for(const entry of [...m.frontend,...m.backend]){
             const src=fs.readFileSync(root+'/'+entry.file,'utf8');
             const ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});
             if(ast.body.length!==1) throw new Error(entry.file+' has '+ast.body.length+' top-level nodes');
-            if(ast.body[0].type!==entry.nodeType) throw new Error(entry.file+' node type mismatch');
+            if(ast.body[0].type!==entry.nodeType) throw new Error(entry.file+' node mismatch');
           }
           const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
           const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
           if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')) throw new Error('frontend bundle mismatch');
           if(b!==fs.readFileSync(root+'/app/server.js','utf8')) throw new Error('backend bundle mismatch');
-          for(const name of ['resourceEditModal','saveResourceMetadata','upsertDriveResource']) if(!m.frontend.find(x=>x.name===name)) throw new Error(name+' cell missing');
-          for(const name of ['parseDriveResourceFilename','driveMetadataFromFile']) if(!m.backend.find(x=>x.name===name)) throw new Error(name+' cell missing');
-          const ctx={};vm.createContext(ctx);
-          for(const name of ['normalizeCourseName','parseDriveResourceFilename','driveMetadataFromFile']){const e=m.backend.find(x=>x.name===name);vm.runInContext(fs.readFileSync(root+'/'+e.file,'utf8'),ctx)}
-          let md=ctx.driveMetadataFromFile({name:'LgsMatematik__Mutlak Değer__Orta__Mutlak Değer Test 01.pdf'});
-          if(md.course!=='LGS Matematik'||md.topic!=='Mutlak Değer'||md.subtopic!=='Mutlak Değer'||md.questionCount!==0||!md.matched) throw new Error('legacy filename contract failed '+JSON.stringify(md));
-          md=ctx.driveMetadataFromFile({name:'LgsMatematik__Sayılar__Mutlak Değer__Orta__20__Mutlak Değer Test 01.pdf'});
-          if(md.course!=='LGS Matematik'||md.unit!=='Sayılar'||md.subtopic!=='Mutlak Değer'||md.topic!=='Mutlak Değer'||md.level!=='Orta'||md.questionCount!==20||md.title!=='Mutlak Değer Test 01'||!md.matched) throw new Error('extended filename contract failed '+JSON.stringify(md));
-          md=ctx.driveMetadataFromFile({name:'x.pdf',appProperties:{yilbayCourse:'TYTMatematik',yilbayUnit:'Temel Kavramlar',yilbaySubtopic:'Sayı Kümeleri',yilbayLevel:'Kolay',yilbayTitle:'Kaynak',yilbayQuestionCount:'15',yilbayAnswerKeyDriveFileId:'answer-1'}});
-          if(md.course!=='TYT Matematik'||md.questionCount!==15||md.answerKeyDriveFileId!=='answer-1'||!md.matched) throw new Error('appProperties metadata failed '+JSON.stringify(md));
-          const upsert=m.frontend.find(x=>x.name==='upsertDriveResource');
-          const uctx={db:{resources:[{id:7,driveFileId:'d1',unit:'Elle Ünite',subtopic:'Elle Alt',questionCount:12,answerKeyDriveFileId:'ak1'}]}};vm.createContext(uctx);vm.runInContext(fs.readFileSync(root+'/'+upsert.file,'utf8'),uctx);
-          const x={id:'d1',course:'LGS Matematik',topic:'Mutlak Değer',subtopic:'Mutlak Değer',unit:'',level:'Orta',questionCount:0,answerKeyDriveFileId:'',title:'Test',name:'Test.pdf',webViewLink:'',modifiedTime:null};
-          if(uctx.upsertDriveResource(x,9)!=='updated') throw new Error('upsert metadata update failed');
-          const r=uctx.db.resources[0];if(r.unit!=='Elle Ünite'||r.questionCount!==12||r.answerKeyDriveFileId!=='ak1') throw new Error('manual metadata was not preserved '+JSON.stringify(r));
-          if(!f.includes('Cevap Anahtarı Drive File ID')||!f.includes('Soru Sayısı')||!f.includes('Ünite')) throw new Error('resource UI metadata fields missing');
-          console.log('STRICT MICRO CELLS',m.counts,'RESOURCE METADATA OK');
+          for(const name of ['assignmentResourceContext','submitHomeworkAnalysis']) if(!m.frontend.find(x=>x.name===name)) throw new Error(name+' cell missing');
+          for(const name of ['driveDownloadAnalysisFile','validateHomeworkQuestionCount','installLaunchPreferences']) if(!m.backend.find(x=>x.name===name)) throw new Error(name+' cell missing');
+          const qc=m.backend.find(x=>x.name==='validateHomeworkQuestionCount');const qctx={};vm.createContext(qctx);vm.runInContext(fs.readFileSync(root+'/'+qc.file,'utf8'),qctx);
+          let a={totalQuestions:20,needsTeacherReview:false,autoFinalize:true};let v=qctx.validateHomeworkQuestionCount(a,20);if(v.questionCountMismatch||v.autoFinalize!==true)throw new Error('question count match failed');
+          v=qctx.validateHomeworkQuestionCount(a,25);if(!v.questionCountMismatch||v.autoFinalize!==false||!v.needsTeacherReview)throw new Error('question count mismatch review failed');
+          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');
+          if(!boot.includes('--start-fullscreen')||!boot.includes('--start-maximized')||!boot.includes('2.1.0-node'))throw new Error('bootstrap fullscreen/version missing');
+          if(/ExecutionPolicy\s+Bypass/i.test(boot)||/ExecutionPolicy\s+Bypass/i.test(b))throw new Error('unsafe powershell bypass reintroduced');
+          if(!b.includes('/MAX powershell.exe -NoLogo -NoProfile'))throw new Error('maximized PowerShell launcher contract missing');
+          if(!f.includes('resourceContext=assignmentResourceContext(a)')||!b.includes('resourceContext?.answerKeyDriveFileId'))throw new Error('homework Drive context wiring missing');
+          console.log('STRICT MICRO CELLS',m.counts,'FULLSCREEN + HOMEWORK CONTEXT OK');
           NODE
-          while IFS= read -r f; do node --check "/tmp/yilbay093/$f"; done < <(node -e "const m=require('/tmp/yilbay093/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
-          node --check /tmp/yilbay093/app/public/app.js
-          node --check /tmp/yilbay093/app/server.js
-          node /tmp/yilbay093/app/tests.js
-          ! grep -qi 'powershell.exe' /tmp/yilbay093/app/server.js
-          grep -q 'drive.readonly' /tmp/yilbay093/app/server.js
-          grep -q '/api/drive/index' /tmp/yilbay093/app/server.js
+          while IFS= read -r f; do node --check "/tmp/yilbay094/$f"; done < <(node -e "const m=require('/tmp/yilbay094/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
+          node --check /tmp/yilbay094/app/public/app.js
+          node --check /tmp/yilbay094/app/server.js
+          node --check /tmp/yilbay094/app/bootstrap/orchestrator_node.js
+          node /tmp/yilbay094/app/tests.js
+          grep -q 'drive.readonly' /tmp/yilbay094/app/server.js
+          grep -q '/api/drive/index' /tmp/yilbay094/app/server.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay093/app/server.js >/tmp/v093_server.log 2>/tmp/v093_server.err &
+          PORT=43127 node /tmp/yilbay094/app/server.js >/tmp/v094_server.log 2>/tmp/v094_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
           OK=0
           for i in $(seq 1 30); do
-            CODE=$(curl -sS -o /tmp/v093_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            CODE=$(curl -sS -o /tmp/v094_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
             if [ "$CODE" = "200" ]; then OK=1; break; fi
             sleep 0.5
           done
-          cat /tmp/v093_health.json || true
-          cat /tmp/v093_server.err || true
+          cat /tmp/v094_health.json || true
+          cat /tmp/v094_server.err || true
           test "$OK" = "1"
-          grep -q '"version":"0.9.3"' /tmp/v093_health.json
-          curl -fsS http://127.0.0.1:43127/api/drive/status >/tmp/v093_drive.json
-          grep -q '"configured":false' /tmp/v093_drive.json
-          CODE=$(curl -sS -o /tmp/v093_drive_start.json -w '%{http_code}' -X POST http://127.0.0.1:43127/api/drive/oauth/start)
+          grep -q '"version":"0.9.4"' /tmp/v094_health.json
+          curl -fsS http://127.0.0.1:43127/api/drive/status >/tmp/v094_drive.json
+          grep -q '"configured":false' /tmp/v094_drive.json
+          CODE=$(curl -sS -o /tmp/v094_homework.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' http://127.0.0.1:43127/api/ai/analyze-homework)
           test "$CODE" = "400"
-          grep -q 'OAuth Client ID/Secret' /tmp/v093_drive_start.json
+          grep -q 'Ödev dosyası gerekli' /tmp/v094_homework.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -132,18 +128,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.9.3.zip
-          (cd /tmp/yilbay093 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.3.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.9.3.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.9.4.zip
+          (cd /tmp/yilbay094 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.4.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.9.4.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
           {
-            "version": "0.9.3",
-            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.3.zip",
+            "version": "0.9.4",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.4.zip",
             "sha256": "$SHA"
           }
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay093 source/current
+          cp -a /tmp/yilbay094 source/current
 
       - name: Commit verified release
         shell: bash
@@ -151,6 +147,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.9.3.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.9.3 resource metadata [skip ci]'
+          git add release/YILBAY_APP_v0.9.4.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.9.4 fullscreen launcher and homework context [skip ci]'
           git push origin main
