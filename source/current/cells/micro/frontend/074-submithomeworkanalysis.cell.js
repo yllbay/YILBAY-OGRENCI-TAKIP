@@ -25,6 +25,6 @@ window.submitHomeworkAnalysis=async id=>{
  finally{if(btn){btn.disabled=false;btn.textContent="Dosyayı Tara"}}
 }
 
-/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.9.1 */
+/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.9.2 */
 
 /* CELL:130-ui-runtime | layer:frontend | generated-from:v0.7.2 */

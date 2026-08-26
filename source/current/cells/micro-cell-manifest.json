@@ -1,6 +1,6 @@
 {
   "protocol": "micro-cell-v2-ast",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "rule": "one-Program.body-node-per-cell",
   "frontend": [
     {
@@ -571,18 +571,25 @@
       "end": 52542
     },
     {
-      "file": "cells/micro/frontend/082-indexgoogledrive.cell.js",
-      "nodeType": "ExpressionStatement",
-      "name": "indexGoogleDrive",
+      "file": "cells/micro/frontend/082-upsertdriveresource.cell.js",
+      "nodeType": "FunctionDeclaration",
+      "name": "upsertDriveResource",
       "start": 52543,
-      "end": 53299
+      "end": 53041
     },
     {
-      "file": "cells/micro/frontend/083-frontend-statement-83.cell.js",
+      "file": "cells/micro/frontend/083-indexgoogledrive.cell.js",
       "nodeType": "ExpressionStatement",
-      "name": "frontend-statement-83",
-      "start": 53301,
-      "end": 53313
+      "name": "indexGoogleDrive",
+      "start": 53042,
+      "end": 53558
+    },
+    {
+      "file": "cells/micro/frontend/084-frontend-statement-84.cell.js",
+      "nodeType": "ExpressionStatement",
+      "name": "frontend-statement-84",
+      "start": 53560,
+      "end": 53572
     }
   ],
   "backend": [
@@ -882,9 +889,9 @@
     }
   ],
   "counts": {
-    "frontend": 83,
+    "frontend": 84,
     "backend": 42,
-    "totalJs": 125
+    "totalJs": 126
   },
   "designSystem": [
     "cells/design-system/00-design-system.cell.css"
