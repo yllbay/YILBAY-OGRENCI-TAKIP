@@ -1,0 +1,106 @@
+name: Publish v0.6.6 native credential reader
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'build_tools/v0.6.6/**'
+      - '.github/workflows/publish-v066.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract stable base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f release/YILBAY_APP_v0.6.5.zip
+          rm -rf /tmp/yilbay066
+          mkdir -p /tmp/yilbay066/src
+          unzip -q release/YILBAY_APP_v0.6.5.zip -d /tmp/yilbay066/src
+
+      - name: Build native Windows credential helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-mingw-w64-x86-64
+          x86_64-w64-mingw32-gcc -Os -municode -static -s build_tools/v0.6.6/credential_reader.c -ladvapi32 -o /tmp/yilbay066/src/app/credential_reader.exe
+          test -s /tmp/yilbay066/src/app/credential_reader.exe
+
+      - name: Apply deterministic app patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python build_tools/v0.6.6/patch_app.py
+
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'credential_reader.exe' /tmp/yilbay066/src/app/server.js
+          ! grep -q 'powershell.exe' /tmp/yilbay066/src/app/server.js
+          node --check /tmp/yilbay066/src/app/server.js
+          node --check /tmp/yilbay066/src/app/public/app.js
+          node /tmp/yilbay066/src/app/tests.js
+
+      - name: Mandatory runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/yilbay066/src/app
+          PORT=43129 node server.js >/tmp/yilbay066/server.out 2>/tmp/yilbay066/server.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:43129/health >/tmp/yilbay066/health.json; then break; fi
+            sleep 0.25
+          done
+          grep -q '"ok":true' /tmp/yilbay066/health.json
+          grep -q '"version":"0.6.6"' /tmp/yilbay066/health.json
+          kill $PID
+          wait $PID || true
+          trap - EXIT
+
+      - name: Build ZIP and calculate SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.6.6.zip
+          cd /tmp/yilbay066/src
+          zip -q -r "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.6.6.zip" .
+          cd "$GITHUB_WORKSPACE"
+          unzip -t release/YILBAY_APP_v0.6.6.zip
+          SHA="$(sha256sum release/YILBAY_APP_v0.6.6.zip | awk '{print $1}')"
+          echo "V066_SHA=$SHA" >> "$GITHUB_ENV"
+
+      - name: Write updater manifest
+        shell: bash
+        run: |
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.6.6",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.6.6.zip",
+            "sha256": "$V066_SHA"
+          }
+          JSON
+
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.6.6.zip release/latest.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Publish verified v0.6.6 release [skip ci]'
+          git push origin main
