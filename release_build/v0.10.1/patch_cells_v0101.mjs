@@ -1,0 +1,22 @@
+import fs from 'fs';
+import path from 'path';
+const ROOT='/tmp/yilbay0101';
+const mp=path.join(ROOT,'cells','micro-cell-manifest.json');
+const m=JSON.parse(fs.readFileSync(mp,'utf8'));
+if(m.version!=='0.10.0'||m.protocol!=='micro-cell-v2-ast')throw new Error('Expected verified v0.10.0 source');
+for(const e of [...m.frontend,...m.backend]){const p=path.join(ROOT,e.file);let s=fs.readFileSync(p,'utf8');s=s.replaceAll('0.10.0','0.10.1');fs.writeFileSync(p,s,'utf8')}
+const handle=m.backend.find(x=>x.name==='handleHomework');if(!handle)throw new Error('handleHomework missing');
+const hp=path.join(ROOT,handle.file);let hs=fs.readFileSync(hp,'utf8');
+const writer=`function writeHomeworkDiagnostic(analysis={},cost=null,assignment=null){const safe={timestamp:new Date().toISOString(),assignmentId:assignment?.id??null,expectedStudentPages:Number(analysis.expectedStudentPages)||0,analyzedStudentPages:Array.isArray(analysis.analyzedStudentPages)?analysis.analyzedStudentPages.slice(0,500):[],missingStudentPages:Array.isArray(analysis.missingStudentPages)?analysis.missingStudentPages.slice(0,500):[],expectedSourcePages:Number(analysis.expectedSourcePages)||0,analyzedSourcePages:Array.isArray(analysis.analyzedSourcePages)?analysis.analyzedSourcePages.slice(0,500):[],missingSourcePages:Array.isArray(analysis.missingSourcePages)?analysis.missingSourcePages.slice(0,500):[],pdfCoverageVerified:!!analysis.pdfCoverageVerified,answerKeyFound:!!analysis.answerKeyFound,answerKeySource:String(analysis.answerKeySource||'none'),answerKeyConfidence:Number(analysis.answerKeyConfidence)||0,confidence:Number(analysis.confidence)||0,needsTeacherReview:!!analysis.needsTeacherReview,autoFinalize:!!analysis.autoFinalize,totalQuestions:Number(analysis.totalQuestions)||0,correct:Number(analysis.correct)||0,wrong:Number(analysis.wrong)||0,blank:Number(analysis.blank)||0,scorePercent:Number(analysis.scorePercent)||0,costTry:Number(cost?.try)||0,secretsCollected:false,contentCollected:false};fs.mkdirSync(runtime,{recursive:true});fs.writeFileSync(path.join(runtime,'last_homework_analysis.json'),JSON.stringify(safe,null,2),'utf8');return safe}\n`;
+hs=hs.replace('async function handleHomework(req,res){',writer+'async function handleHomework(req,res){');
+hs=hs.replace('const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});','const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});\n  writeHomeworkDiagnostic(parsed,cost,assignment);');
+if(!hs.includes('writeHomeworkDiagnostic(parsed,cost,assignment)'))throw new Error('diagnostic call missing');fs.writeFileSync(hp,hs,'utf8');
+const frontend=m.frontend.map(e=>fs.readFileSync(path.join(ROOT,e.file),'utf8')).join('');const backend=m.backend.map(e=>fs.readFileSync(path.join(ROOT,e.file),'utf8')).join('');
+fs.writeFileSync(path.join(ROOT,'app','public','app.js'),frontend,'utf8');fs.writeFileSync(path.join(ROOT,'app','server.js'),backend,'utf8');fs.writeFileSync(path.join(ROOT,'app','VERSION'),'0.10.1\n','utf8');
+const boot=path.join(ROOT,'app','bootstrap','orchestrator_node.js');let bs=fs.readFileSync(boot,'utf8');
+bs=bs.replaceAll('2.1.1-node','2.1.2-node').replaceAll('Node bootstrap v2.1.1','Node bootstrap v2.1.2');
+const needle='fs.copyFileSync(slog,path.join(rep,"LOGS",path.basename(slog)));';
+const add='fs.copyFileSync(slog,path.join(rep,"LOGS",path.basename(slog)));const hwdiag=path.join(RUNTIME,"last_homework_analysis.json");if(fs.existsSync(hwdiag))fs.copyFileSync(hwdiag,path.join(rep,"REPORT","homework_analysis.json"));';
+if(!bs.includes(needle))throw new Error('report copy anchor missing');bs=bs.replace(needle,add);
+if(!bs.includes('homework_analysis.json')||!bs.includes('2.1.2-node'))throw new Error('bootstrap diagnostic patch failed');fs.writeFileSync(boot,bs,'utf8');
+console.log('v0.10.1 homework diagnostic report patch applied');
