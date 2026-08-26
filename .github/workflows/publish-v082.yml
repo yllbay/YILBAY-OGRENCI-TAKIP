@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.10.7/**'
+      - 'release_build/v0.10.8/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,24 +20,25 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.10.6 source
+      - name: Copy verified v0.10.7 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay0107 /tmp/microtools
-          cp -a source/current /tmp/yilbay0107
-          test "$(cat /tmp/yilbay0107/app/VERSION | tr -d '\r\n')" = "0.10.6"
+          rm -rf /tmp/yilbay0108 /tmp/microtools
+          cp -a source/current /tmp/yilbay0108
+          test "$(cat /tmp/yilbay0108/app/VERSION | tr -d '\r\n')" = "0.10.7"
 
-      - name: Patch diagnostics
+      - name: Patch composite question identity and deletion
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.7/patch_v0107.mjs
-          grep -q 'correctQuestionNumbers:Array.isArray' /tmp/yilbay0107/app/server.js
-          grep -q 'wrongQuestionNumbers:Array.isArray' /tmp/yilbay0107/app/server.js
-          grep -q 'function writeHomeworkPdfDiagnostic' /tmp/yilbay0107/app/server.js
-          grep -q 'last_homework_pdf.json' /tmp/yilbay0107/app/bootstrap/orchestrator_node.js
-          grep -q '2.1.4-node' /tmp/yilbay0107/app/bootstrap/orchestrator_node.js
+          node release_build/v0.10.8/patch_v0108.mjs
+          grep -q 'function normalizeHomeworkQuestionRef' /tmp/yilbay0108/app/server.js
+          grep -q 'function finalizeHomeworkQuestionSets' /tmp/yilbay0108/app/server.js
+          grep -q 'direct_luna_wrong_only_composite_question_id' /tmp/yilbay0108/app/server.js
+          grep -q 'function handleHomeworkReportDelete' /tmp/yilbay0108/app/server.js
+          grep -q 'window.deleteHomeworkAnalysis' /tmp/yilbay0108/app/public/app.js
+          grep -q 'window.clearHomeworkAnalyses' /tmp/yilbay0108/app/public/app.js
 
       - name: Install AST parser
         shell: bash
@@ -50,42 +51,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.7/microcellularize.mjs
+          node release_build/v0.10.8/microcellularize.mjs
 
-      - name: Strict diagnostics tests
+      - name: Strict question identity and deletion tests
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import fs from 'fs';import vm from 'vm';import path from 'path';import os from 'os';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay0107',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.version!=='0.10.7'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
+          const root='/tmp/yilbay0108',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
+          if(m.version!=='0.10.8'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
           for(const e of [...m.frontend,...m.backend]){const src=fs.readFileSync(root+'/'+e.file,'utf8'),ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});if(ast.body.length!==1||ast.body[0].type!==e.nodeType)throw new Error(e.file)}
-          const cell=n=>m.backend.find(x=>x.name===n);
-          for(const n of ['writeHomeworkDiagnostic','writeHomeworkPdfDiagnostic','handleHomeworkReportPdf'])if(!cell(n))throw new Error('missing '+n);
-          const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'yilbaydiag-'));const ctx={fs,path,runtime:tmp,Date,JSON,Number,String,Array};vm.createContext(ctx);
-          vm.runInContext(fs.readFileSync(root+'/'+cell('writeHomeworkDiagnostic').file,'utf8'),ctx);
-          const d=ctx.writeHomeworkDiagnostic({correctQuestionNumbers:[1,2,3],blankQuestionNumbers:[5],uncertainQuestionNumbers:[7],items:[{question:4,status:'wrong',note:'PRIVATE'}],analysisArchitecture:'direct_luna_wrong_only'}, {try:.25},{id:9});
-          if(JSON.stringify(d).includes('PRIVATE'))throw new Error('diagnostic content leak');if(d.correctQuestionNumbers.join(',')!=='1,2,3'||d.wrongQuestionNumbers.join(',')!=='4'||d.blankQuestionNumbers[0]!==5||d.uncertainQuestionNumbers[0]!==7)throw new Error('question lists');
-          vm.runInContext(fs.readFileSync(root+'/'+cell('writeHomeworkPdfDiagnostic').file,'utf8'),ctx);const p=ctx.writeHomeworkPdfDiagnostic({generated:true,reportId:'123_abcd',sizeBytes:4567,error:'SECRET'.repeat(200)});if(!p.generated||p.sizeBytes!==4567||p.error.length>300||p.secretsCollected!==false)throw new Error('pdf diagnostic');
-          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||b!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
-          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('2.1.4-node')||!boot.includes('homework_pdf.json')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('bootstrap regression');
-          console.log('V0107 DIAGNOSTICS OK',m.counts);
+          const cell=n=>m.backend.find(x=>x.name===n);for(const n of ['normalizeHomeworkQuestionRef','normalizeHomeworkQuestionRefs','finalizeHomeworkQuestionSets','handleHomeworkReportDelete'])if(!cell(n))throw new Error('missing '+n);
+          const ctx={Set,String,Number,Array,Math};vm.createContext(ctx);for(const n of ['normalizeHomeworkQuestionRef','normalizeHomeworkQuestionRefs','finalizeHomeworkQuestionSets'])vm.runInContext(fs.readFileSync(root+'/'+cell(n).file,'utf8'),ctx);
+          const refs=[];for(let i=1;i<=9;i++)refs.push({sectionKey:'sayi-problemleri',section:'Sayı Problemleri',page:i<=5?1:2,printedNumber:i});for(let i=1;i<=11;i++)refs.push({sectionKey:'kesir-problemleri',section:'Kesir Problemleri',page:i<=7?3:4,printedNumber:i});for(let i=1;i<=13;i++)refs.push({sectionKey:'bos-dolu-problemleri',section:'Boş-Dolu Problemleri',page:i<=6?5:i<=9?6:7,printedNumber:i});
+          let q=ctx.finalizeHomeworkQuestionSets({correctQuestions:refs,blankQuestions:[],uncertainQuestions:[],items:[],autoFinalize:true});if(q.totalQuestions!==33||q.correct!==33||q.questionIdentityDuplicateCount!==0)throw new Error('33-question regression: '+JSON.stringify({total:q.totalQuestions,correct:q.correct}));
+          if(q.correctQuestions.filter(x=>x.printedNumber===1).length!==3)throw new Error('restarted question numbers collapsed');
+          q=ctx.finalizeHomeworkQuestionSets({correctQuestions:[refs[0]],blankQuestions:[refs[0]],items:[],uncertainQuestions:[],autoFinalize:true});if(q.questionIdentityDuplicateCount!==1||!q.needsTeacherReview||q.questionAccountingVerified)throw new Error('cross-status duplicate guard');
+          const promptCell=cell('lunaHomeworkDirectInstruction'),promptCtx={};vm.createContext(promptCtx);vm.runInContext(fs.readFileSync(root+'/'+promptCell.file,'utf8'),promptCtx);const prompt=promptCtx.lunaHomeworkDirectInstruction();if(!prompt.includes('sectionKey + printedNumber')||!prompt.includes('1\'den yeniden başlayabilir'))throw new Error('prompt identity contract');
+          const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'yilbaydel-')),pdfDir=path.join(tmp,'homework_reports');fs.mkdirSync(pdfDir,{recursive:true});const id='123_abcd',file=path.join(pdfDir,id+'.pdf');fs.writeFileSync(file,'%PDF-x');let status=0,payload=null;const dctx={fs,path,runtime:tmp,json:(res,st,obj)=>{status=st;payload=obj}};vm.createContext(dctx);vm.runInContext(fs.readFileSync(root+'/'+cell('handleHomeworkReportDelete').file,'utf8'),dctx);dctx.handleHomeworkReportDelete({pathname:'/api/reports/homework-pdf/'+id},{});if(status!==200||fs.existsSync(file)||!payload.deleted)throw new Error('PDF delete');dctx.handleHomeworkReportDelete({pathname:'/api/reports/homework-pdf/../../secret'},{});if(status!==400)throw new Error('path traversal guard');
+          const front=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),back=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(front!==fs.readFileSync(root+'/app/public/app.js','utf8')||back!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');if(!front.includes('Tüm Analiz Geçmişini Temizle')||!front.includes('deleteHomeworkAnalysis'))throw new Error('delete UI');if(!back.includes('req.method==="DELETE"'))throw new Error('delete route');
+          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('2.1.4-node')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('launcher regression');
+          console.log('V0108 QUESTION ID + DELETE OK',m.counts);
           NODE
-          node --check /tmp/yilbay0107/app/server.js
-          node --check /tmp/yilbay0107/app/public/app.js
-          node --check /tmp/yilbay0107/app/bootstrap/orchestrator_node.js
-          node /tmp/yilbay0107/app/tests.js
+          node --check /tmp/yilbay0108/app/server.js
+          node --check /tmp/yilbay0108/app/public/app.js
+          node /tmp/yilbay0108/app/tests.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay0107/app/server.js >/tmp/v0107_server.log 2>/tmp/v0107_server.err &
+          PORT=43127 node /tmp/yilbay0108/app/server.js >/tmp/v0108_server.log 2>/tmp/v0108_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0107_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
-          grep -q '"version":"0.10.7"' /tmp/v0107_health.json
+          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0108_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
+          grep -q '"version":"0.10.8"' /tmp/v0108_health.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -94,14 +95,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.10.7.zip
-          (cd /tmp/yilbay0107 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.7.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.10.7.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.10.8.zip
+          (cd /tmp/yilbay0108 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.8.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.10.8.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
-          {"version":"0.10.7","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.7.zip","sha256":"$SHA"}
+          {"version":"0.10.8","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.8.zip","sha256":"$SHA"}
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay0107 source/current
+          cp -a /tmp/yilbay0108 source/current
 
       - name: Commit verified release
         shell: bash
@@ -109,6 +110,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.10.7.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.10.7 diagnostics [skip ci]'
+          git add release/YILBAY_APP_v0.10.8.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.10.8 question identity and analysis deletion [skip ci]'
           git push origin main
