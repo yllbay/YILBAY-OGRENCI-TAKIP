@@ -1,0 +1,122 @@
+name: Publish v0.8.1 micro-cell architecture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release_build/v0.8.1/**'
+      - '.github/workflows/publish-v081.yml'
+      - 'CELL_PROTOCOL.md'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Copy verified v0.8.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/yilbay081
+          cp -a source/current /tmp/yilbay081
+          test -s /tmp/yilbay081/app/public/app.js
+          test -s /tmp/yilbay081/app/server.js
+
+      - name: Split every top-level behavior into micro cells
+        shell: bash
+        run: |
+          set -euo pipefail
+          python release_build/v0.8.1/microcellularize.py
+          test -f /tmp/yilbay081/cells/micro-cell-manifest.json
+          cat /tmp/yilbay081/cells/micro-cell-manifest.json
+
+      - name: Micro-cell contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('/tmp/yilbay081')
+          m=json.loads((root/'cells/micro-cell-manifest.json').read_text(encoding='utf-8'))
+          assert m['protocol']=='micro-cell-v1'
+          assert m['version']=='0.8.1'
+          assert m['counts']['frontend'] >= 20, m['counts']
+          assert m['counts']['backend'] >= 10, m['counts']
+          assert m['counts']['totalJs']==len(m['frontend'])+len(m['backend'])
+          for f in m['frontend']+m['backend']:
+              p=root/f
+              assert p.exists() and p.stat().st_size>0, f
+          # Runtime bundle must equal exact manifest concatenation.
+          app=''.join((root/f).read_text(encoding='utf-8') for f in m['frontend'])
+          srv=''.join((root/f).read_text(encoding='utf-8') for f in m['backend'])
+          assert app==(root/'app/public/app.js').read_text(encoding='utf-8')
+          assert srv==(root/'app/server.js').read_text(encoding='utf-8')
+          print('MICRO CELL COUNTS',m['counts'])
+          PY
+          while IFS= read -r f; do node --check "/tmp/yilbay081/$f"; done < <(python - <<'PY'
+          import json
+          m=json.load(open('/tmp/yilbay081/cells/micro-cell-manifest.json',encoding='utf-8'))
+          print('\n'.join(m['frontend']+m['backend']))
+          PY
+          )
+          node --check /tmp/yilbay081/app/public/app.js
+          node --check /tmp/yilbay081/app/server.js
+          node /tmp/yilbay081/app/tests.js
+          ! grep -qi 'powershell.exe' /tmp/yilbay081/app/server.js
+
+      - name: Runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=43127 node /tmp/yilbay081/app/server.js >/tmp/v081_server.log 2>/tmp/v081_server.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          OK=0
+          for i in $(seq 1 30); do
+            CODE=$(curl -sS -o /tmp/v081_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
+            sleep 0.5
+          done
+          cat /tmp/v081_health.json || true
+          cat /tmp/v081_server.err || true
+          test "$OK" = "1"
+          grep -q '"version":"0.8.1"' /tmp/v081_health.json
+          curl -fsS http://127.0.0.1:43127/api/integrations/status >/tmp/v081_integrations.json
+          curl -fsS http://127.0.0.1:43127/api/ai/costs >/tmp/v081_costs.json
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+
+      - name: Build verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.8.1.zip
+          (cd /tmp/yilbay081 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.8.1.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.8.1.zip | awk '{print $1}')
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.8.1",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.8.1.zip",
+            "sha256": "$SHA"
+          }
+          JSON
+          rm -rf source/current
+          cp -a /tmp/yilbay081 source/current
+
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.8.1.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.8.1 micro-cell architecture [skip ci]'
+          git push origin main
