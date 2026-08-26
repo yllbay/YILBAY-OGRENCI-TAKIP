@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.10.0/**'
+      - 'release_build/v0.10.1/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,23 +20,23 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.9.9 source
+      - name: Copy verified v0.10.0 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay0100 /tmp/microtools
-          cp -a source/current /tmp/yilbay0100
-          test "$(cat /tmp/yilbay0100/app/VERSION | tr -d '\r\n')" = "0.9.9"
+          rm -rf /tmp/yilbay0101 /tmp/microtools
+          cp -a source/current /tmp/yilbay0101
+          test "$(cat /tmp/yilbay0101/app/VERSION | tr -d '\r\n')" = "0.10.0"
 
-      - name: Patch full PDF page coverage
+      - name: Patch homework diagnostics
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.0/patch_cells_v0100.mjs
-          grep -q 'function estimatePdfPageCount' /tmp/yilbay0100/app/server.js
-          grep -q 'function validateHomeworkPageCoverage' /tmp/yilbay0100/app/server.js
-          grep -q 'TÜM SAYFALARI' /tmp/yilbay0100/app/server.js
-          grep -q 'Sayfa Kapsamı' /tmp/yilbay0100/app/public/app.js
+          node release_build/v0.10.1/patch_cells_v0101.mjs
+          grep -q 'function writeHomeworkDiagnostic' /tmp/yilbay0101/app/server.js
+          grep -q 'last_homework_analysis.json' /tmp/yilbay0101/app/server.js
+          grep -q 'homework_analysis.json' /tmp/yilbay0101/app/bootstrap/orchestrator_node.js
+          grep -q '2.1.2-node' /tmp/yilbay0101/app/bootstrap/orchestrator_node.js
 
       - name: Install AST parser
         shell: bash
@@ -49,40 +49,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.0/microcellularize.mjs
+          node release_build/v0.10.1/microcellularize.mjs
 
-      - name: Strict page coverage tests
+      - name: Strict diagnostic tests
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
-          import fs from 'fs';import vm from 'vm';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay0100',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.version!=='0.10.0'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
+          import fs from 'fs';import path from 'path';import os from 'os';import vm from 'vm';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
+          const root='/tmp/yilbay0101',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
+          if(m.version!=='0.10.1'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
           for(const e of [...m.frontend,...m.backend]){const s=fs.readFileSync(root+'/'+e.file,'utf8'),a=parse(s,{ecmaVersion:'latest',sourceType:'script'});if(a.body.length!==1||a.body[0].type!==e.nodeType)throw new Error(e.file)}
-          const est=m.backend.find(x=>x.name==='estimatePdfPageCount'),val=m.backend.find(x=>x.name==='validateHomeworkPageCoverage');if(!est||!val)throw new Error('coverage cells missing');
-          const ctx={Buffer};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+est.file,'utf8'),ctx);vm.runInContext(fs.readFileSync(root+'/'+val.file,'utf8'),ctx);
-          const fake=Buffer.from('%PDF-1.4\n1 0 obj << /Type /Page >>\n2 0 obj << /Type /Page >>\n3 0 obj << /Type /Page >>').toString('base64');if(ctx.estimatePdfPageCount(fake,'application/pdf')!==3)throw new Error('page estimate failed');
-          let r=ctx.validateHomeworkPageCoverage({needsTeacherReview:false,autoFinalize:true,analyzedStudentPages:[1,2,3],analyzedSourcePages:[1,2]},3,2);if(!r.pdfCoverageVerified||r.needsTeacherReview)throw new Error('complete coverage failed');
-          r=ctx.validateHomeworkPageCoverage({needsTeacherReview:false,autoFinalize:true,analyzedStudentPages:[1],analyzedSourcePages:[1,2]},3,2);if(r.pdfCoverageVerified||!r.needsTeacherReview||r.missingStudentPages.join(',')!=='2,3')throw new Error('partial coverage guard failed');
+          const wr=m.backend.find(x=>x.name==='writeHomeworkDiagnostic');if(!wr)throw new Error('diagnostic cell missing');
+          const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'yilbaydiag-'));const ctx={fs,path,runtime:tmp,Date};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+wr.file,'utf8'),ctx);
+          const safe=ctx.writeHomeworkDiagnostic({expectedStudentPages:5,analyzedStudentPages:[1,2],missingStudentPages:[3,4,5],expectedSourcePages:4,analyzedSourcePages:[1,2,3,4],missingSourcePages:[],pdfCoverageVerified:false,answerKeyFound:true,answerKeySource:'embedded_end_pages',answerKeyConfidence:.91,confidence:.82,needsTeacherReview:true,autoFinalize:false,totalQuestions:20,correct:12,wrong:5,blank:3,scorePercent:60},{try:.1234},{id:99});
+          const stored=JSON.parse(fs.readFileSync(path.join(tmp,'last_homework_analysis.json'),'utf8'));
+          if(stored.assignmentId!==99||stored.expectedStudentPages!==5||stored.missingStudentPages.join(',')!=='3,4,5'||stored.answerKeySource!=='embedded_end_pages'||stored.costTry!==.1234)throw new Error('diagnostic values');
+          for(const banned of ['fileData','base64','answerKeyEvidence','studentAnswer','correctAnswer','apiKey','accessToken','refreshToken'])if(Object.prototype.hasOwnProperty.call(stored,banned)||JSON.stringify(stored).includes(banned))throw new Error('unsafe diagnostic field '+banned);
+          if(stored.secretsCollected!==false||stored.contentCollected!==false)throw new Error('privacy flags');
           const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||b!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
-          if(!b.includes('analyzedStudentPages')||!f.includes('Sayfa Kapsamı'))throw new Error('coverage contract missing');
-          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('launch regression');
-          console.log('FULL PDF PAGE COVERAGE OK',m.counts);
+          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('homework_analysis.json')||!boot.includes('2.1.2-node')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('bootstrap/report regression');
+          console.log('HOMEWORK DIAGNOSTICS OK',m.counts,safe.expectedStudentPages);
           NODE
-          node --check /tmp/yilbay0100/app/public/app.js
-          node --check /tmp/yilbay0100/app/server.js
-          node /tmp/yilbay0100/app/tests.js
+          node --check /tmp/yilbay0101/app/public/app.js
+          node --check /tmp/yilbay0101/app/server.js
+          node --check /tmp/yilbay0101/app/bootstrap/orchestrator_node.js
+          node /tmp/yilbay0101/app/tests.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay0100/app/server.js >/tmp/v0100_server.log 2>/tmp/v0100_server.err &
+          PORT=43127 node /tmp/yilbay0101/app/server.js >/tmp/v0101_server.log 2>/tmp/v0101_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0100_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
-          grep -q '"version":"0.10.0"' /tmp/v0100_health.json
+          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0101_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
+          grep -q '"version":"0.10.1"' /tmp/v0101_health.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -91,14 +93,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.10.0.zip
-          (cd /tmp/yilbay0100 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.0.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.10.0.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.10.1.zip
+          (cd /tmp/yilbay0101 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.1.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.10.1.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
-          {"version":"0.10.0","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.0.zip","sha256":"$SHA"}
+          {"version":"0.10.1","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.1.zip","sha256":"$SHA"}
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay0100 source/current
+          cp -a /tmp/yilbay0101 source/current
 
       - name: Commit verified release
         shell: bash
@@ -106,6 +108,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.10.0.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.10.0 full PDF page coverage [skip ci]'
+          git add release/YILBAY_APP_v0.10.1.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.10.1 homework diagnostics [skip ci]'
           git push origin main
