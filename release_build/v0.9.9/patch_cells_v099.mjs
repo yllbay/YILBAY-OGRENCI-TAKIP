@@ -8,11 +8,8 @@ for(const e of [...m.frontend,...m.backend]){const p=path.join(ROOT,e.file);let 
 const modalEntry=m.frontend.find(x=>x.name==='assignmentModal');
 if(!modalEntry)throw new Error('assignmentModal cell missing');
 const modalPath=path.join(ROOT,modalEntry.file);
-let s=fs.readFileSync(modalPath,'utf8');
-s=s.replace('window.assignmentModal=()=>modal(`','window.assignmentModal=()=>{modal(`');
-s=s.replace('</div>` )\n','</div>`);refreshAssignmentItems()}\n');
-if(!s.includes('refreshAssignmentItems()}'))throw new Error('assignment modal init patch failed');
-fs.writeFileSync(modalPath,s,'utf8');
+const modalCell=`window.assignmentModal=()=>{modal(\`<h2>Yeni Atama</h2><div class="formgrid">\n<div class="field"><label>Öğrenci</label><select id="astudent">\${db.students.map(s=>\`<option value="\${s.id}">\${s.name}</option>\`).join("")}</select></div>\n<div class="field"><label>Atama türü</label><select id="akind" onchange="refreshAssignmentItems()"><option>PDF Kaynak</option><option>Online Sınav</option></select></div>\n<div class="field" style="grid-column:1/-1"><label>İçerik</label><select id="aitem"></select></div>\n</div><div class="modal-actions"><button class="btn primary" onclick="addAssignment()">Ata</button> <button class="btn ghost" onclick="closeModal()">İptal</button></div>\`);refreshAssignmentItems()}\n`;
+fs.writeFileSync(modalPath,modalCell,'utf8');
 const frontend=m.frontend.map(e=>fs.readFileSync(path.join(ROOT,e.file),'utf8')).join('');
 const backend=m.backend.map(e=>fs.readFileSync(path.join(ROOT,e.file),'utf8')).join('');
 fs.writeFileSync(path.join(ROOT,'app','public','app.js'),frontend,'utf8');
