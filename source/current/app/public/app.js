@@ -54,6 +54,8 @@ function normalizeDb(x){
  x.weeklyPlans??={};
  x.aiPlans??={};
  x.videoSuggestions??={};
+ x.homeworkAnalyses??=[];
+ x.repeatSignals??=[];
  x.threshold??=70;
  return x
 }
@@ -64,7 +66,7 @@ function initials(name=""){return name.split(/\s+/).filter(Boolean).slice(0,2).m
 function tableWrap(html){return `<div class="table-wrap">${html}</div>`}
 function emptyState(title,text){return `<div class="empty"><strong>${title}</strong>${text}</div>`}
 function pageHead(title,desc,actions=""){return `<div class="page-head"><div class="page-title"><h1>${title}</h1><p>${desc}</p></div><div class="page-actions">${actions}</div></div>`}
-function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.7.0</span></div></div><div class="layout"><aside>
+function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.7.1</span></div></div><div class="layout"><aside>
 <div class="nav-section">Yönetim</div>${nav("dashboard","Genel Bakış",active)}${nav("students","Öğrenciler",active)}${nav("profile","Öğrenci Profili",active)}
 <div class="nav-section">Akademik İçerik</div>${nav("curriculum","Ders ve Üniteler",active)}${nav("resources","Kaynak Havuzu",active)}${nav("exams","Online Sınavlar",active)}
 <div class="nav-section">Operasyon</div>${nav("assignments","Atamalar",active)}${nav("results","Başarı Sonuçları",active)}${nav("program","Haftalık Program",active)}
@@ -180,7 +182,7 @@ window.assignmentModal=()=>modal(`<h2>Yeni Atama</h2><div class="formgrid">
 window.refreshAssignmentItems=()=>{const k=q("akind").value,items=k==="PDF Kaynak"?db.resources:db.exams;q("aitem").innerHTML=items.map(x=>`<option value="${x.id}">${x.title} — ${x.course} / ${x.topic}</option>`).join("")}
 window.addAssignment=()=>{const kind=q("akind").value,items=kind==="PDF Kaynak"?db.resources:db.exams,item=items.find(x=>x.id===Number(q("aitem").value));if(!item)return alert("Atanabilir içerik yok");db.assignments.push({id:Date.now(),studentId:Number(q("astudent").value),kind,title:item.title,course:item.course,topic:item.topic,sourceId:item.id,status:"Bekliyor",assignedAt:new Date().toISOString().slice(0,10)});save();closeModal();assignments()}
 window.completeAssignment=id=>{const a=db.assignments.find(x=>x.id===id);if(!a)return;modal(`<h2>Atamayı Tamamla</h2><p><b>${a.title}</b><br>${studentName(a.studentId)} — ${a.course} / ${a.topic}</p><div class="field"><label>Başarı %</label><input id="ascore" type="number" min="0" max="100"></div><div class="modal-actions"><button class="btn primary" onclick="saveAssignmentResult(${id})">Kaydet</button></div>`)}
-window.saveAssignmentResult=id=>{const a=db.assignments.find(x=>x.id===id);if(!a)return;const score=Math.max(0,Math.min(100,Number(q("ascore").value)));a.status="Tamamlandı";a.completedAt=new Date().toISOString().slice(0,10);a.score=score;db.results.push({id:Date.now(),studentId:a.studentId,kind:a.kind==="PDF Kaynak"?"Ödev":"Online Sınav",course:a.course,topic:a.topic,score,date:a.completedAt,assignmentId:a.id});save();closeModal();assignments()}
+window.saveAssignmentResult=id=>{const a=db.assignments.find(x=>x.id===id);if(!a)return;const score=Math.max(0,Math.min(100,Number(q("ascore").value)));a.status="Tamamlandı";a.completedAt=new Date().toISOString().slice(0,10);a.score=score;db.results.push({id:Date.now(),studentId:a.studentId,kind:a.kind==="PDF Kaynak"?"Ödev":"Online Sınav",course:a.course,topic:a.topic,score,date:a.completedAt,assignmentId:a.id});if(score<db.threshold&&!db.repeatSignals.some(r=>r.assignmentId===a.id&&r.status==="Bekliyor"))db.repeatSignals.push({id:Date.now()+1,studentId:a.studentId,assignmentId:a.id,course:a.course,topic:a.topic,score,threshold:db.threshold,status:"Bekliyor",createdAt:new Date().toISOString()});save();closeModal();assignments()}
 function results(){
  const rows=db.results.slice().reverse().map(r=>`<tr><td><div class="cell-title">${studentName(r.studentId)}</div></td><td>${r.kind}</td><td><div class="cell-title">${r.topic}</div><div class="cell-sub">${r.course}</div></td><td><span class="badge ${scoreClass(r.score)}">%${r.score}</span></td><td>${r.date}</td></tr>`).join("");
  shell(`${pageHead("Başarı Sonuçları","Ödev ve online sınav başarılarını kaydedin. Adaptif tekrar eşiği %${db.threshold}.",`<button class="btn primary" onclick="resultModal()">+ Sonuç Gir</button>`)}${rows?tableWrap(`<table><thead><tr><th>Öğrenci</th><th>Tür</th><th>Konu</th><th>Başarı</th><th>Tarih</th></tr></thead><tbody>${rows}</tbody></table>`):emptyState("Sonuç bulunamadı","İlk ödev veya sınav sonucunu girin.")}`,"results")
@@ -330,17 +332,24 @@ window.submitHomeworkAnalysis=async id=>{
  const btn=document.querySelector(".modal-actions .btn.primary");if(btn){btn.disabled=true;btn.textContent="AI tarıyor…"}
  try{
   const fileData=await fileToBase64(file),answerKey=q("answerKey").value.trim()||null;
-  const data=await apiJson("/api/ai/analyze-homework",{fileData,mimeType:file.type||"application/pdf",fileName:file.name,assignment:{id:a.id,course:a.course,topic:a.topic,title:a.title},answerKey});
-  const an=data.analysis,score=Math.round(Number(an.scorePercent)||0);
-  db.homeworkAnalyses.push({id:Date.now(),assignmentId:a.id,studentId:a.studentId,course:a.course,topic:a.topic,date:new Date().toISOString().slice(0,10),...an});
-  a.status="Tamamlandı";a.completedAt=new Date().toISOString().slice(0,10);a.score=score;
-  db.results.push({id:Date.now()+1,studentId:a.studentId,kind:"AI Ödev Analizi",course:a.course,topic:a.topic,score,date:a.completedAt,assignmentId:a.id});
+  const data=await apiJson("/api/ai/analyze-homework",{fileData,mimeType:file.type||"application/pdf",fileName:file.name,assignment:{id:a.id,studentId:a.studentId,course:a.course,topic:a.topic,title:a.title},answerKey});
+  const an=data.analysis||{},score=Math.round(Number(an.scorePercent)||0),reviewRequired=!!an.needsTeacherReview||data.autoFinalize===false;
+  db.homeworkAnalyses.push({id:Date.now(),assignmentId:a.id,studentId:a.studentId,course:a.course,topic:a.topic,date:new Date().toISOString().slice(0,10),fileName:file.name,fileSize:file.size,mimeType:file.type||"application/pdf",costTry:Number(data.cost?.try||0),...an});
+  a.completedAt=new Date().toISOString().slice(0,10);a.score=score;a.aiConfidence=Number(an.confidence||0);
+  if(reviewRequired){
+    a.status="Öğretmen Kontrolü";
+  }else{
+    a.status="Tamamlandı";
+    db.results.push({id:Date.now()+1,studentId:a.studentId,kind:"AI Ödev Analizi",course:a.course,topic:a.topic,score,date:a.completedAt,assignmentId:a.id});
+    if(score<db.threshold&&!db.repeatSignals.some(r=>r.assignmentId===a.id&&r.status==="Bekliyor"))db.repeatSignals.push({id:Date.now()+2,studentId:a.studentId,assignmentId:a.id,course:a.course,topic:a.topic,score,threshold:db.threshold,status:"Bekliyor",createdAt:new Date().toISOString()});
+  }
   save();
-  q("modalbg").querySelector(".modal").innerHTML=`<h2>Ödev Analizi Tamamlandı</h2><div class="result-hero"><div class="kpi">%${score}</div><div><div class="cell-title">${an.correct||0} doğru · ${an.wrong||0} yanlış · ${an.blank||0} boş</div><div class="cell-sub">Güven: %${Math.round((Number(an.confidence)||0)*100)}</div></div></div>
+  q("modalbg").querySelector(".modal").innerHTML=`<h2>${reviewRequired?"Öğretmen Kontrolü Gerekli":"Ödev Analizi Tamamlandı"}</h2><div class="result-hero"><div class="kpi">%${score}</div><div><div class="cell-title">${an.correct||0} doğru · ${an.wrong||0} yanlış · ${an.blank||0} boş</div><div class="cell-sub">Güven: %${Math.round((Number(an.confidence)||0)*100)}${data.cost?` · AI maliyeti ${Number(data.cost.try||0).toFixed(4)} TL`:""}</div></div></div>
+   ${reviewRequired?`<div class="notice error"><div><b>Otomatik sonuç kesinleştirilmedi</b>AI güveni yeterli olmadığı için bu analiz başarı sonuçlarına ve tekrar motoruna otomatik aktarılmadı. Atamalar ekranından “Manuel sonuç” ile öğretmen onayı verin.</div></div>`:`<div class="notice"><div><b>${score<db.threshold?"Tekrar sinyali oluşturuldu":"Başarı yeterli"}</b>${score<db.threshold?`%${db.threshold} eşiğinin altında olduğu için ${a.topic} konusu sonraki programda tekrar önceliği alacak.`:"Konu için otomatik tekrar sinyali oluşturulmadı."}</div></div>`}
    <div class="section"><h3>Zayıf Alanlar</h3>${(an.weaknesses||[]).map(x=>`<span class="course-chip">${x}</span>`).join("")||"—"}</div>
-   <div class="notice"><div><b>Adaptif karar</b>${score<db.threshold||an.recommendRepeat?"Bu konu sonraki programa tekrar olarak taşınacak.":"Başarı eşiği sağlandı; zorunlu tekrar eklenmeyecek."}</div></div>
-   <div class="modal-actions"><button class="btn primary" onclick="closeModal();assignments()">Tamam</button></div>`
- }catch(e){alert("Ödev analizi hatası: "+e.message)}
+   <div class="section"><h3>Hata Türleri</h3>${(an.errorTypes||[]).map(x=>`<span class="course-chip">${typeof x==="string"?x:(x.type||x.label||JSON.stringify(x))}</span>`).join("")||"—"}</div>
+   <div class="modal-actions"><button class="btn primary" onclick="closeModal();assignments()">Tamam</button></div>`;
+ }catch(e){alert("Ödev analizi başarısız: "+e.message)}
  finally{if(btn){btn.disabled=false;btn.textContent="Dosyayı Tara"}}
 }
 function q(id){return document.getElementById(id)}
