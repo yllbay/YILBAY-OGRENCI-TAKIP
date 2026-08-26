@@ -33,12 +33,14 @@ jobs:
         run: |
           set -euo pipefail
           node release_build/v0.10.6/patch_cells_v0106b.mjs
+          node release_build/v0.10.6/fix_frontend_v0106.mjs
           grep -q 'LUNA MALİYET-OPTİMİZE ÖDEV ANALİZ PROTOKOLÜ' /tmp/yilbay0106/app/server.js
           grep -q 'function sanitizeHomeworkReportPayload' /tmp/yilbay0106/app/server.js
           grep -q 'function buildHomeworkReportHtml' /tmp/yilbay0106/app/server.js
           grep -q 'function generateHomeworkReportPdf' /tmp/yilbay0106/app/server.js
           grep -q '/api/reports/homework-pdf' /tmp/yilbay0106/app/server.js
           grep -q 'PDF Karnesini İndir' /tmp/yilbay0106/app/public/app.js
+          grep -q 'window.openLastHomeworkPdf' /tmp/yilbay0106/app/public/app.js
           grep -q 'YILBAY_BROWSER_PATH' /tmp/yilbay0106/app/bootstrap/orchestrator_node.js
 
       - name: Install AST parser
@@ -78,7 +80,7 @@ jobs:
           const html=pctx.buildHomeworkReportHtml(safe);for(const k of ['Ödev Analiz Karnesi','Yanlış Sorular – Özet Tablo','Pedagojik Karne','Ali &lt;Test&gt;'])if(!html.includes(k))throw new Error('report html '+k);
           const pdf=pctx.generateHomeworkReportPdf(safe);if(!pdf.downloadUrl.startsWith('/api/reports/homework-pdf/')||pdf.size<1000)throw new Error('pdf generation contract');
           const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),be=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||be!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
-          if(!f.includes('PDF Karnesini İndir')||!f.includes('Yanlış Soruların Ayrıntılı Analizi'))throw new Error('frontend report contract');
+          if(!f.includes('PDF Karnesini İndir')||!f.includes('Yanlış Soruların Ayrıntılı Analizi')||!f.includes('openLastHomeworkPdf'))throw new Error('frontend report contract');
           const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('2.1.3-node')||!boot.includes('YILBAY_BROWSER_PATH:browser')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('bootstrap/browser regression');
           console.log('WRONG-ONLY + PDF REPORT OK',m.counts,pdf.size);
           NODE
