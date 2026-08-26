@@ -5,6 +5,6 @@ async function apiJson(url,body=null){
  return data
 }
 
-/* CELL:90-integrations | layer:frontend | generated-from:v0.10.1 */
+/* CELL:90-integrations | layer:frontend | generated-from:v0.10.2 */
 
 /* CELL:90-integrations | layer:frontend | generated-from:v0.7.2 */

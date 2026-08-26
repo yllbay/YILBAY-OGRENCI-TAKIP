@@ -19,7 +19,7 @@ Sadece JSON döndür:
   if(resourceContext?.answerKeyDriveFileId){const key=await driveDownloadAnalysisFile(resourceContext.answerKeyDriveFileId);content.push({type:"input_text",text:"CEVAP ANAHTARI - kesin referans olarak kullan"},{type:"input_file",filename:"cevap_anahtari.pdf",file_data:`data:${key.mimeType};base64,${key.base64}`})}
   content.push({type:"input_text",text:`ÖĞRENCİ ÇÖZÜM DOSYASI - TÜM SAYFALARI tara. Beklenen sayfa sayısı: ${expectedStudentPages||"bilinmiyor"}. İlk sayfada durma.`},{type:"input_file",filename:fileName,file_data:`data:${mimeType};base64,${fileData}`});
   const ai=await openaiRequest({instructions,input:[{role:"user",content}],reasoning:"medium"});
-  const parsed=validateHomeworkPageCoverage(validateHomeworkAnswerKeyEvidence(validateHomeworkQuestionCount(normalizeHomeworkAnalysis(parseJsonText(ai.text)),resourceContext?.questionCount),answerKey,resourceContext),expectedStudentPages,expectedSourcePages);
+  const parsed=deriveHomeworkReviewReasons(validateHomeworkQuestionAccounting(validateHomeworkPageCoverage(validateHomeworkAnswerKeyEvidence(validateHomeworkQuestionCount(normalizeHomeworkAnalysis(parseJsonText(ai.text)),resourceContext?.questionCount),answerKey,resourceContext),expectedStudentPages,expectedSourcePages)));
   const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});
   writeHomeworkDiagnostic(parsed,cost,assignment);
   return json(res,200,{ok:true,analysis:parsed,autoFinalize:parsed.autoFinalize,usage:ai.data?.usage||null,cost});
