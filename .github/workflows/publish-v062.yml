@@ -19,6 +19,38 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify and normalize staged parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root=Path('release_staging/v0.6.2')
+          expected={
+            'part00.txt':'dbf29fc445be999cde7b877fc96be6fcd4a1df919fbd9e4e7c2a0c8e8116f317',
+            'part01.txt':'aa6e9fce85257a3d5d71586ffc9edb43ef31d224d083b08c4436c97f3a1ff9bf',
+            'part02.txt':'9cb8379cb199820cf360a5c0d6a465a1457f29bf50faf6d612a8cecc24186c17',
+            'part03.txt':'18bef8f8692cfa5e054ee70824848b767ca363cf6c2857cb7653403c9e76638c',
+            'part04.txt':'1080d4981c93f15120eaf6d763ff20edcff1742f6b581826bd91b1f45c510c58'
+          }
+          def sha(b): return hashlib.sha256(b).hexdigest()
+          for name,want in expected.items():
+            p=root/name
+            b=p.read_bytes()
+            if sha(b)==want:
+              print(name,'OK',len(b)); continue
+            fixed=None
+            if len(b)>0:
+              for i in range(len(b)):
+                c=b[:i]+b[i+1:]
+                if sha(c)==want:
+                  fixed=c; print(name,'AUTO_REPAIRED_REMOVE_INDEX',i); break
+            if fixed is None:
+              raise SystemExit(f'{name} hash mismatch and no safe one-byte repair matched')
+            p.write_bytes(fixed)
+          PY
+
       - name: Rebuild exact ZIP from staged base64
         shell: bash
         run: |
