@@ -1,0 +1,95 @@
+name: Publish v0.8.0 cellular architecture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release_build/v0.8.0/**'
+      - 'CELL_PROTOCOL.md'
+      - '.github/workflows/publish-v080.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Copy verified v0.7.2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/yilbay080
+          cp -a source/current /tmp/yilbay080
+          test -f /tmp/yilbay080/app/public/app.js
+          test -f /tmp/yilbay080/app/server.js
+
+      - name: Cellularize source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python release_build/v0.8.0/cellularize.py
+
+      - name: Cell contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node /tmp/yilbay080/app/cell-tests.js
+          node --check /tmp/yilbay080/app/public/app.js
+          node --check /tmp/yilbay080/app/server.js
+          node /tmp/yilbay080/app/tests.js
+          test $(find /tmp/yilbay080/cells/frontend -name '*.cell.js' | wc -l) -ge 10
+          test $(find /tmp/yilbay080/cells/backend -name '*.cell.js' | wc -l) -ge 7
+
+      - name: Runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=43127 node /tmp/yilbay080/app/server.js >/tmp/v080.log 2>/tmp/v080.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          OK=0
+          for i in $(seq 1 30); do
+            CODE=$(curl -sS -o /tmp/v080_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
+            sleep 0.4
+          done
+          cat /tmp/v080_health.json || true
+          cat /tmp/v080.err || true
+          test "$OK" = "1"
+          grep -q '"version":"0.8.0"' /tmp/v080_health.json
+          curl -fsS http://127.0.0.1:43127/api/integrations/status >/tmp/v080_integrations.json
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+
+      - name: Build release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.8.0.zip
+          (cd /tmp/yilbay080 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.8.0.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.8.0.zip | awk '{print $1}')
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.8.0",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.8.0.zip",
+            "sha256": "$SHA"
+          }
+          JSON
+          rm -rf source/current
+          cp -a /tmp/yilbay080 source/current
+
+      - name: Commit verified cellular release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source/current release/YILBAY_APP_v0.8.0.zip release/latest.json
+          git commit -m 'Publish verified v0.8.0 cellular architecture [skip ci]'
+          git push origin main
