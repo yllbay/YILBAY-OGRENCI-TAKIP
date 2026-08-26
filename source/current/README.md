@@ -1,6 +1,6 @@
-# YILBAY Öğrenci Takip — v0.6.5
+# YILBAY Öğrenci Takip — v0.7.2
 
-- v0.6.4 başlangıç regresyonu geri alındı.
-- Çalışan v0.6.3 sunucu tabanı kullanıldı.
-- Credential Manager entegrasyonu uygulama başlangıcını etkileyemez.
-- Yayın öncesi gerçek sunucu başlatma ve /health smoke testi zorunludur.
+- AI ödev analiz geçmişi
+- Düşük güvenli analizler için öğretmen kontrol/onay akışı
+- Öğretmen onayı sonrası başarı sonucu ve tekrar sinyali
+- Analiz güven/maliyet görünürlüğü
