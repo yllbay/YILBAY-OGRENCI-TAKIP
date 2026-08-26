@@ -55,3 +55,5 @@ async function handleAiPing(req,res){
   const cost=appendUsage("connection_test",ai.model,ai.data?.usage||{},{});
   return json(res,200,{ok:true,connected:true,model:ai.model,latencyMs:Date.now()-started,response:String(ai.text||"").trim().slice(0,80),usage:ai.data?.usage||null,cost});
 }
+
+/* CELL:40-academic-planner | layer:backend | generated-from:v0.7.2 */

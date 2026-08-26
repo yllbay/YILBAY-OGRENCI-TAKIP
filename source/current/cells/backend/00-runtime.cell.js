@@ -6,3 +6,5 @@ const runtime=path.join(root,"runtime");
 const secretFile=path.join(runtime,"api_secrets.json");
 const usageFile=path.join(runtime,"ai_usage.jsonl");
 fs.mkdirSync(runtime,{recursive:true});
+
+/* CELL:10-secrets-integrations | layer:backend | generated-from:v0.7.2 */

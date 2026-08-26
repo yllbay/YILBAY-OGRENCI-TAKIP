@@ -80,3 +80,5 @@ Kurallar:
   const cost=appendUsage("plan",ai.model,ai.data?.usage||{}, {studentId:student.id});
   return json(res,200,{ok:true,usedAi:true,plan:{mode:"ai",...parsed},usage:ai.data?.usage||null,cost});
 }
+
+/* CELL:50-homework-vision | layer:backend | generated-from:v0.7.2 */

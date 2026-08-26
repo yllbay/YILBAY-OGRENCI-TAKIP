@@ -8,6 +8,8 @@ const usageFile=path.join(runtime,"ai_usage.jsonl");
 fs.mkdirSync(runtime,{recursive:true});
 
 /* CELL:10-secrets-integrations | layer:backend | generated-from:v0.7.2 */
+
+/* CELL:10-secrets-integrations | layer:backend | generated-from:v0.7.2 */
 const OPENAI_CREDENTIAL_TARGET="YILBAY-OPENAI-API-HOME";
 const OPENAI_CREDENTIAL_USERNAME="YILBAY-DEVELOPMENT-HOME";
 function readStoredSecrets(){
@@ -45,6 +47,8 @@ function integrationStatus(){
     cost:{usdTry:Number(s.usdTry||48.12)||48.12,monthlyBudgetTry:Number(s.monthlyBudgetTry||1000)||1000}
   };
 }
+
+/* CELL:20-cost-accounting | layer:backend | generated-from:v0.7.2 */
 
 /* CELL:20-cost-accounting | layer:backend | generated-from:v0.7.2 */
 const OPENAI_PRICES={
@@ -99,6 +103,8 @@ function costSummary(){
     recent:rows.slice(-20).reverse()
   };
 }
+
+/* CELL:30-http-openai-core | layer:backend | generated-from:v0.7.2 */
 
 /* CELL:30-http-openai-core | layer:backend | generated-from:v0.7.2 */
 function json(res,status,obj){
@@ -157,6 +163,8 @@ async function handleAiPing(req,res){
   const cost=appendUsage("connection_test",ai.model,ai.data?.usage||{},{});
   return json(res,200,{ok:true,connected:true,model:ai.model,latencyMs:Date.now()-started,response:String(ai.text||"").trim().slice(0,80),usage:ai.data?.usage||null,cost});
 }
+
+/* CELL:40-academic-planner | layer:backend | generated-from:v0.7.2 */
 
 /* CELL:40-academic-planner | layer:backend | generated-from:v0.7.2 */
 function flattenCurriculum(curriculum,courses){
@@ -242,6 +250,8 @@ Kurallar:
 }
 
 /* CELL:50-homework-vision | layer:backend | generated-from:v0.7.2 */
+
+/* CELL:50-homework-vision | layer:backend | generated-from:v0.7.2 */
 function normalizeHomeworkAnalysis(x={}){
   const clamp=(n,a,b)=>Math.max(a,Math.min(b,Number.isFinite(Number(n))?Number(n):a));
   const correct=Math.max(0,Math.round(Number(x.correct)||0));
@@ -289,6 +299,8 @@ Sadece JSON döndür:
 }
 
 /* CELL:60-youtube | layer:backend | generated-from:v0.7.2 */
+
+/* CELL:60-youtube | layer:backend | generated-from:v0.7.2 */
 async function handleYoutube(req,res){
   const body=await readJson(req,512*1024);
   const s=readSecrets();
@@ -309,6 +321,8 @@ async function handleYoutube(req,res){
   }));
   json(res,200,{ok:true,videos});
 }
+
+/* CELL:70-routes | layer:backend | generated-from:v0.7.2 */
 
 /* CELL:70-routes | layer:backend | generated-from:v0.7.2 */
 http.createServer(async(req,res)=>{

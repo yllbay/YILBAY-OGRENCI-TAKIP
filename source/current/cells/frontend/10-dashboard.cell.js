@@ -13,3 +13,5 @@ function dashboard(){
  ${low.length?`<div class="list">${low.slice().sort((a,b)=>a.score-b.score).slice(0,8).map(r=>`<div class="item item-row"><div><div class="cell-title">${studentName(r.studentId)}</div><div class="cell-sub">${r.course} · ${r.topic}</div></div><span class="badge low">%${r.score}</span></div>`).join("")}</div>`:emptyState("Tekrar gerektiren konu yok","Mevcut sonuçlar belirlenen başarı eşiğinin üzerinde.")}</div>`,'dashboard')
 }
 function studentName(id){return db.students.find(s=>s.id===id)?.name||"Bilinmeyen"}
+
+/* CELL:20-students-profile | layer:frontend | generated-from:v0.8.0 */

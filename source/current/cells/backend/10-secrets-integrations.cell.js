@@ -36,3 +36,5 @@ function integrationStatus(){
     cost:{usdTry:Number(s.usdTry||48.12)||48.12,monthlyBudgetTry:Number(s.monthlyBudgetTry||1000)||1000}
   };
 }
+
+/* CELL:20-cost-accounting | layer:backend | generated-from:v0.7.2 */

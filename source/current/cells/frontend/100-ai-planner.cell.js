@@ -21,3 +21,5 @@ window.generateAiMasterPlan=async()=>{
  }catch(e){alert("AI planlama hatası: "+e.message)}
  finally{if(btn){btn.disabled=false;btn.textContent=oldText||"AI ile Dönem Planı Üret"}}
 }
+
+/* CELL:110-youtube | layer:frontend | generated-from:v0.8.0 */

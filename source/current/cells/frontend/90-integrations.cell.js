@@ -48,3 +48,5 @@ window.testOpenAIConnection=async()=>{
  }catch(e){alert("OpenAI bağlantı testi başarısız: "+e.message)}
  finally{if(btn){btn.disabled=false;btn.textContent=old||"OpenAI Bağlantısını Test Et"}}
 }
+
+/* CELL:100-ai-planner | layer:frontend | generated-from:v0.8.0 */

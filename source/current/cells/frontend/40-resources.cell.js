@@ -5,3 +5,5 @@ function resources(){
 }
 window.resourceModal=()=>modal(`<h2>Kaynak Ekle</h2><div class="formgrid"><div class="field"><label>Başlık</label><input id="rtitle"></div><div class="field"><label>Konu</label><select id="rtopic">${topicOptions()}</select></div><div class="field"><label>Zorluk</label><select id="rlevel"><option>Başlangıç</option><option>Kolay</option><option>Orta</option><option>Orta-Zor</option><option>Zor</option><option>İleri</option></select></div><div class="field"><label>Drive bağlantısı / File ID</label><input id="rurl"></div></div><div class="modal-actions"><button class="btn primary" onclick="addResource()">Kaydet</button></div>`)
 window.addResource=()=>{const [course,topic]=q("rtopic").value.split("|||");db.resources.push({id:Date.now(),type:"PDF",course,topic,level:q("rlevel").value,title:q("rtitle").value||topic+" Kaynak",url:q("rurl").value});save();closeModal();resources()}
+
+/* CELL:50-exams | layer:frontend | generated-from:v0.8.0 */

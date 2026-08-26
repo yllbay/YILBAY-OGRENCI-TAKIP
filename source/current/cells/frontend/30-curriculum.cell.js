@@ -6,3 +6,5 @@ function curriculum(){
 window.currModal=()=>modal(`<h2>Müfredat Ekle</h2><div class="formgrid"><div class="field"><label>Ders</label><input id="ccourse"></div><div class="field"><label>Ünite</label><input id="cunit"></div><div class="field"><label>Alt ünite / konu</label><input id="ctopic"></div></div><div class="modal-actions"><button class="btn primary" onclick="addCurr()">Kaydet</button></div>`)
 window.addCurr=()=>{let c=q("ccourse").value.trim(),u=q("cunit").value.trim(),t=q("ctopic").value.trim();if(!c||!u||!t)return alert("Tüm alanlar gerekli");db.curriculum[c]??={};db.curriculum[c][u]??=[];if(!db.curriculum[c][u].includes(t))db.curriculum[c][u].push(t);save();closeModal();curriculum()}
 function topicOptions(){let out="";for(const [c,units] of Object.entries(db.curriculum))for(const topics of Object.values(units))for(const t of topics)out+=`<option data-course="${c}" value="${c}|||${t}">${c} — ${t}</option>`;return out}
+
+/* CELL:40-resources | layer:frontend | generated-from:v0.8.0 */

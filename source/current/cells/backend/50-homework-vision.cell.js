@@ -44,3 +44,5 @@ Sadece JSON döndür:
   const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});
   return json(res,200,{ok:true,analysis:parsed,autoFinalize:parsed.autoFinalize,usage:ai.data?.usage||null,cost});
 }
+
+/* CELL:60-youtube | layer:backend | generated-from:v0.7.2 */

@@ -51,3 +51,5 @@ function costSummary(){
     recent:rows.slice(-20).reverse()
   };
 }
+
+/* CELL:30-http-openai-core | layer:backend | generated-from:v0.7.2 */

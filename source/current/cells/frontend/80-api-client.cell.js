@@ -5,3 +5,5 @@ async function apiJson(url,body=null){
  if(!r.ok||data.ok===false)throw new Error(data.error||`HTTP ${r.status}`);
  return data
 }
+
+/* CELL:90-integrations | layer:frontend | generated-from:v0.8.0 */

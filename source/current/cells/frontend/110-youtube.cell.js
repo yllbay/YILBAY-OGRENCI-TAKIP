@@ -8,3 +8,5 @@ window.findTopicVideo=async(course,topic)=>{
   q("videoResults").innerHTML=data.videos.length?`<div class="video-list">${data.videos.map((v,i)=>`<a class="video-row" href="${v.url}" target="_blank" rel="noopener"><div class="video-rank">${i+1}</div><div><div class="cell-title">${v.title}</div><div class="cell-sub">${v.channelTitle}</div></div></a>`).join("")}</div>`:emptyState("Video bulunamadı","Arama sorgusunu veya API ayarını kontrol edin.")
  }catch(e){if(q("videoResults"))q("videoResults").innerHTML=`<div class="notice error">${e.message}</div>`;else alert(e.message)}
 }
+
+/* CELL:120-ai-homework | layer:frontend | generated-from:v0.8.0 */

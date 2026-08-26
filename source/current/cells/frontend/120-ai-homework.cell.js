@@ -34,3 +34,5 @@ window.submitHomeworkAnalysis=async id=>{
  }catch(e){alert("Ödev analizi başarısız: "+e.message)}
  finally{if(btn){btn.disabled=false;btn.textContent="Dosyayı Tara"}}
 }
+
+/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.8.0 */

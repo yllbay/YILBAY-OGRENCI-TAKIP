@@ -76,3 +76,5 @@ function shell(content,active=view){app().innerHTML=`<div class="top"><div class
 function nav(k,t,a){return `<button class="nav ${a===k?"active":""}" onclick="go('${k}')">${t}</button>`}
 window.go=k=>{view=k;render()}
 function render(){({dashboard,students,profile,curriculum,resources,exams,assignments,results,program,integrations}[view]||dashboard)()}
+
+/* CELL:10-dashboard | layer:frontend | generated-from:v0.8.0 */
