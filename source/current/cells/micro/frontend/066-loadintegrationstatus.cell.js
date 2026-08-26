@@ -13,8 +13,10 @@ async function loadIntegrationStatus(){
    <div class="card kpi-card"><div class="kpi-label">Ödev analizi</div><div class="kpi">${Number(c.byOperation.homework_analysis||0).toFixed(2)} TL</div><div class="kpi-foot">PDF / vision değerlendirme</div></div>
    <div class="card kpi-card"><div class="kpi-label">Kur</div><div class="kpi">${c.usdTry.toFixed(2)}</div><div class="kpi-foot">1 USD → TL maliyet hesabı</div></div>
   </div>
+  <div class="section"><div class="section-head"><h2>Google Drive Kaynak Havuzu</h2><span class="muted">Salt-okunur bağlantı</span></div><div id="drivePanel"><div class="card">Drive durumu okunuyor…</div></div></div>
   <div class="section"><button class="btn primary" onclick="integrationSettingsModal()">API Ayarlarını Aç</button></div>`
  }catch(e){q("integrationStatus").innerHTML=`<div class="notice error">${e.message}</div>`}
+  loadDriveStatus();
 }
 
 

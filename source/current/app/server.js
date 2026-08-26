@@ -55,6 +55,13 @@ function writeSecrets(next){
   const clean={
     openaiApiKey:String(next.openaiApiKey||"").trim(),
     youtubeApiKey:String(next.youtubeApiKey||"").trim(),
+    driveClientId:String(next.driveClientId||"").trim(),
+    driveClientSecret:String(next.driveClientSecret||"").trim(),
+    driveFolderId:String(next.driveFolderId||"").trim(),
+    driveRefreshToken:String(next.driveRefreshToken||"").trim(),
+    driveAccessToken:String(next.driveAccessToken||"").trim(),
+    driveAccessTokenExpiresAt:Number(next.driveAccessTokenExpiresAt||0)||0,
+    driveOauthState:String(next.driveOauthState||"").trim(),
     openaiModel:String(next.openaiModel||"gpt-5.6-luna").trim()||"gpt-5.6-luna",
     usdTry:Number(next.usdTry||48.12)||48.12,
     monthlyBudgetTry:Number(next.monthlyBudgetTry||1000)||1000
@@ -69,7 +76,7 @@ function integrationStatus(){
   return {
     openai:{configured:!!s.openaiApiKey,model:s.openaiModel||"gpt-5.6-luna",source:s.openaiApiSource||"none",credentialTarget:OPENAI_CREDENTIAL_TARGET,credentialDiagnostic:s.credentialDiagnostic||null},
     youtube:{configured:!!s.youtubeApiKey},
-    drive:{configured:false,mode:"resource-metadata"},
+    drive:{configured:!!(s.driveClientId&&s.driveClientSecret),connected:!!s.driveRefreshToken,folderConfigured:!!s.driveFolderId,mode:"oauth-readonly"},
     cost:{usdTry:Number(s.usdTry||48.12)||48.12,monthlyBudgetTry:Number(s.monthlyBudgetTry||1000)||1000}
   };
 }
@@ -377,17 +384,36 @@ async function handleYoutube(req,res){
 /* CELL:70-routes | layer:backend | generated-from:v0.7.2 */
 
 /* CELL:70-routes | layer:backend | generated-from:v0.7.2 */
+
+function driveRedirectUri(){return `http://127.0.0.1:${port}/api/drive/oauth/callback`}
+function driveTokenSavePatch(patch){const old=readStoredSecrets();return writeSecrets({...old,...patch})}
+async function driveRefreshAccessToken(){const st=readStoredSecrets();if(st.driveAccessToken&&Number(st.driveAccessTokenExpiresAt||0)>Date.now()+60000)return st.driveAccessToken;if(!st.driveRefreshToken)throw new Error("Google Drive yetkilendirmesi yok");const body=new URLSearchParams({client_id:st.driveClientId,client_secret:st.driveClientSecret,refresh_token:st.driveRefreshToken,grant_type:"refresh_token"});const r=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error_description||j.error||`Google token HTTP ${r.status}`);driveTokenSavePatch({driveAccessToken:j.access_token,driveAccessTokenExpiresAt:Date.now()+Math.max(60,Number(j.expires_in||3600))*1000});return j.access_token}
+function driveMetadataFromFile(file){const ap=file.appProperties||{};let course=String(ap.yilbayCourse||"").trim(),topic=String(ap.yilbayTopic||"").trim(),level=String(ap.yilbayLevel||"").trim(),title=String(ap.yilbayTitle||"").trim();if(!(course&&topic&&level)){const base=String(file.name||"").replace(/\.pdf$/i,"");const parts=base.split("__").map(x=>x.trim()).filter(Boolean);if(parts.length>=4){course=course||parts[0];topic=topic||parts[1];level=level||parts[2];title=title||parts.slice(3).join("__")}}return {course,topic,level,title:title||String(file.name||"").replace(/\.pdf$/i,""),matched:!!(course&&topic&&level)}}
+async function driveListPdfIndex(){const st=readStoredSecrets();if(!st.driveFolderId)throw new Error("Google Drive kaynak klasörü ayarlanmamış");const token=await driveRefreshAccessToken();let pageToken="",files=[];do{const q=`'${String(st.driveFolderId).replace(/'/g,"\\'")}' in parents and mimeType='application/pdf' and trashed=false`;const u=new URL("https://www.googleapis.com/drive/v3/files");u.searchParams.set("q",q);u.searchParams.set("pageSize","1000");u.searchParams.set("fields","nextPageToken,files(id,name,mimeType,modifiedTime,size,webViewLink,appProperties)");if(pageToken)u.searchParams.set("pageToken",pageToken);const r=await fetch(u,{headers:{Authorization:`Bearer ${token}`}});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error?.message||`Drive API HTTP ${r.status}`);files.push(...(j.files||[]));pageToken=j.nextPageToken||""}while(pageToken);return files.map(f=>({...f,...driveMetadataFromFile(f)}))}
+async function handleDriveOauthStart(req,res){const st=readStoredSecrets();if(!(st.driveClientId&&st.driveClientSecret))return json(res,400,{ok:false,error:"Google Drive OAuth Client ID/Secret ayarlanmamış"});const state=require("crypto").randomBytes(20).toString("hex");driveTokenSavePatch({driveOauthState:state});const u=new URL("https://accounts.google.com/o/oauth2/v2/auth");u.searchParams.set("client_id",st.driveClientId);u.searchParams.set("redirect_uri",driveRedirectUri());u.searchParams.set("response_type","code");u.searchParams.set("scope","https://www.googleapis.com/auth/drive.readonly");u.searchParams.set("access_type","offline");u.searchParams.set("prompt","consent");u.searchParams.set("state",state);return json(res,200,{ok:true,authorizationUrl:u.toString(),redirectUri:driveRedirectUri()})}
+async function handleDriveOauthCallback(u,res){const st=readStoredSecrets();if(!u.searchParams.get("code")||u.searchParams.get("state")!==st.driveOauthState){res.writeHead(400,{"Content-Type":"text/html; charset=utf-8"});return res.end("<h2>Google Drive yetkilendirmesi doğrulanamadı.</h2>")}const body=new URLSearchParams({code:u.searchParams.get("code"),client_id:st.driveClientId,client_secret:st.driveClientSecret,redirect_uri:driveRedirectUri(),grant_type:"authorization_code"});const r=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});const j=await r.json().catch(()=>({}));if(!r.ok){res.writeHead(400,{"Content-Type":"text/html; charset=utf-8"});return res.end("<h2>Google Drive bağlantısı tamamlanamadı.</h2>")}driveTokenSavePatch({driveRefreshToken:j.refresh_token||st.driveRefreshToken||"",driveAccessToken:j.access_token||"",driveAccessTokenExpiresAt:Date.now()+Math.max(60,Number(j.expires_in||3600))*1000,driveOauthState:""});res.writeHead(200,{"Content-Type":"text/html; charset=utf-8"});res.end("<h2>Google Drive bağlandı.</h2><p>Bu pencereyi kapatıp YILBAY uygulamasına dönebilirsiniz.</p>")}
+async function handleDriveIndex(req,res){const items=await driveListPdfIndex();return json(res,200,{ok:true,items,matchedCount:items.filter(x=>x.matched).length,unmatchedCount:items.filter(x=>!x.matched).length})}
+
 http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.8.2",integrations:integrationStatus()});
+    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.9.0",integrations:integrationStatus()});
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
+    if(u.pathname==="/api/drive/status"&&req.method==="GET"){const d=integrationStatus().drive;return json(res,200,{ok:true,...d})}
+    if(u.pathname==="/api/drive/oauth/start"&&req.method==="POST") return await handleDriveOauthStart(req,res);
+    if(u.pathname==="/api/drive/oauth/callback"&&req.method==="GET") return await handleDriveOauthCallback(u,res);
+    if(u.pathname==="/api/drive/index"&&req.method==="POST") return await handleDriveIndex(req,res);
+    if(u.pathname==="/api/drive/disconnect"&&req.method==="POST"){const old=readStoredSecrets();writeSecrets({...old,driveRefreshToken:"",driveAccessToken:"",driveAccessTokenExpiresAt:0,driveOauthState:""});return json(res,200,{ok:true})}
     if(u.pathname==="/api/integrations/settings"&&req.method==="POST"){
       const b=await readJson(req,128*1024),old=readStoredSecrets();
       writeSecrets({
+        ...old,
         openaiApiKey:b.openaiApiKey==="__KEEP__"?old.openaiApiKey:b.openaiApiKey,
         youtubeApiKey:b.youtubeApiKey==="__KEEP__"?old.youtubeApiKey:b.youtubeApiKey,
+        driveClientId:b.driveClientId==="__KEEP__"?old.driveClientId:b.driveClientId,
+        driveClientSecret:b.driveClientSecret==="__KEEP__"?old.driveClientSecret:b.driveClientSecret,
+        driveFolderId:b.driveFolderId==="__KEEP__"?old.driveFolderId:b.driveFolderId,
         openaiModel:b.openaiModel||old.openaiModel||"gpt-5.6-luna",
         usdTry:b.usdTry??old.usdTry??48.12,
         monthlyBudgetTry:b.monthlyBudgetTry??old.monthlyBudgetTry??1000

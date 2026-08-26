@@ -1,0 +1,1 @@
+window.disconnectGoogleDrive=async()=>{if(!confirm("Google Drive bağlantısı kesilsin mi?"))return;try{await apiJson("/api/drive/disconnect",{});loadDriveStatus()}catch(e){alert("Drive bağlantısı kesilemedi: "+e.message)}}

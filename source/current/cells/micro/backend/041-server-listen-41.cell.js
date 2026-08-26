@@ -1,14 +1,23 @@
 http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.8.2",integrations:integrationStatus()});
+    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.9.0",integrations:integrationStatus()});
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
+    if(u.pathname==="/api/drive/status"&&req.method==="GET"){const d=integrationStatus().drive;return json(res,200,{ok:true,...d})}
+    if(u.pathname==="/api/drive/oauth/start"&&req.method==="POST") return await handleDriveOauthStart(req,res);
+    if(u.pathname==="/api/drive/oauth/callback"&&req.method==="GET") return await handleDriveOauthCallback(u,res);
+    if(u.pathname==="/api/drive/index"&&req.method==="POST") return await handleDriveIndex(req,res);
+    if(u.pathname==="/api/drive/disconnect"&&req.method==="POST"){const old=readStoredSecrets();writeSecrets({...old,driveRefreshToken:"",driveAccessToken:"",driveAccessTokenExpiresAt:0,driveOauthState:""});return json(res,200,{ok:true})}
     if(u.pathname==="/api/integrations/settings"&&req.method==="POST"){
       const b=await readJson(req,128*1024),old=readStoredSecrets();
       writeSecrets({
+        ...old,
         openaiApiKey:b.openaiApiKey==="__KEEP__"?old.openaiApiKey:b.openaiApiKey,
         youtubeApiKey:b.youtubeApiKey==="__KEEP__"?old.youtubeApiKey:b.youtubeApiKey,
+        driveClientId:b.driveClientId==="__KEEP__"?old.driveClientId:b.driveClientId,
+        driveClientSecret:b.driveClientSecret==="__KEEP__"?old.driveClientSecret:b.driveClientSecret,
+        driveFolderId:b.driveFolderId==="__KEEP__"?old.driveFolderId:b.driveFolderId,
         openaiModel:b.openaiModel||old.openaiModel||"gpt-5.6-luna",
         usdTry:b.usdTry??old.usdTry??48.12,
         monthlyBudgetTry:b.monthlyBudgetTry??old.monthlyBudgetTry??1000

@@ -1,0 +1,1 @@
+window.connectGoogleDrive=async()=>{try{const d=await apiJson("/api/drive/oauth/start",{});window.open(d.authorizationUrl,"_blank","noopener");alert("Google yetkilendirme ekranı açıldı. Onaydan sonra bu sayfaya dönün.");setTimeout(loadDriveStatus,2500)}catch(e){alert("Drive bağlantısı başlatılamadı: "+e.message)}}
