@@ -1,0 +1,87 @@
+name: Publish v0.7.2 teacher review workflow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release_build/v0.7.2/**'
+      - '.github/workflows/publish-v072.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Copy verified v0.7.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/yilbay072
+          cp -a source/current /tmp/yilbay072
+          test -f /tmp/yilbay072/app/server.js
+      - name: Apply v0.7.2 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python release_build/v0.7.2/patch_v072.py
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check /tmp/yilbay072/app/server.js
+          node --check /tmp/yilbay072/app/public/app.js
+          node /tmp/yilbay072/app/tests.js
+          grep -q 'reviewHomeworkAnalysis' /tmp/yilbay072/app/public/app.js
+          grep -q 'approveHomeworkAnalysis' /tmp/yilbay072/app/public/app.js
+          grep -q 'AI Ödev Analiz Geçmişi' /tmp/yilbay072/app/public/app.js
+          ! grep -qi 'powershell.exe' /tmp/yilbay072/app/server.js
+      - name: Runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=43127 node /tmp/yilbay072/app/server.js >/tmp/v072_server.log 2>/tmp/v072_server.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          OK=0
+          for i in $(seq 1 20); do
+            CODE=$(curl -sS -o /tmp/v072_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
+            sleep 0.5
+          done
+          cat /tmp/v072_health.json
+          test "$OK" = "1"
+          grep -q '"version":"0.7.2"' /tmp/v072_health.json
+          curl -fsS http://127.0.0.1:43127/api/integrations/status >/tmp/v072_integrations.json
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+      - name: Build verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.7.2.zip
+          (cd /tmp/yilbay072 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.7.2.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.7.2.zip | awk '{print $1}')
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.7.2",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.7.2.zip",
+            "sha256": "$SHA"
+          }
+          JSON
+          rm -rf source/current
+          cp -a /tmp/yilbay072 source/current
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.7.2.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.7.2 teacher review workflow [skip ci]'
+          git push origin main
