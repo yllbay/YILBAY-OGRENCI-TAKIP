@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.9.2/**'
+      - 'release_build/v0.9.3/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,24 +20,25 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.9.1 source
+      - name: Copy verified v0.9.2 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay092 /tmp/microtools
-          cp -a source/current /tmp/yilbay092
-          test "$(cat /tmp/yilbay092/app/VERSION | tr -d '\r\n')" = "0.9.1"
-          test -s /tmp/yilbay092/app/public/app.js
-          test -s /tmp/yilbay092/app/server.js
-          test -s /tmp/yilbay092/cells/micro-cell-manifest.json
+          rm -rf /tmp/yilbay093 /tmp/microtools
+          cp -a source/current /tmp/yilbay093
+          test "$(cat /tmp/yilbay093/app/VERSION | tr -d '\r\n')" = "0.9.2"
+          test -s /tmp/yilbay093/app/public/app.js
+          test -s /tmp/yilbay093/app/server.js
+          test -s /tmp/yilbay093/cells/micro-cell-manifest.json
 
-      - name: Patch only related source cells
+      - name: Patch resource metadata cells
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.2/patch_cells_v092.mjs
-          grep -q 'function upsertDriveResource' /tmp/yilbay092/app/public/app.js
-          grep -q 'upsertDriveResource(x' /tmp/yilbay092/app/public/app.js
+          node release_build/v0.9.3/patch_cells_v093.mjs
+          grep -q 'function parseDriveResourceFilename' /tmp/yilbay093/app/server.js
+          grep -q 'resourceEditModal' /tmp/yilbay093/app/public/app.js
+          grep -q 'answerKeyDriveFileId' /tmp/yilbay093/app/public/app.js
 
       - name: Install build-only AST parser
         shell: bash
@@ -50,9 +51,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.2/microcellularize.mjs
+          node release_build/v0.9.3/microcellularize.mjs
 
-      - name: Strict micro-cell and Drive upsert tests
+      - name: Strict micro-cell and metadata tests
         shell: bash
         run: |
           set -euo pipefail
@@ -60,11 +61,11 @@ jobs:
           import fs from 'fs';
           import vm from 'vm';
           import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay092';
+          const root='/tmp/yilbay093';
           const m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.2') throw new Error('manifest protocol/version');
-          if(m.counts.frontend<84) throw new Error('Drive upsert frontend cell missing: '+m.counts.frontend);
-          if(m.counts.backend<42) throw new Error('backend cells missing: '+m.counts.backend);
+          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.3') throw new Error('manifest protocol/version');
+          if(m.counts.frontend<86) throw new Error('resource metadata frontend cells missing: '+m.counts.frontend);
+          if(m.counts.backend<43) throw new Error('resource filename parser cell missing: '+m.counts.backend);
           for(const entry of [...m.frontend,...m.backend]){
             const src=fs.readFileSync(root+'/'+entry.file,'utf8');
             const ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});
@@ -75,50 +76,54 @@ jobs:
           const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
           if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')) throw new Error('frontend bundle mismatch');
           if(b!==fs.readFileSync(root+'/app/server.js','utf8')) throw new Error('backend bundle mismatch');
+          for(const name of ['resourceEditModal','saveResourceMetadata','upsertDriveResource']) if(!m.frontend.find(x=>x.name===name)) throw new Error(name+' cell missing');
+          for(const name of ['parseDriveResourceFilename','driveMetadataFromFile']) if(!m.backend.find(x=>x.name===name)) throw new Error(name+' cell missing');
+          const ctx={};vm.createContext(ctx);
+          for(const name of ['normalizeCourseName','parseDriveResourceFilename','driveMetadataFromFile']){const e=m.backend.find(x=>x.name===name);vm.runInContext(fs.readFileSync(root+'/'+e.file,'utf8'),ctx)}
+          let md=ctx.driveMetadataFromFile({name:'LgsMatematik__Mutlak Değer__Orta__Mutlak Değer Test 01.pdf'});
+          if(md.course!=='LGS Matematik'||md.topic!=='Mutlak Değer'||md.subtopic!=='Mutlak Değer'||md.questionCount!==0||!md.matched) throw new Error('legacy filename contract failed '+JSON.stringify(md));
+          md=ctx.driveMetadataFromFile({name:'LgsMatematik__Sayılar__Mutlak Değer__Orta__20__Mutlak Değer Test 01.pdf'});
+          if(md.course!=='LGS Matematik'||md.unit!=='Sayılar'||md.subtopic!=='Mutlak Değer'||md.topic!=='Mutlak Değer'||md.level!=='Orta'||md.questionCount!==20||md.title!=='Mutlak Değer Test 01'||!md.matched) throw new Error('extended filename contract failed '+JSON.stringify(md));
+          md=ctx.driveMetadataFromFile({name:'x.pdf',appProperties:{yilbayCourse:'TYTMatematik',yilbayUnit:'Temel Kavramlar',yilbaySubtopic:'Sayı Kümeleri',yilbayLevel:'Kolay',yilbayTitle:'Kaynak',yilbayQuestionCount:'15',yilbayAnswerKeyDriveFileId:'answer-1'}});
+          if(md.course!=='TYT Matematik'||md.questionCount!==15||md.answerKeyDriveFileId!=='answer-1'||!md.matched) throw new Error('appProperties metadata failed '+JSON.stringify(md));
           const upsert=m.frontend.find(x=>x.name==='upsertDriveResource');
-          const index=m.frontend.find(x=>x.name==='indexGoogleDrive');
-          if(!upsert||!index) throw new Error('Drive upsert/index cells missing');
-          const ctx={db:{resources:[]}};vm.createContext(ctx);
-          vm.runInContext(fs.readFileSync(root+'/'+upsert.file,'utf8'),ctx);
-          const x1={id:'drive-1',course:'LGS Matematik',topic:'Mutlak Değer',level:'Orta',title:'Test 01',name:'Test 01.pdf',webViewLink:'https://example.test/1',modifiedTime:'2026-08-26T00:00:00Z'};
-          if(ctx.upsertDriveResource(x1,101)!=='added'||ctx.db.resources.length!==1) throw new Error('initial Drive add failed');
-          const x2={...x1,title:'Test 01 Yeni',topic:'Mutlak Değer Yeni',modifiedTime:'2026-08-27T00:00:00Z'};
-          if(ctx.upsertDriveResource(x2,102)!=='updated'||ctx.db.resources.length!==1) throw new Error('Drive update failed');
-          if(ctx.db.resources[0].title!=='Test 01 Yeni'||ctx.db.resources[0].topic!=='Mutlak Değer Yeni'||ctx.db.resources[0].id!==101) throw new Error('Drive update did not preserve local id/update fields');
-          ctx.db.resources.push({id:999,driveFileId:'drive-1',title:'duplicate'});
-          if(ctx.upsertDriveResource(x2,103)!=='updated'||ctx.db.resources.filter(r=>r.driveFileId==='drive-1').length!==1) throw new Error('Drive duplicate cleanup failed');
-          console.log('STRICT MICRO CELLS',m.counts,'DRIVE UPSERT OK');
+          const uctx={db:{resources:[{id:7,driveFileId:'d1',unit:'Elle Ünite',subtopic:'Elle Alt',questionCount:12,answerKeyDriveFileId:'ak1'}]}};vm.createContext(uctx);vm.runInContext(fs.readFileSync(root+'/'+upsert.file,'utf8'),uctx);
+          const x={id:'d1',course:'LGS Matematik',topic:'Mutlak Değer',subtopic:'Mutlak Değer',unit:'',level:'Orta',questionCount:0,answerKeyDriveFileId:'',title:'Test',name:'Test.pdf',webViewLink:'',modifiedTime:null};
+          if(uctx.upsertDriveResource(x,9)!=='updated') throw new Error('upsert metadata update failed');
+          const r=uctx.db.resources[0];if(r.unit!=='Elle Ünite'||r.questionCount!==12||r.answerKeyDriveFileId!=='ak1') throw new Error('manual metadata was not preserved '+JSON.stringify(r));
+          if(!f.includes('Cevap Anahtarı Drive File ID')||!f.includes('Soru Sayısı')||!f.includes('Ünite')) throw new Error('resource UI metadata fields missing');
+          console.log('STRICT MICRO CELLS',m.counts,'RESOURCE METADATA OK');
           NODE
-          while IFS= read -r f; do node --check "/tmp/yilbay092/$f"; done < <(node -e "const m=require('/tmp/yilbay092/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
-          node --check /tmp/yilbay092/app/public/app.js
-          node --check /tmp/yilbay092/app/server.js
-          node /tmp/yilbay092/app/tests.js
-          ! grep -qi 'powershell.exe' /tmp/yilbay092/app/server.js
-          grep -q 'drive.readonly' /tmp/yilbay092/app/server.js
-          grep -q '/api/drive/index' /tmp/yilbay092/app/server.js
+          while IFS= read -r f; do node --check "/tmp/yilbay093/$f"; done < <(node -e "const m=require('/tmp/yilbay093/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
+          node --check /tmp/yilbay093/app/public/app.js
+          node --check /tmp/yilbay093/app/server.js
+          node /tmp/yilbay093/app/tests.js
+          ! grep -qi 'powershell.exe' /tmp/yilbay093/app/server.js
+          grep -q 'drive.readonly' /tmp/yilbay093/app/server.js
+          grep -q '/api/drive/index' /tmp/yilbay093/app/server.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay092/app/server.js >/tmp/v092_server.log 2>/tmp/v092_server.err &
+          PORT=43127 node /tmp/yilbay093/app/server.js >/tmp/v093_server.log 2>/tmp/v093_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
           OK=0
           for i in $(seq 1 30); do
-            CODE=$(curl -sS -o /tmp/v092_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            CODE=$(curl -sS -o /tmp/v093_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
             if [ "$CODE" = "200" ]; then OK=1; break; fi
             sleep 0.5
           done
-          cat /tmp/v092_health.json || true
-          cat /tmp/v092_server.err || true
+          cat /tmp/v093_health.json || true
+          cat /tmp/v093_server.err || true
           test "$OK" = "1"
-          grep -q '"version":"0.9.2"' /tmp/v092_health.json
-          curl -fsS http://127.0.0.1:43127/api/drive/status >/tmp/v092_drive.json
-          grep -q '"configured":false' /tmp/v092_drive.json
-          CODE=$(curl -sS -o /tmp/v092_drive_start.json -w '%{http_code}' -X POST http://127.0.0.1:43127/api/drive/oauth/start)
+          grep -q '"version":"0.9.3"' /tmp/v093_health.json
+          curl -fsS http://127.0.0.1:43127/api/drive/status >/tmp/v093_drive.json
+          grep -q '"configured":false' /tmp/v093_drive.json
+          CODE=$(curl -sS -o /tmp/v093_drive_start.json -w '%{http_code}' -X POST http://127.0.0.1:43127/api/drive/oauth/start)
           test "$CODE" = "400"
-          grep -q 'OAuth Client ID/Secret' /tmp/v092_drive_start.json
+          grep -q 'OAuth Client ID/Secret' /tmp/v093_drive_start.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -127,18 +132,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.9.2.zip
-          (cd /tmp/yilbay092 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.2.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.9.2.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.9.3.zip
+          (cd /tmp/yilbay093 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.3.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.9.3.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
           {
-            "version": "0.9.2",
-            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.2.zip",
+            "version": "0.9.3",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.3.zip",
             "sha256": "$SHA"
           }
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay092 source/current
+          cp -a /tmp/yilbay093 source/current
 
       - name: Commit verified release
         shell: bash
@@ -146,6 +151,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.9.2.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.9.2 Drive upsert deduplication [skip ci]'
+          git add release/YILBAY_APP_v0.9.3.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.9.3 resource metadata [skip ci]'
           git push origin main
