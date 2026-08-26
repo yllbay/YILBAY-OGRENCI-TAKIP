@@ -1,0 +1,1 @@
+function homeworkMathVerificationTargets(x={}){const out=[],seen=new Set();for(const q of [...(Array.isArray(x.wrongQuestions)?x.wrongQuestions:[]),...(Array.isArray(x.uncertainQuestions)?x.uncertainQuestions:[])]){const n=normalizeHomeworkQuestionRef(q);if(n&&!seen.has(n.questionId)){seen.add(n.questionId);out.push(n)}}return out.slice(0,80)}

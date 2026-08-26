@@ -1,0 +1,1 @@
+window.clearScannedPdfRecords=async()=>{if(!db.homeworkAnalyses.length||!confirm('Tüm taranmış PDF analiz kayıtları ve yerel karne PDF dosyaları silinsin mi? Asıl dosyalar etkilenmez.'))return;for(const x of db.homeworkAnalyses){if(x.pdfReportUrl){try{await fetch(x.pdfReportUrl,{method:'DELETE'})}catch{}}}db.homeworkAnalyses=[];save();scannedPdfHistory()}
