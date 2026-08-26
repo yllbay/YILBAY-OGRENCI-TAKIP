@@ -1,0 +1,21 @@
+import fs from 'fs';
+import path from 'path';
+const ROOT='/tmp/yilbay096';
+const manifestPath=path.join(ROOT,'cells','micro-cell-manifest.json');
+const m=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
+if(m.version!=='0.9.5'||m.protocol!=='micro-cell-v2-ast')throw new Error('Expected verified v0.9.5 source');
+for(const e of [...m.frontend,...m.backend]){const p=path.join(ROOT,e.file);let s=fs.readFileSync(p,'utf8');s=s.replaceAll('0.9.5','0.9.6');fs.writeFileSync(p,s,'utf8')}
+const frontend=m.frontend.map(e=>fs.readFileSync(path.join(ROOT,e.file),'utf8')).join('');
+const backend=m.backend.map(e=>fs.readFileSync(path.join(ROOT,e.file),'utf8')).join('');
+fs.writeFileSync(path.join(ROOT,'app','public','app.js'),frontend,'utf8');
+fs.writeFileSync(path.join(ROOT,'app','server.js'),backend,'utf8');
+fs.writeFileSync(path.join(ROOT,'app','VERSION'),'0.9.6\n','utf8');
+const boot=path.join(ROOT,'app','bootstrap','orchestrator_node.js');
+let bs=fs.readFileSync(boot,'utf8');
+bs=bs.replaceAll('2.1.0-node','2.1.1-node').replaceAll('Node bootstrap v2.1.0','Node bootstrap v2.1.1');
+bs=bs.replace(',"--start-fullscreen","--start-maximized",',',"--start-maximized",');
+bs=bs.replace(',"--start-fullscreen",',',');
+if(bs.includes('--start-fullscreen'))throw new Error('fullscreen flag still present');
+if(!bs.includes('--start-maximized'))throw new Error('maximized flag missing');
+fs.writeFileSync(boot,bs,'utf8');
+console.log('v0.9.6 maximized-window patch applied');
