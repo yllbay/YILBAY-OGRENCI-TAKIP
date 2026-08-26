@@ -21,6 +21,6 @@ window.generateAiMasterPlan=async()=>{
  finally{if(btn){btn.disabled=false;btn.textContent=oldText||"AI ile Dönem Planı Üret"}}
 }
 
-/* CELL:110-youtube | layer:frontend | generated-from:v0.9.7 */
+/* CELL:110-youtube | layer:frontend | generated-from:v0.9.8 */
 
 /* CELL:110-youtube | layer:frontend | generated-from:v0.7.2 */

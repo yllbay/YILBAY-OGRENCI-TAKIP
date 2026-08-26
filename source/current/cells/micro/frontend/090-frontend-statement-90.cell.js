@@ -1,1 +1,1 @@
-dashboard();
+applyViewportProfile()

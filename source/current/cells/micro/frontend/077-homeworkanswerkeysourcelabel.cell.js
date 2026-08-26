@@ -1,0 +1,1 @@
+function homeworkAnswerKeySourceLabel(source){const labels={manual:'Manuel',external_drive:'Ayrı Drive PDF',embedded_same_page:'Kaynak PDF · aynı sayfa',embedded_adjacent_page:'Kaynak PDF · sonraki sayfa',embedded_end_pages:'Kaynak PDF · son sayfalar',ambiguous:'Belirsiz',none:'Bulunamadı'};return labels[String(source||'none')]||String(source||'Bulunamadı')}

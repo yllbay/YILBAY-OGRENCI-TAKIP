@@ -337,24 +337,29 @@ function normalizeHomeworkAnalysis(x={}){
 
 async function driveDownloadAnalysisFile(fileId){if(!fileId)return null;const token=await driveRefreshAccessToken();const u='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?alt=media';const r=await fetch(u,{headers:{Authorization:'Bearer '+token}});if(!r.ok){let j={};try{j=await r.json()}catch{}throw new Error(j.error?.message||('Drive dosyası indirilemedi HTTP '+r.status))}const b=Buffer.from(await r.arrayBuffer());if(b.length>14*1024*1024)throw new Error('Drive analiz dosyası 14 MB sınırını aşıyor');return {base64:b.toString('base64'),mimeType:r.headers.get('content-type')||'application/pdf',size:b.length}}
 function validateHomeworkQuestionCount(analysis,expected){const n=Math.max(0,Math.round(Number(expected)||0));if(!n)return analysis;if(Number(analysis.totalQuestions)!==n)return {...analysis,needsTeacherReview:true,autoFinalize:false,questionCountMismatch:true,expectedQuestionCount:n};return {...analysis,expectedQuestionCount:n,questionCountMismatch:false}}
+function homeworkAnswerKeySearchInstruction(){return `CEVAP ANAHTARI ARAMA PROTOKOLÜ:
+Önce manuel veya ayrı cevap anahtarı verilmişse onu kesin referans kabul et. Ayrı anahtar yoksa KAYNAK PDF'nin tamamında cevap anahtarı ara. Cevap anahtarı testin bulunduğu aynı sayfanın üstünde veya altında, bir sonraki sayfanın üstünde veya altında, PDF'nin son sayfalarında ya da son sayfalarda test isimleriyle toplu tabloda olabilir. Toplu cevap anahtarında assignment.title, resourceContext.title, course ve topic bilgilerini kullanarak doğru test bloğunu eşleştir. Öğrencinin kendi işaretlerini asla cevap anahtarı sayma. Birden fazla blok aynı derecede olasıysa answerKeySource=\"ambiguous\" yap. Hiç güvenilir anahtar yoksa answerKeySource=\"none\" yap. Gömülü anahtar bulunduğunda source yalnız embedded_same_page, embedded_adjacent_page veya embedded_end_pages olabilir. answerKeyConfidence cevap anahtarının gerçekten ilgili teste ait olma güvenidir.`}
+function validateHomeworkAnswerKeyEvidence(analysis,manualAnswerKey,resourceContext){const manual=String(manualAnswerKey||'').trim(),external=String(resourceContext?.answerKeyDriveFileId||'').trim();if(manual)return {...analysis,answerKeyFound:true,answerKeySource:'manual',answerKeyConfidence:1,answerKeyEvidence:analysis.answerKeyEvidence||'Öğretmen tarafından manuel cevap anahtarı sağlandı'};if(external)return {...analysis,answerKeyFound:true,answerKeySource:'external_drive',answerKeyConfidence:1,answerKeyEvidence:analysis.answerKeyEvidence||'Ayrı Drive cevap anahtarı sağlandı'};const allowed=['embedded_same_page','embedded_adjacent_page','embedded_end_pages'],source=String(analysis.answerKeySource||'none'),confidence=Math.max(0,Math.min(1,Number(analysis.answerKeyConfidence)||0)),found=analysis.answerKeyFound===true&&allowed.includes(source),review=!found||confidence<0.75;return {...analysis,answerKeyFound:found,answerKeySource:found?source:(source==='ambiguous'?'ambiguous':'none'),answerKeyConfidence:Math.round(confidence*1000)/1000,answerKeyEvidence:String(analysis.answerKeyEvidence||'').slice(0,500),needsTeacherReview:!!analysis.needsTeacherReview||review,autoFinalize:!!analysis.autoFinalize&&!review}}
 async function handleHomework(req,res){
   const body=await readJson(req,18*1024*1024);
   const {fileData,mimeType="application/pdf",fileName="odev.pdf",assignment,answerKey=null,resourceContext=null}=body;
   if(!fileData) return json(res,400,{ok:false,error:"Ödev dosyası gerekli"});
   if(!integrationStatus().openai.configured) return json(res,400,{ok:false,error:"Ödev analizi için OpenAI API anahtarı gerekli"});
+  const answerKeySearch=homeworkAnswerKeySearchInstruction();
   const instructions=`Sen bir öğrenci ödevi değerlendirme motorusun. Yüklenen PDF/görselde öğrencinin işaretlerini, boş bıraktığı soruları ve mümkünse çözüm yollarını incele.
-Eğer cevap anahtarı sağlandıysa onu kesin referans olarak kullan. Cevap anahtarı yoksa yalnızca güvenle değerlendirebildiklerini puanla ve confidence değerini düşür.
+${answerKeySearch}
+Cevap anahtarı kanıtı olmadan doğru/yanlış durumunu kesinmiş gibi uydurma.
 Yanlış/boş/doğru sayısını, başarı yüzdesini ve hata türlerini çıkar. Öğrencinin çözüm yolu görünüyorsa temel kavramsal hataları kısa şekilde sınıflandır.
 Kesin göremediğin işaret veya çözüm için tahmin yürütme. Soruların/işaretlerin yeterli kısmı okunamıyorsa needsTeacherReview=true yap.
 confidence 0 ile 1 arasında olmalı. confidence 0.65 altındaysa sonuç öğretmen onayı gerektirmelidir.
 Sadece JSON döndür:
-{"totalQuestions":number,"correct":number,"wrong":number,"blank":number,"scorePercent":number,"confidence":number,"items":[{"question":number,"status":"correct|wrong|blank|uncertain","studentAnswer":"string|null","correctAnswer":"string|null","errorType":"string|null","note":"string|null"}],"weaknesses":["..."],"recommendRepeat":boolean,"summary":"..."}`;
+{"totalQuestions":number,"correct":number,"wrong":number,"blank":number,"scorePercent":number,"confidence":number,"items":[{"question":number,"status":"correct|wrong|blank|uncertain","studentAnswer":"string|null","correctAnswer":"string|null","errorType":"string|null","note":"string|null"}],"weaknesses":["..."],"recommendRepeat":boolean,"summary":"...","answerKeyFound":boolean,"answerKeySource":"manual|external_drive|embedded_same_page|embedded_adjacent_page|embedded_end_pages|ambiguous|none","answerKeyConfidence":number,"answerKeyEvidence":"kısa konum/eşleşme açıklaması","answerKeyTestName":"string|null"}`;
   const content=[{type:"input_text",text:JSON.stringify({assignment,answerKey,resourceContext})}];
   if(resourceContext?.driveFileId){const src=await driveDownloadAnalysisFile(resourceContext.driveFileId);content.push({type:"input_text",text:"KAYNAK PDF - öğrencinin çözdüğü asıl soru dokümanı"},{type:"input_file",filename:"kaynak.pdf",file_data:`data:${src.mimeType};base64,${src.base64}`})}
   if(resourceContext?.answerKeyDriveFileId){const key=await driveDownloadAnalysisFile(resourceContext.answerKeyDriveFileId);content.push({type:"input_text",text:"CEVAP ANAHTARI - kesin referans olarak kullan"},{type:"input_file",filename:"cevap_anahtari.pdf",file_data:`data:${key.mimeType};base64,${key.base64}`})}
   content.push({type:"input_text",text:"ÖĞRENCİ ÇÖZÜM DOSYASI - değerlendirilecek çalışma"},{type:"input_file",filename:fileName,file_data:`data:${mimeType};base64,${fileData}`});
   const ai=await openaiRequest({instructions,input:[{role:"user",content}],reasoning:"medium"});
-  const parsed=validateHomeworkQuestionCount(normalizeHomeworkAnalysis(parseJsonText(ai.text)),resourceContext?.questionCount);
+  const parsed=validateHomeworkAnswerKeyEvidence(validateHomeworkQuestionCount(normalizeHomeworkAnalysis(parseJsonText(ai.text)),resourceContext?.questionCount),answerKey,resourceContext);
   const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});
   return json(res,200,{ok:true,analysis:parsed,autoFinalize:parsed.autoFinalize,usage:ai.data?.usage||null,cost});
 }
@@ -406,7 +411,7 @@ installLaunchPreferences()
 http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.9.7",integrations:integrationStatus()});
+    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.9.8",integrations:integrationStatus()});
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
     if(u.pathname==="/api/drive/status"&&req.method==="GET"){const d=integrationStatus().drive;return json(res,200,{ok:true,...d})}
