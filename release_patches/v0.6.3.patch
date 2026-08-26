@@ -1,0 +1,118 @@
+--- a/app/server.js
++++ b/app/server.js
+@@ -13,7 +13,7 @@
+   try{return JSON.parse(fs.readFileSync(secretFile,"utf8"))}catch{return {}}
+ }
+ function readWindowsCredential(target=OPENAI_CREDENTIAL_TARGET){
+-  if(process.platform!=="win32") return null;
++  if(process.platform!=="win32") return {value:null,diagnostic:{method:"not-windows",found:false,userMatch:false}};
+   const now=Date.now();
+   if(now-credentialCache.at<30000) return credentialCache.value;
+   const ps=`$ErrorActionPreference='Stop'
+@@ -30,36 +30,56 @@
+   }
+   [DllImport("advapi32.dll", EntryPoint="CredReadW", CharSet=CharSet.Unicode, SetLastError=true)]
+   public static extern bool CredRead(string target, UInt32 type, UInt32 reservedFlag, out IntPtr credentialPtr);
+-  [DllImport("advapi32.dll", SetLastError=true)]
+-  public static extern void CredFree(IntPtr credentialPtr);
++  [DllImport("advapi32.dll", EntryPoint="CredEnumerateW", CharSet=CharSet.Unicode, SetLastError=true)]
++  public static extern bool CredEnumerate(string filter, UInt32 flags, out UInt32 count, out IntPtr credentials);
++  [DllImport("advapi32.dll", SetLastError=true)] public static extern void CredFree(IntPtr credentialPtr);
+ }
+ '@
+ Add-Type -TypeDefinition $src -ErrorAction SilentlyContinue
++function Convert-Cred([IntPtr]$p,[string]$method){
++  $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[type][YilbayCredNative+CREDENTIAL])
++  $t=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.TargetName)
++  $u=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.UserName)
++  $bytes=New-Object byte[] $c.CredentialBlobSize
++  if($c.CredentialBlobSize -gt 0){[Runtime.InteropServices.Marshal]::Copy($c.CredentialBlob,$bytes,0,$c.CredentialBlobSize)}
++  $secret=[Text.Encoding]::Unicode.GetString($bytes).Trim([char]0)
++  if([string]::IsNullOrWhiteSpace($secret) -or $secret.Contains([char]0)){$secret=[Text.Encoding]::UTF8.GetString($bytes).Trim([char]0)}
++  [pscustomobject]@{target=$t;username=$u;secret=$secret;method=$method}
++}
+ $p=[IntPtr]::Zero
+-if(-not [YilbayCredNative]::CredRead('${target.replace(/'/g,"''")}',1,0,[ref]$p)){ exit 3 }
+-try {
+-  $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[type][YilbayCredNative+CREDENTIAL])
+-  $user=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.UserName)
+-  $bytes=New-Object byte[] $c.CredentialBlobSize
+-  if($c.CredentialBlobSize -gt 0){ [Runtime.InteropServices.Marshal]::Copy($c.CredentialBlob,$bytes,0,$c.CredentialBlobSize) }
+-  $secret=[Text.Encoding]::Unicode.GetString($bytes).Trim([char]0)
+-  [pscustomobject]@{username=$user;secret=$secret} | ConvertTo-Json -Compress
+-} finally { [YilbayCredNative]::CredFree($p) }`;
++if([YilbayCredNative]::CredRead('${target.replace(/'/g,"''")}',1,0,[ref]$p)){
++  try{Convert-Cred $p 'direct'}finally{[YilbayCredNative]::CredFree($p)}
++  exit 0
++}
++$count=0;$arr=[IntPtr]::Zero
++if([YilbayCredNative]::CredEnumerate($null,0,[ref]$count,[ref]$arr)){
++  try{
++    for($i=0;$i -lt $count;$i++){
++      $cp=[Runtime.InteropServices.Marshal]::ReadIntPtr($arr,$i*[IntPtr]::Size)
++      $c=[Runtime.InteropServices.Marshal]::PtrToStructure($cp,[type][YilbayCredNative+CREDENTIAL])
++      $t=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.TargetName)
++      if($t -eq '${target.replace(/'/g,"''")}' -or $t.EndsWith('${target.replace(/'/g,"''")}')){Convert-Cred $cp 'enumerate'; exit 0}
++    }
++  }finally{[YilbayCredNative]::CredFree($arr)}
++}
++exit 3`;
+   try{
+     const encoded=Buffer.from(ps,"utf16le").toString("base64");
+-    const out=cp.execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-EncodedCommand",encoded],{encoding:"utf8",windowsHide:true,timeout:5000,stdio:["ignore","pipe","ignore"]}).trim();
++    const out=cp.execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-EncodedCommand",encoded],{encoding:"utf8",windowsHide:true,timeout:7000,stdio:["ignore","pipe","ignore"]}).trim();
+     const parsed=JSON.parse(out||"null");
+-    const value=parsed&&parsed.secret?{username:String(parsed.username||""),secret:String(parsed.secret||"")} : null;
+-    credentialCache={at:now,value};
+-    return value;
++    const user=String(parsed?.username||""); const secret=String(parsed?.secret||"");
++    const userMatch=!OPENAI_CREDENTIAL_USERNAME||user===OPENAI_CREDENTIAL_USERNAME;
++    const result={value:(secret&&userMatch)?{username:user,secret}:null,diagnostic:{method:String(parsed?.method||"unknown"),found:!!secret,userMatch,targetMatched:String(parsed?.target||"").endsWith(target)}};
++    credentialCache={at:now,value:result}; return result;
+   }catch{
+-    credentialCache={at:now,value:null};
+-    return null;
++    const result={value:null,diagnostic:{method:"not-found",found:false,userMatch:false,targetMatched:false}};
++    credentialCache={at:now,value:result}; return result;
+   }
+ }
+ function readSecrets(){
+   const stored=readStoredSecrets();
+-  const cred=readWindowsCredential();
++  const credResult=readWindowsCredential();
++  const cred=credResult.value;
+@@ -67,7 +87,7 @@
+     openaiApiKey=cred.secret; openaiApiSource="windows-credential-manager";
+   }else if(envKey){ openaiApiKey=envKey; openaiApiSource="environment"; }
+   else if(manual){ openaiApiKey=manual; openaiApiSource="manual"; }
+-  return {...stored,openaiApiKey,openaiApiSource,credentialTarget:OPENAI_CREDENTIAL_TARGET};
++  return {...stored,openaiApiKey,openaiApiSource,credentialTarget:OPENAI_CREDENTIAL_TARGET,credentialDiagnostic:credResult.diagnostic};
+ }
+@@ -83,7 +103,7 @@
+ function integrationStatus(){
+   const s=readSecrets();
+   return {
+-    openai:{configured:!!s.openaiApiKey,model:s.openaiModel||"gpt-5.6-luna",source:s.openaiApiSource||"none",credentialTarget:OPENAI_CREDENTIAL_TARGET},
++    openai:{configured:!!s.openaiApiKey,model:s.openaiModel||"gpt-5.6-luna",source:s.openaiApiSource||"none",credentialTarget:OPENAI_CREDENTIAL_TARGET,credentialDiagnostic:s.credentialDiagnostic||null},
+@@ -337,7 +357,7 @@
+-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.6.2",integrations:integrationStatus()});
++    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.6.3",integrations:integrationStatus()});
+@@ -367,4 +387,4 @@
+-}).listen(port,"127.0.0.1",()=>console.log("READY 0.6.2"));
++}).listen(port,"127.0.0.1",()=>console.log("READY 0.6.3"));
+--- a/app/public/app.js
++++ b/app/public/app.js
+@@ -1,4 +1,5 @@
+-const STORAGE="yilbay_mvp_062";
++const STORAGE="yilbay_mvp_063";
++const PREV_STORAGE_062="yilbay_mvp_062";
+@@ -29,6 +30,8 @@
+  const current=localStorage.getItem(STORAGE);
+  if(current) return normalizeDb(JSON.parse(current));
++ const p62=localStorage.getItem(PREV_STORAGE_062);
++ if(p62){const migrated=normalizeDb(JSON.parse(p62));localStorage.setItem(STORAGE,JSON.stringify(migrated));return migrated;}
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-0.6.2
++0.6.3
