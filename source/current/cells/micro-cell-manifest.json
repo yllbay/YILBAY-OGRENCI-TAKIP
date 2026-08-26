@@ -1,6 +1,6 @@
 {
   "protocol": "micro-cell-v2-ast",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "rule": "one-Program.body-node-per-cell",
   "frontend": [
     {
