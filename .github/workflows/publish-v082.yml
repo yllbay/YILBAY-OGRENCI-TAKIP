@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.10.1/**'
+      - 'release_build/v0.10.2/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,23 +20,23 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.10.0 source
+      - name: Copy verified v0.10.1 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay0101 /tmp/microtools
-          cp -a source/current /tmp/yilbay0101
-          test "$(cat /tmp/yilbay0101/app/VERSION | tr -d '\r\n')" = "0.10.0"
+          rm -rf /tmp/yilbay0102 /tmp/microtools
+          cp -a source/current /tmp/yilbay0102
+          test "$(cat /tmp/yilbay0102/app/VERSION | tr -d '\r\n')" = "0.10.1"
 
-      - name: Patch homework diagnostics
+      - name: Patch accounting diagnostics
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.1/patch_cells_v0101.mjs
-          grep -q 'function writeHomeworkDiagnostic' /tmp/yilbay0101/app/server.js
-          grep -q 'last_homework_analysis.json' /tmp/yilbay0101/app/server.js
-          grep -q 'homework_analysis.json' /tmp/yilbay0101/app/bootstrap/orchestrator_node.js
-          grep -q '2.1.2-node' /tmp/yilbay0101/app/bootstrap/orchestrator_node.js
+          node release_build/v0.10.2/patch_cells_v0102.mjs
+          grep -q 'function validateHomeworkQuestionAccounting' /tmp/yilbay0102/app/server.js
+          grep -q 'function deriveHomeworkReviewReasons' /tmp/yilbay0102/app/server.js
+          grep -q 'questionAccountingVerified' /tmp/yilbay0102/app/server.js
+          grep -q 'reviewReasons' /tmp/yilbay0102/app/server.js
 
       - name: Install AST parser
         shell: bash
@@ -49,42 +49,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.1/microcellularize.mjs
+          node release_build/v0.10.2/microcellularize.mjs
 
-      - name: Strict diagnostic tests
+      - name: Strict accounting tests
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import fs from 'fs';import path from 'path';import os from 'os';import vm from 'vm';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay0101',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.version!=='0.10.1'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
+          const root='/tmp/yilbay0102',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
+          if(m.version!=='0.10.2'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
           for(const e of [...m.frontend,...m.backend]){const s=fs.readFileSync(root+'/'+e.file,'utf8'),a=parse(s,{ecmaVersion:'latest',sourceType:'script'});if(a.body.length!==1||a.body[0].type!==e.nodeType)throw new Error(e.file)}
-          const wr=m.backend.find(x=>x.name==='writeHomeworkDiagnostic');if(!wr)throw new Error('diagnostic cell missing');
-          const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'yilbaydiag-'));const ctx={fs,path,runtime:tmp,Date};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+wr.file,'utf8'),ctx);
-          const safe=ctx.writeHomeworkDiagnostic({expectedStudentPages:5,analyzedStudentPages:[1,2],missingStudentPages:[3,4,5],expectedSourcePages:4,analyzedSourcePages:[1,2,3,4],missingSourcePages:[],pdfCoverageVerified:false,answerKeyFound:true,answerKeySource:'embedded_end_pages',answerKeyConfidence:.91,confidence:.82,needsTeacherReview:true,autoFinalize:false,totalQuestions:20,correct:12,wrong:5,blank:3,scorePercent:60},{try:.1234},{id:99});
-          const stored=JSON.parse(fs.readFileSync(path.join(tmp,'last_homework_analysis.json'),'utf8'));
-          if(stored.assignmentId!==99||stored.expectedStudentPages!==5||stored.missingStudentPages.join(',')!=='3,4,5'||stored.answerKeySource!=='embedded_end_pages'||stored.costTry!==.1234)throw new Error('diagnostic values');
-          for(const banned of ['fileData','base64','answerKeyEvidence','studentAnswer','correctAnswer','apiKey','accessToken','refreshToken'])if(Object.prototype.hasOwnProperty.call(stored,banned)||JSON.stringify(stored).includes(banned))throw new Error('unsafe diagnostic field '+banned);
-          if(stored.secretsCollected!==false||stored.contentCollected!==false)throw new Error('privacy flags');
+          const acc=m.backend.find(x=>x.name==='validateHomeworkQuestionAccounting'),rr=m.backend.find(x=>x.name==='deriveHomeworkReviewReasons'),wr=m.backend.find(x=>x.name==='writeHomeworkDiagnostic');if(!acc||!rr||!wr)throw new Error('new cells missing');
+          const ctx={};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+acc.file,'utf8'),ctx);vm.runInContext(fs.readFileSync(root+'/'+rr.file,'utf8'),ctx);
+          let r=ctx.validateHomeworkQuestionAccounting({totalQuestions:13,correct:9,wrong:1,blank:2,needsTeacherReview:false,autoFinalize:true});if(r.questionAccountingVerified||!r.needsTeacherReview||r.classifiedQuestions!==12)throw new Error('accounting guard failed');
+          r=ctx.deriveHomeworkReviewReasons({...r,confidence:.84,pdfCoverageVerified:true,answerKeyFound:true,answerKeyConfidence:.99});if(!r.reviewReasons.includes('question_accounting_mismatch'))throw new Error('review reason missing');
+          r=ctx.validateHomeworkQuestionAccounting({totalQuestions:12,correct:9,wrong:1,blank:2,needsTeacherReview:false,autoFinalize:true});if(!r.questionAccountingVerified||r.needsTeacherReview)throw new Error('valid accounting failed');
+          const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'yilbaydiag-'));const wctx={fs,path,runtime:tmp,Date};vm.createContext(wctx);vm.runInContext(fs.readFileSync(root+'/'+wr.file,'utf8'),wctx);const stored=wctx.writeHomeworkDiagnostic({expectedSourcePages:0,questionAccountingVerified:false,classifiedQuestions:12,expectedQuestionCount:20,questionCountMismatch:true,reviewReasons:['question_accounting_mismatch']},{try:.2},{id:1});if(stored.sourcePageCountStatus!=='unknown'||stored.expectedQuestionCount!==20||!stored.reviewReasons.includes('question_accounting_mismatch'))throw new Error('diagnostic detail failed');
           const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||b!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
-          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('homework_analysis.json')||!boot.includes('2.1.2-node')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('bootstrap/report regression');
-          console.log('HOMEWORK DIAGNOSTICS OK',m.counts,safe.expectedStudentPages);
+          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('2.1.2-node')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('bootstrap regression');
+          console.log('QUESTION ACCOUNTING DIAGNOSTICS OK',m.counts);
           NODE
-          node --check /tmp/yilbay0101/app/public/app.js
-          node --check /tmp/yilbay0101/app/server.js
-          node --check /tmp/yilbay0101/app/bootstrap/orchestrator_node.js
-          node /tmp/yilbay0101/app/tests.js
+          node --check /tmp/yilbay0102/app/public/app.js
+          node --check /tmp/yilbay0102/app/server.js
+          node /tmp/yilbay0102/app/tests.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay0101/app/server.js >/tmp/v0101_server.log 2>/tmp/v0101_server.err &
+          PORT=43127 node /tmp/yilbay0102/app/server.js >/tmp/v0102_server.log 2>/tmp/v0102_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0101_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
-          grep -q '"version":"0.10.1"' /tmp/v0101_health.json
+          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0102_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
+          grep -q '"version":"0.10.2"' /tmp/v0102_health.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -93,14 +91,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.10.1.zip
-          (cd /tmp/yilbay0101 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.1.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.10.1.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.10.2.zip
+          (cd /tmp/yilbay0102 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.2.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.10.2.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
-          {"version":"0.10.1","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.1.zip","sha256":"$SHA"}
+          {"version":"0.10.2","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.2.zip","sha256":"$SHA"}
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay0101 source/current
+          cp -a /tmp/yilbay0102 source/current
 
       - name: Commit verified release
         shell: bash
@@ -108,6 +106,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.10.1.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.10.1 homework diagnostics [skip ci]'
+          git add release/YILBAY_APP_v0.10.2.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.10.2 accounting diagnostics [skip ci]'
           git push origin main
