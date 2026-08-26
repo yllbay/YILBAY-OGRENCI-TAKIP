@@ -107,7 +107,7 @@ function emptyState(title,text){return `<div class="empty"><strong>${title}</str
 function pageHead(title,desc,actions=""){return `<div class="page-head"><div class="page-title"><h1>${title}</h1><p>${desc}</p></div><div class="page-actions">${actions}</div></div>`}
 
 
-function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.10.8</span></div></div><div class="layout"><aside>
+function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.10.9</span></div></div><div class="layout"><aside>
 <div class="nav-section">Yönetim</div>${nav("dashboard","Genel Bakış",active)}${nav("students","Öğrenciler",active)}${nav("profile","Öğrenci Profili",active)}
 <div class="nav-section">Akademik İçerik</div>${nav("curriculum","Ders ve Üniteler",active)}${nav("resources","Kaynak Havuzu",active)}${nav("exams","Online Sınavlar",active)}
 <div class="nav-section">Operasyon</div>${nav("assignments","Atamalar",active)}${nav("results","Başarı Sonuçları",active)}${nav("program","Haftalık Program",active)}
@@ -121,7 +121,7 @@ function nav(k,t,a){return `<button class="nav ${a===k?"active":""}" onclick="go
 window.go=k=>{view=k;render()}
 function render(){({dashboard,students,profile,curriculum,resources,exams,assignments,results,program,integrations}[view]||dashboard)()}
 
-/* CELL:10-dashboard | layer:frontend | generated-from:v0.10.8 */
+/* CELL:10-dashboard | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:10-dashboard | layer:frontend | generated-from:v0.7.2 */
 function dashboard(){
@@ -139,7 +139,7 @@ function dashboard(){
 }
 function studentName(id){return db.students.find(s=>s.id===id)?.name||"Bilinmeyen"}
 
-/* CELL:20-students-profile | layer:frontend | generated-from:v0.10.8 */
+/* CELL:20-students-profile | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:20-students-profile | layer:frontend | generated-from:v0.7.2 */
 function students(){
@@ -205,7 +205,7 @@ function profile(){
  <h2>Son sonuçlar</h2><table><thead><tr><th>Tarih</th><th>Tür</th><th>Ders / Konu</th><th>Başarı</th></tr></thead><tbody>${rs.slice(0,12).map(r=>`<tr><td>${r.date}</td><td>${r.kind}</td><td>${r.course} / ${r.topic}</td><td><span class="badge ${scoreClass(r.score)}">%${r.score}</span></td></tr>`).join("")||`<tr><td colspan="4">Sonuç yok.</td></tr>`}</tbody></table>`,"profile")
 }
 
-/* CELL:30-curriculum | layer:frontend | generated-from:v0.10.8 */
+/* CELL:30-curriculum | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:30-curriculum | layer:frontend | generated-from:v0.7.2 */
 function curriculum(){
@@ -216,7 +216,7 @@ window.currModal=()=>modal(`<h2>Müfredat Ekle</h2><div class="formgrid"><div cl
 window.addCurr=()=>{let c=q("ccourse").value.trim(),u=q("cunit").value.trim(),t=q("ctopic").value.trim();if(!c||!u||!t)return alert("Tüm alanlar gerekli");db.curriculum[c]??={};db.curriculum[c][u]??=[];if(!db.curriculum[c][u].includes(t))db.curriculum[c][u].push(t);save();closeModal();curriculum()}
 function topicOptions(){let out="";for(const [c,units] of Object.entries(db.curriculum))for(const topics of Object.values(units))for(const t of topics)out+=`<option data-course="${c}" value="${c}|||${t}">${c} — ${t}</option>`;return out}
 
-/* CELL:40-resources | layer:frontend | generated-from:v0.10.8 */
+/* CELL:40-resources | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:40-resources | layer:frontend | generated-from:v0.7.2 */
 function resources(){
@@ -234,7 +234,7 @@ function exams(){
 window.examModal=()=>modal(`<h2>Online Sınav Ekle</h2><div class="formgrid"><div class="field"><label>Başlık</label><input id="etitle"></div><div class="field"><label>Konu</label><select id="etopic">${topicOptions()}</select></div><div class="field"><label>Link</label><input id="eurl"></div></div><div class="modal-actions"><button class="btn primary" onclick="addExam()">Kaydet</button></div>`)
 window.addExam=()=>{const [course,topic]=q("etopic").value.split("|||");db.exams.push({id:Date.now(),course,topic,title:q("etitle").value||topic+" Online Test",url:q("eurl").value});save();closeModal();exams()}
 
-/* CELL:60-assignments-results | layer:frontend | generated-from:v0.10.8 */
+/* CELL:60-assignments-results | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:60-assignments-results | layer:frontend | generated-from:v0.7.2 */
 function assignments(){
@@ -284,7 +284,7 @@ window.clearHomeworkAnalyses=async()=>{if(!db.homeworkAnalyses.length||!confirm(
 window.resultModal=()=>modal(`<h2>Sonuç Gir</h2><div class="formgrid"><div class="field"><label>Öğrenci</label><select id="xstudent">${db.students.map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}</select></div><div class="field"><label>Tür</label><select id="xkind"><option>Ödev</option><option>Online Sınav</option></select></div><div class="field"><label>Konu</label><select id="xtopic">${topicOptions()}</select></div><div class="field"><label>Başarı %</label><input id="xscore" type="number" min="0" max="100"></div></div><div class="modal-actions"><button class="btn primary" onclick="addResult()">Kaydet</button></div>`)
 window.addResult=()=>{const [course,topic]=q("xtopic").value.split("|||"),score=Math.max(0,Math.min(100,Number(q("xscore").value)));db.results.push({id:Date.now(),studentId:Number(q("xstudent").value),kind:q("xkind").value,course,topic,score,date:new Date().toISOString().slice(0,10)});save();closeModal();results()}
 
-/* CELL:70-planner | layer:frontend | generated-from:v0.10.8 */
+/* CELL:70-planner | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:70-planner | layer:frontend | generated-from:v0.7.2 */
 let selectedStudentId=null;
@@ -335,7 +335,7 @@ function program(){
  <div class="section"><div class="weekgrid">${DAY_NAMES.map(d=>`<div class="daycard"><h3>${d}</h3>${preview[d].map(x=>`<div class="task"><div class="task-title">${x.type} · ${x.course}</div><div class="task-sub">${x.topic}<br>${x.resource!=="—"?x.resource:x.exam}</div><div class="task-actions"><span class="badge ${x.type==="Tekrar"?"low":"mid"}">${x.reason}</span><button class="link-btn" onclick='findTopicVideo(${JSON.stringify(x.course)},${JSON.stringify(x.topic)})'>Video bul</button></div></div>`).join("")||`<div class="muted">Görev yok</div>`}</div>`).join("")}</div></div>`,"program")
 }
 
-/* CELL:80-api-client | layer:frontend | generated-from:v0.10.8 */
+/* CELL:80-api-client | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:80-api-client | layer:frontend | generated-from:v0.7.2 */
 async function apiJson(url,body=null){
@@ -345,7 +345,7 @@ async function apiJson(url,body=null){
  return data
 }
 
-/* CELL:90-integrations | layer:frontend | generated-from:v0.10.8 */
+/* CELL:90-integrations | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:90-integrations | layer:frontend | generated-from:v0.7.2 */
 function integrations(){
@@ -405,7 +405,7 @@ window.testOpenAIConnection=async()=>{
  finally{if(btn){btn.disabled=false;btn.textContent=old||"OpenAI Bağlantısını Test Et"}}
 }
 
-/* CELL:100-ai-planner | layer:frontend | generated-from:v0.10.8 */
+/* CELL:100-ai-planner | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:100-ai-planner | layer:frontend | generated-from:v0.7.2 */
 window.generateAiMasterPlan=async()=>{
@@ -431,7 +431,7 @@ window.generateAiMasterPlan=async()=>{
  finally{if(btn){btn.disabled=false;btn.textContent=oldText||"AI ile Dönem Planı Üret"}}
 }
 
-/* CELL:110-youtube | layer:frontend | generated-from:v0.10.8 */
+/* CELL:110-youtube | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:110-youtube | layer:frontend | generated-from:v0.7.2 */
 window.findTopicVideo=async(course,topic)=>{
@@ -444,7 +444,7 @@ window.findTopicVideo=async(course,topic)=>{
  }catch(e){if(q("videoResults"))q("videoResults").innerHTML=`<div class="notice error">${e.message}</div>`;else alert(e.message)}
 }
 
-/* CELL:120-ai-homework | layer:frontend | generated-from:v0.10.8 */
+/* CELL:120-ai-homework | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:120-ai-homework | layer:frontend | generated-from:v0.7.2 */
 window.analyzeAssignment=id=>{
@@ -502,7 +502,7 @@ window.submitHomeworkAnalysis=async id=>{
  finally{if(btn){btn.disabled=false;btn.textContent="Dosyayı Tara"}}
 }
 
-/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.10.8 */
+/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.10.9 */
 
 /* CELL:130-ui-runtime | layer:frontend | generated-from:v0.7.2 */
 function q(id){return document.getElementById(id)}

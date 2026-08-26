@@ -16,7 +16,7 @@ async function handleHomework(req,res){
   parsed=validateLunaQuestionAccounting(parsed);
   parsed=deriveHomeworkReviewReasons(parsed);
   const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});
-  parsed.studentFileSource=studentFileSource;parsed.studentFileDriveUsed=!!studentFile.driveUsed;parsed.analysisArchitecture="direct_luna_wrong_only_composite_question_id";
+  parsed.studentFileSource=studentFileSource;parsed.studentFileDriveUsed=!!studentFile.driveUsed;parsed.analysisArchitecture="direct_luna_wrong_only_composite_question_id_status_reconciled";
   writeHomeworkDiagnostic(parsed,cost,assignment);
   return json(res,200,{ok:true,analysis:parsed,autoFinalize:parsed.autoFinalize,usage:ai.data?.usage||null,cost});
 }
