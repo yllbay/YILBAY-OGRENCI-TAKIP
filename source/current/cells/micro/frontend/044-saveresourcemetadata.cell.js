@@ -1,0 +1,1 @@
+window.saveResourceMetadata=(id)=>{const r=db.resources.find(x=>x.id===id);if(!r)return;r.title=q('ertitle').value.trim()||r.title;r.unit=q('erunit').value.trim();r.subtopic=q('ersubtopic').value.trim()||r.topic;r.questionCount=Math.max(0,Number(q('erquestioncount').value)||0);r.answerKeyDriveFileId=q('eranswerkey').value.trim();save();closeModal();resources()}
