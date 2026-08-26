@@ -1,3 +1,4 @@
+/* CELL:00-core-store-ui | layer:frontend | generated-from:v0.7.2 */
 const STORAGE="yilbay_mvp_065";
 const PREV_STORAGE_063="yilbay_mvp_063";
 const PREV_STORAGE_062="yilbay_mvp_062";
@@ -66,7 +67,7 @@ function initials(name=""){return name.split(/\s+/).filter(Boolean).slice(0,2).m
 function tableWrap(html){return `<div class="table-wrap">${html}</div>`}
 function emptyState(title,text){return `<div class="empty"><strong>${title}</strong>${text}</div>`}
 function pageHead(title,desc,actions=""){return `<div class="page-head"><div class="page-title"><h1>${title}</h1><p>${desc}</p></div><div class="page-actions">${actions}</div></div>`}
-function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.7.2</span></div></div><div class="layout"><aside>
+function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.8.0</span></div></div><div class="layout"><aside>
 <div class="nav-section">Yönetim</div>${nav("dashboard","Genel Bakış",active)}${nav("students","Öğrenciler",active)}${nav("profile","Öğrenci Profili",active)}
 <div class="nav-section">Akademik İçerik</div>${nav("curriculum","Ders ve Üniteler",active)}${nav("resources","Kaynak Havuzu",active)}${nav("exams","Online Sınavlar",active)}
 <div class="nav-section">Operasyon</div>${nav("assignments","Atamalar",active)}${nav("results","Başarı Sonuçları",active)}${nav("program","Haftalık Program",active)}
@@ -75,6 +76,8 @@ function shell(content,active=view){app().innerHTML=`<div class="top"><div class
 function nav(k,t,a){return `<button class="nav ${a===k?"active":""}" onclick="go('${k}')">${t}</button>`}
 window.go=k=>{view=k;render()}
 function render(){({dashboard,students,profile,curriculum,resources,exams,assignments,results,program,integrations}[view]||dashboard)()}
+
+/* CELL:10-dashboard | layer:frontend | generated-from:v0.7.2 */
 function dashboard(){
  const low=db.results.filter(r=>r.score<db.threshold), pending=db.assignments.filter(a=>a.status!=="Tamamlandı");
  const avg=db.results.length?Math.round(db.results.reduce((n,r)=>n+r.score,0)/db.results.length):0;
@@ -90,6 +93,7 @@ function dashboard(){
 }
 function studentName(id){return db.students.find(s=>s.id===id)?.name||"Bilinmeyen"}
 
+/* CELL:20-students-profile | layer:frontend | generated-from:v0.7.2 */
 function students(){
  const actions=`<button class="btn primary" onclick="studentModal()">+ Yeni Öğrenci</button>`;
  const rows=db.students.map(s=>`<tr><td><button class="navlink" onclick="openProfile(${s.id})">${s.name}</button><div class="cell-sub">${s.target||"Hedef belirtilmedi"}</div></td><td>${s.grade||"—"}</td><td>${(s.courses||[]).length}</td><td>${(s.courses||[]).map(c=>`<span class="badge neutral">${c}: ${s.levels?.[c]||"Orta"}</span>`).join(" ")||"—"}</td><td><div class="toolbar-group"><button class="btn ghost small" onclick="editStudent(${s.id})">Düzenle</button><button class="btn danger small" onclick="deleteStudent(${s.id})">Sil</button></div></td></tr>`).join("");
@@ -150,6 +154,8 @@ function profile(){
  <h2>Son atamalar</h2><table><thead><tr><th>Tür</th><th>İçerik</th><th>Konu</th><th>Durum</th><th>Başarı</th></tr></thead><tbody>${as.slice(0,10).map(a=>`<tr><td>${a.kind}</td><td>${a.title}</td><td>${a.course} / ${a.topic}</td><td>${a.status}</td><td>${a.score!=null?`%${a.score}`:"—"}</td></tr>`).join("")||`<tr><td colspan="5">Atama yok.</td></tr>`}</tbody></table>
  <h2>Son sonuçlar</h2><table><thead><tr><th>Tarih</th><th>Tür</th><th>Ders / Konu</th><th>Başarı</th></tr></thead><tbody>${rs.slice(0,12).map(r=>`<tr><td>${r.date}</td><td>${r.kind}</td><td>${r.course} / ${r.topic}</td><td><span class="badge ${scoreClass(r.score)}">%${r.score}</span></td></tr>`).join("")||`<tr><td colspan="4">Sonuç yok.</td></tr>`}</tbody></table>`,"profile")
 }
+
+/* CELL:30-curriculum | layer:frontend | generated-from:v0.7.2 */
 function curriculum(){
  let cards="";for(const [course,units] of Object.entries(db.curriculum)){cards+=`<div class="card"><div class="section-head"><h2 style="margin:0">${course}</h2><span class="badge info">${Object.values(units).reduce((n,x)=>n+x.length,0)} konu</span></div>`;for(const [u,topics] of Object.entries(units)){cards+=`<div class="item"><div class="cell-title">${u}</div><div style="margin-top:8px">${topics.map(t=>`<span class="badge neutral">${t}</span>`).join(" ")}</div></div>`}cards+="</div>"}
  shell(`${pageHead("Ders ve Üniteler","Ders, ünite ve alt konu yapısını yönetin.",`<button class="btn primary" onclick="currModal()">+ Müfredat Ekle</button>`)}<div class="list">${cards||emptyState("Müfredat boş","Ders ve konu ekleyerek başlayın.")}</div>`,"curriculum")
@@ -157,12 +163,16 @@ function curriculum(){
 window.currModal=()=>modal(`<h2>Müfredat Ekle</h2><div class="formgrid"><div class="field"><label>Ders</label><input id="ccourse"></div><div class="field"><label>Ünite</label><input id="cunit"></div><div class="field"><label>Alt ünite / konu</label><input id="ctopic"></div></div><div class="modal-actions"><button class="btn primary" onclick="addCurr()">Kaydet</button></div>`)
 window.addCurr=()=>{let c=q("ccourse").value.trim(),u=q("cunit").value.trim(),t=q("ctopic").value.trim();if(!c||!u||!t)return alert("Tüm alanlar gerekli");db.curriculum[c]??={};db.curriculum[c][u]??=[];if(!db.curriculum[c][u].includes(t))db.curriculum[c][u].push(t);save();closeModal();curriculum()}
 function topicOptions(){let out="";for(const [c,units] of Object.entries(db.curriculum))for(const topics of Object.values(units))for(const t of topics)out+=`<option data-course="${c}" value="${c}|||${t}">${c} — ${t}</option>`;return out}
+
+/* CELL:40-resources | layer:frontend | generated-from:v0.7.2 */
 function resources(){
  const rows=db.resources.map(r=>`<tr><td><div class="cell-title">${r.title}</div><div class="cell-sub">${r.type||"PDF"}</div></td><td>${r.course}</td><td>${r.topic}</td><td><span class="badge neutral">${r.level}</span></td></tr>`).join("");
  shell(`${pageHead("Kaynak Havuzu","PDF ödev ve çalışma kaynaklarını ders, konu ve zorluk düzeyine göre yönetin.",`<button class="btn primary" onclick="resourceModal()">+ Kaynak Ekle</button>`)}${rows?tableWrap(`<table><thead><tr><th>Kaynak</th><th>Ders</th><th>Konu</th><th>Seviye</th></tr></thead><tbody>${rows}</tbody></table>`):emptyState("Kaynak bulunamadı","İlk PDF kaynağınızı ekleyin.")}`,"resources")
 }
 window.resourceModal=()=>modal(`<h2>Kaynak Ekle</h2><div class="formgrid"><div class="field"><label>Başlık</label><input id="rtitle"></div><div class="field"><label>Konu</label><select id="rtopic">${topicOptions()}</select></div><div class="field"><label>Zorluk</label><select id="rlevel"><option>Başlangıç</option><option>Kolay</option><option>Orta</option><option>Orta-Zor</option><option>Zor</option><option>İleri</option></select></div><div class="field"><label>Drive bağlantısı / File ID</label><input id="rurl"></div></div><div class="modal-actions"><button class="btn primary" onclick="addResource()">Kaydet</button></div>`)
 window.addResource=()=>{const [course,topic]=q("rtopic").value.split("|||");db.resources.push({id:Date.now(),type:"PDF",course,topic,level:q("rlevel").value,title:q("rtitle").value||topic+" Kaynak",url:q("rurl").value});save();closeModal();resources()}
+
+/* CELL:50-exams | layer:frontend | generated-from:v0.7.2 */
 function exams(){
  const rows=db.exams.map(e=>`<tr><td><div class="cell-title">${e.title}</div></td><td>${e.course}</td><td>${e.topic}</td><td>${e.url?`<a href="${e.url}" target="_blank">Sınavı aç</a>`:"—"}</td></tr>`).join("");
  shell(`${pageHead("Online Sınavlar","Online test ve sınav bağlantılarını konu bazında yönetin.",`<button class="btn primary" onclick="examModal()">+ Sınav Ekle</button>`)}${rows?tableWrap(`<table><thead><tr><th>Sınav</th><th>Ders</th><th>Konu</th><th>Bağlantı</th></tr></thead><tbody>${rows}</tbody></table>`):emptyState("Online sınav yok","İlk sınav bağlantısını ekleyin.")}`,"exams")
@@ -170,6 +180,7 @@ function exams(){
 window.examModal=()=>modal(`<h2>Online Sınav Ekle</h2><div class="formgrid"><div class="field"><label>Başlık</label><input id="etitle"></div><div class="field"><label>Konu</label><select id="etopic">${topicOptions()}</select></div><div class="field"><label>Link</label><input id="eurl"></div></div><div class="modal-actions"><button class="btn primary" onclick="addExam()">Kaydet</button></div>`)
 window.addExam=()=>{const [course,topic]=q("etopic").value.split("|||");db.exams.push({id:Date.now(),course,topic,title:q("etitle").value||topic+" Online Test",url:q("eurl").value});save();closeModal();exams()}
 
+/* CELL:60-assignments-results | layer:frontend | generated-from:v0.7.2 */
 function assignments(){
  const rows=db.assignments.slice().reverse().map(a=>`<tr><td><div class="cell-title">${studentName(a.studentId)}</div></td><td><span class="badge info">${a.kind}</span></td><td><div class="cell-title">${a.title}</div><div class="cell-sub">${a.course} · ${a.topic}</div></td><td><span class="badge ${a.status==="Tamamlandı"?"good":"mid"}">${a.status}</span></td><td>${a.status==="Tamamlandı"?`<span class="muted">Tamamlandı</span>`:a.status==="Öğretmen Kontrolü"?`<div class="row-actions"><button class="btn primary small" onclick="reviewHomeworkAnalysis(${a.id})">AI analizini kontrol et</button><button class="btn ghost small" onclick="analyzeAssignment(${a.id})">Yeniden tara</button></div>`:`<div class="row-actions"><button class="btn ghost small" onclick="completeAssignment(${a.id})">Manuel sonuç</button>${a.kind==="PDF Kaynak"?`<button class="btn primary small" onclick="analyzeAssignment(${a.id})">AI ile ödevi tara</button>`:""}</div>`}</td></tr>`).join("");
  shell(`${pageHead("Atamalar","Öğrencilere kaynak ve online sınav atayın, tamamlanma durumunu takip edin.",`<button class="btn primary" onclick="assignmentModal()">+ Yeni Atama</button>`)}${rows?tableWrap(`<table><thead><tr><th>Öğrenci</th><th>Tür</th><th>İçerik</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>${rows}</tbody></table>`):emptyState("Henüz atama yok","Yeni atama oluşturarak çalışma akışını başlatın.")}`,"assignments")
@@ -214,7 +225,7 @@ function results(){
 window.resultModal=()=>modal(`<h2>Sonuç Gir</h2><div class="formgrid"><div class="field"><label>Öğrenci</label><select id="xstudent">${db.students.map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}</select></div><div class="field"><label>Tür</label><select id="xkind"><option>Ödev</option><option>Online Sınav</option></select></div><div class="field"><label>Konu</label><select id="xtopic">${topicOptions()}</select></div><div class="field"><label>Başarı %</label><input id="xscore" type="number" min="0" max="100"></div></div><div class="modal-actions"><button class="btn primary" onclick="addResult()">Kaydet</button></div>`)
 window.addResult=()=>{const [course,topic]=q("xtopic").value.split("|||"),score=Math.max(0,Math.min(100,Number(q("xscore").value)));db.results.push({id:Date.now(),studentId:Number(q("xstudent").value),kind:q("xkind").value,course,topic,score,date:new Date().toISOString().slice(0,10)});save();closeModal();results()}
 
-
+/* CELL:70-planner | layer:frontend | generated-from:v0.7.2 */
 let selectedStudentId=null;
 const DAY_NAMES=["Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi","Pazar"];
 function buildPlanItems(s){
@@ -255,12 +266,15 @@ function program(){
  <div class="section"><div class="weekgrid">${DAY_NAMES.map(d=>`<div class="daycard"><h3>${d}</h3>${preview[d].map(x=>`<div class="task"><div class="task-title">${x.type} · ${x.course}</div><div class="task-sub">${x.topic}<br>${x.resource!=="—"?x.resource:x.exam}</div><div class="task-actions"><span class="badge ${x.type==="Tekrar"?"low":"mid"}">${x.reason}</span><button class="link-btn" onclick='findTopicVideo(${JSON.stringify(x.course)},${JSON.stringify(x.topic)})'>Video bul</button></div></div>`).join("")||`<div class="muted">Görev yok</div>`}</div>`).join("")}</div></div>`,"program")
 }
 
+/* CELL:80-api-client | layer:frontend | generated-from:v0.7.2 */
 async function apiJson(url,body=null){
  const opt=body===null?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)};
  const r=await fetch(url,opt),data=await r.json().catch(()=>({}));
  if(!r.ok||data.ok===false)throw new Error(data.error||`HTTP ${r.status}`);
  return data
 }
+
+/* CELL:90-integrations | layer:frontend | generated-from:v0.7.2 */
 function integrations(){
  shell(`${pageHead("AI ve API Entegrasyonları","OpenAI ile adaptif planlama/ödev analizi, YouTube ile konu anlatım videosu seçimi. API anahtarları tarayıcıya kaydedilmez.",`<button class="btn primary" onclick="testOpenAIConnection()">OpenAI Bağlantısını Test Et</button>`)}
  <div id="integrationStatus"><div class="card">Entegrasyon durumu okunuyor…</div></div>
@@ -310,6 +324,8 @@ window.testOpenAIConnection=async()=>{
  }catch(e){alert("OpenAI bağlantı testi başarısız: "+e.message)}
  finally{if(btn){btn.disabled=false;btn.textContent=old||"OpenAI Bağlantısını Test Et"}}
 }
+
+/* CELL:100-ai-planner | layer:frontend | generated-from:v0.7.2 */
 window.generateAiMasterPlan=async()=>{
  const s=db.students.find(x=>x.id===selectedStudentId);if(!s)return;
  const key=String(s.id);
@@ -332,6 +348,8 @@ window.generateAiMasterPlan=async()=>{
  }catch(e){alert("AI planlama hatası: "+e.message)}
  finally{if(btn){btn.disabled=false;btn.textContent=oldText||"AI ile Dönem Planı Üret"}}
 }
+
+/* CELL:110-youtube | layer:frontend | generated-from:v0.7.2 */
 window.findTopicVideo=async(course,topic)=>{
  try{
   const key=course+"|||"+topic;
@@ -341,6 +359,8 @@ window.findTopicVideo=async(course,topic)=>{
   q("videoResults").innerHTML=data.videos.length?`<div class="video-list">${data.videos.map((v,i)=>`<a class="video-row" href="${v.url}" target="_blank" rel="noopener"><div class="video-rank">${i+1}</div><div><div class="cell-title">${v.title}</div><div class="cell-sub">${v.channelTitle}</div></div></a>`).join("")}</div>`:emptyState("Video bulunamadı","Arama sorgusunu veya API ayarını kontrol edin.")
  }catch(e){if(q("videoResults"))q("videoResults").innerHTML=`<div class="notice error">${e.message}</div>`;else alert(e.message)}
 }
+
+/* CELL:120-ai-homework | layer:frontend | generated-from:v0.7.2 */
 window.analyzeAssignment=id=>{
  const a=db.assignments.find(x=>x.id===id);if(!a)return;
  modal(`<h2>AI ile Ödev Analizi</h2><p><b>${a.title}</b><br>${studentName(a.studentId)} · ${a.course} / ${a.topic}</p>
@@ -376,8 +396,12 @@ window.submitHomeworkAnalysis=async id=>{
  }catch(e){alert("Ödev analizi başarısız: "+e.message)}
  finally{if(btn){btn.disabled=false;btn.textContent="Dosyayı Tara"}}
 }
+
+/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.7.2 */
 function q(id){return document.getElementById(id)}
 function modal(html){const d=document.createElement("div");d.className="modalbg";d.id="modalbg";d.innerHTML=`<div class="modal">${html}</div>`;document.body.appendChild(d)}
 window.closeModal=()=>document.getElementById("modalbg")?.remove()
 window.resetDemo=()=>{db=structuredClone(seed);save();render()}
+
+/* CELL:bootstrap */
 dashboard();

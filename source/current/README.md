@@ -1,6 +1,9 @@
-# YILBAY Öğrenci Takip — v0.7.2
+# YILBAY Öğrenci Takip — v0.8.0
 
-- AI ödev analiz geçmişi
-- Düşük güvenli analizler için öğretmen kontrol/onay akışı
-- Öğretmen onayı sonrası başarı sonucu ve tekrar sinyali
-- Analiz güven/maliyet görünürlüğü
+Hücresel geliştirme mimarisine geçiş.
+
+- Geliştirme kaynağı: `cells/`
+- Hücre manifesti: `cells/cell-manifest.json`
+- Runtime `app.js` ve `server.js` otomatik bundle'dır; elle düzenlenmez.
+- Her yeni özellik ayrı hücre olarak eklenir.
+- CELL_PROTOCOL.md proje standardıdır.

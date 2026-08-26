@@ -1,0 +1,130 @@
+{
+  "version": "1.0",
+  "protocol": "CELL_PROTOCOL.md",
+  "runtimeVersion": "0.8.0",
+  "frontend": [
+    {
+      "id": "00-core-store-ui",
+      "path": "cells/frontend/00-core-store-ui.cell.js",
+      "order": 0
+    },
+    {
+      "id": "10-dashboard",
+      "path": "cells/frontend/10-dashboard.cell.js",
+      "order": 1
+    },
+    {
+      "id": "20-students-profile",
+      "path": "cells/frontend/20-students-profile.cell.js",
+      "order": 2
+    },
+    {
+      "id": "30-curriculum",
+      "path": "cells/frontend/30-curriculum.cell.js",
+      "order": 3
+    },
+    {
+      "id": "40-resources",
+      "path": "cells/frontend/40-resources.cell.js",
+      "order": 4
+    },
+    {
+      "id": "50-exams",
+      "path": "cells/frontend/50-exams.cell.js",
+      "order": 5
+    },
+    {
+      "id": "60-assignments-results",
+      "path": "cells/frontend/60-assignments-results.cell.js",
+      "order": 6
+    },
+    {
+      "id": "70-planner",
+      "path": "cells/frontend/70-planner.cell.js",
+      "order": 7
+    },
+    {
+      "id": "80-api-client",
+      "path": "cells/frontend/80-api-client.cell.js",
+      "order": 8
+    },
+    {
+      "id": "90-integrations",
+      "path": "cells/frontend/90-integrations.cell.js",
+      "order": 9
+    },
+    {
+      "id": "100-ai-planner",
+      "path": "cells/frontend/100-ai-planner.cell.js",
+      "order": 10
+    },
+    {
+      "id": "110-youtube",
+      "path": "cells/frontend/110-youtube.cell.js",
+      "order": 11
+    },
+    {
+      "id": "120-ai-homework",
+      "path": "cells/frontend/120-ai-homework.cell.js",
+      "order": 12
+    },
+    {
+      "id": "130-ui-runtime",
+      "path": "cells/frontend/130-ui-runtime.cell.js",
+      "order": 13
+    }
+  ],
+  "backend": [
+    {
+      "id": "00-runtime",
+      "path": "cells/backend/00-runtime.cell.js",
+      "order": 0
+    },
+    {
+      "id": "10-secrets-integrations",
+      "path": "cells/backend/10-secrets-integrations.cell.js",
+      "order": 1
+    },
+    {
+      "id": "20-cost-accounting",
+      "path": "cells/backend/20-cost-accounting.cell.js",
+      "order": 2
+    },
+    {
+      "id": "30-http-openai-core",
+      "path": "cells/backend/30-http-openai-core.cell.js",
+      "order": 3
+    },
+    {
+      "id": "40-academic-planner",
+      "path": "cells/backend/40-academic-planner.cell.js",
+      "order": 4
+    },
+    {
+      "id": "50-homework-vision",
+      "path": "cells/backend/50-homework-vision.cell.js",
+      "order": 5
+    },
+    {
+      "id": "60-youtube",
+      "path": "cells/backend/60-youtube.cell.js",
+      "order": 6
+    },
+    {
+      "id": "70-routes",
+      "path": "cells/backend/70-routes.cell.js",
+      "order": 7
+    }
+  ],
+  "rules": {
+    "runtimeBundlesAreGenerated": true,
+    "directBundleEditingForbidden": true
+  },
+  "designSystem": [
+    {
+      "id": "00-design-system",
+      "path": "cells/design-system/00-design-system.cell.css",
+      "order": 0
+    }
+  ]
+}

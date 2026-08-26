@@ -1,3 +1,4 @@
+/* CELL:00-runtime | layer:backend | generated-from:v0.7.2 */
 const http=require("http"),fs=require("fs"),path=require("path"),cp=require("child_process");
 const port=Number(process.env.PORT||43127), pub=path.join(__dirname,"public");
 const root=path.resolve(__dirname,"..");
@@ -6,6 +7,7 @@ const secretFile=path.join(runtime,"api_secrets.json");
 const usageFile=path.join(runtime,"ai_usage.jsonl");
 fs.mkdirSync(runtime,{recursive:true});
 
+/* CELL:10-secrets-integrations | layer:backend | generated-from:v0.7.2 */
 const OPENAI_CREDENTIAL_TARGET="YILBAY-OPENAI-API-HOME";
 const OPENAI_CREDENTIAL_USERNAME="YILBAY-DEVELOPMENT-HOME";
 function readStoredSecrets(){
@@ -44,6 +46,7 @@ function integrationStatus(){
   };
 }
 
+/* CELL:20-cost-accounting | layer:backend | generated-from:v0.7.2 */
 const OPENAI_PRICES={
   "gpt-5.6-luna":{input:0.20,cached:0.02,output:1.20},
   "gpt-5.6-terra":{input:2.00,cached:0.20,output:12.00},
@@ -97,6 +100,7 @@ function costSummary(){
   };
 }
 
+/* CELL:30-http-openai-core | layer:backend | generated-from:v0.7.2 */
 function json(res,status,obj){
   res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});
   res.end(JSON.stringify(obj));
@@ -153,6 +157,8 @@ async function handleAiPing(req,res){
   const cost=appendUsage("connection_test",ai.model,ai.data?.usage||{},{});
   return json(res,200,{ok:true,connected:true,model:ai.model,latencyMs:Date.now()-started,response:String(ai.text||"").trim().slice(0,80),usage:ai.data?.usage||null,cost});
 }
+
+/* CELL:40-academic-planner | layer:backend | generated-from:v0.7.2 */
 function flattenCurriculum(curriculum,courses){
   const rows=[];
   for(const course of courses||[]){
@@ -234,6 +240,8 @@ Kurallar:
   const cost=appendUsage("plan",ai.model,ai.data?.usage||{}, {studentId:student.id});
   return json(res,200,{ok:true,usedAi:true,plan:{mode:"ai",...parsed},usage:ai.data?.usage||null,cost});
 }
+
+/* CELL:50-homework-vision | layer:backend | generated-from:v0.7.2 */
 function normalizeHomeworkAnalysis(x={}){
   const clamp=(n,a,b)=>Math.max(a,Math.min(b,Number.isFinite(Number(n))?Number(n):a));
   const correct=Math.max(0,Math.round(Number(x.correct)||0));
@@ -279,6 +287,8 @@ Sadece JSON döndür:
   const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});
   return json(res,200,{ok:true,analysis:parsed,autoFinalize:parsed.autoFinalize,usage:ai.data?.usage||null,cost});
 }
+
+/* CELL:60-youtube | layer:backend | generated-from:v0.7.2 */
 async function handleYoutube(req,res){
   const body=await readJson(req,512*1024);
   const s=readSecrets();
@@ -300,11 +310,11 @@ async function handleYoutube(req,res){
   json(res,200,{ok:true,videos});
 }
 
-
+/* CELL:70-routes | layer:backend | generated-from:v0.7.2 */
 http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.7.2",integrations:integrationStatus()});
+    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.8.0",integrations:integrationStatus()});
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
     if(u.pathname==="/api/integrations/settings"&&req.method==="POST"){
@@ -336,6 +346,3 @@ http.createServer(async(req,res)=>{
     if(!res.headersSent) json(res,500,{ok:false,error:e.message||"Sunucu hatası"});
   }
 }).listen(port,"127.0.0.1",()=>console.log("READY 0.6.8"));
-
-
-

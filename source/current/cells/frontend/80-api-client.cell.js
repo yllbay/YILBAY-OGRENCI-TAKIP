@@ -1,0 +1,7 @@
+/* CELL:80-api-client | layer:frontend | generated-from:v0.7.2 */
+async function apiJson(url,body=null){
+ const opt=body===null?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)};
+ const r=await fetch(url,opt),data=await r.json().catch(()=>({}));
+ if(!r.ok||data.ok===false)throw new Error(data.error||`HTTP ${r.status}`);
+ return data
+}
