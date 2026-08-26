@@ -42,15 +42,24 @@ jobs:
       - name: Mandatory runtime smoke test
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           PORT=43127 node /tmp/yilbay070/app/server.js >/tmp/v070_server.log 2>/tmp/v070_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
+          OK=0
           for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:43127/health >/tmp/v070_health.json; then break; fi
+            CODE=$(curl -sS -o /tmp/v070_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
             sleep 0.5
           done
-          cat /tmp/v070_health.json
+          echo '--- health body ---'
+          cat /tmp/v070_health.json 2>/dev/null || true
+          echo
+          echo '--- server stdout ---'
+          cat /tmp/v070_server.log 2>/dev/null || true
+          echo '--- server stderr ---'
+          cat /tmp/v070_server.err 2>/dev/null || true
+          test "$OK" = "1"
           grep -q '"version":"0.7.0"' /tmp/v070_health.json
           curl -fsS http://127.0.0.1:43127/api/integrations/status >/tmp/v070_integrations.json
           kill $PID 2>/dev/null || true
