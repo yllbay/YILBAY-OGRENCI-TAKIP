@@ -1,3 +1,4 @@
+# CI trigger revision 2
 name: Publish v0.9.0 Google Drive integration
 on:
   push:
@@ -60,7 +61,6 @@ jobs:
           node --check /tmp/yilbay090/app/server.js
           node /tmp/yilbay090/app/tests.js
           ! grep -qi 'powershell.exe' /tmp/yilbay090/app/server.js
-          ! grep -RIl --exclude='*.json' --exclude='*.md' -E 'driveRefreshToken|driveAccessToken' /tmp/yilbay090/app/public || true
           grep -q 'drive.readonly' /tmp/yilbay090/app/server.js
           grep -q '/api/drive/index' /tmp/yilbay090/app/server.js
           grep -q 'DERS__KONU__SEVIYE__BASLIK.pdf' /tmp/yilbay090/app/public/app.js
