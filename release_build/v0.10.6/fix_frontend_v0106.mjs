@@ -12,3 +12,4 @@ s=s.replace('  let pdfReport=null;try{pdfReport=await createHomeworkPdfReport(a,
 fs.writeFileSync(p,s,'utf8');
 console.log('v0.10.6 frontend PDF state/action fixed');
 const lines=s.split(/\r?\n/);for(let i=394;i<=402&&i<=lines.length;i++)console.log('APPJS_LINE_'+i+': '+lines[i-1]);
+const srv=fs.readFileSync('/tmp/yilbay0106/app/server.js','utf8').split(/\r?\n/);for(let i=394;i<=404&&i<=srv.length;i++)console.log('SERVERJS_LINE_'+i+': '+srv[i-1]);
