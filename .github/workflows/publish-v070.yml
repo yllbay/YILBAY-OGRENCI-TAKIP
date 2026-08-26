@@ -26,7 +26,9 @@ jobs:
           test -f /tmp/yilbay070/app/server.js
       - name: Apply v0.7.0 patch
         shell: bash
-        run: python release_build/v0.7.0/patch_v070.py
+        run: |
+          python release_build/v0.7.0/patch_v070.py
+          python release_build/v0.7.0/cleanup_powershell.py
       - name: Static validation
         shell: bash
         run: |
