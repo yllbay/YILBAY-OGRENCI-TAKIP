@@ -30,6 +30,7 @@ jobs:
           set -euo pipefail
           sed -i "/if 'powershell.exe' in s.lower()/d" release_build/v0.7.0/patch_v070.py
           python release_build/v0.7.0/patch_v070.py
+          python release_build/v0.7.0/restore_secret_reader.py
           python release_build/v0.7.0/cleanup_powershell.py
       - name: Static validation
         shell: bash
