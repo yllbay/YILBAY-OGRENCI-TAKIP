@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.5/patch_cells_v0105b.mjs
+          node release_build/v0.10.5/patch_cells_v0105c.mjs
           grep -q 'function lunaHomeworkDirectInstruction' /tmp/yilbay0105/app/server.js
           grep -q 'function validateLunaQuestionAccounting' /tmp/yilbay0105/app/server.js
           grep -q 'function validateLunaDirectAnswerKey' /tmp/yilbay0105/app/server.js
