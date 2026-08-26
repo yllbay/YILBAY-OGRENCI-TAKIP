@@ -1,9 +1,11 @@
-function lunaHomeworkDirectInstruction(){return `LUNA DOĞRUDAN ÖDEV ANALİZ PROTOKOLÜ:
-Yüklenen öğrenci PDF/görselinin tamamını doğrudan analiz et. Programın yerel tahminlerine güvenme; belgeyi kendin incele. İlk sayfada durma, tüm sayfaları sırayla tara.
-Her basılı soru için soru numarasını, öğrencinin cevabını, doğru cevabı yalnız güvenilir cevap anahtarı varsa, correct|wrong|blank|uncertain durumunu ve el yazısı çözümünü değerlendir.
-El yazısında öğrencinin yaklaşımını, görülen çözüm adımlarını, ilk hata adımını, kavramsal/işlem/dikkat/yöntem/eksik çözüm hatasını, gereksiz ve eksik adımları, yöntem kalitesini, daha iyi yaklaşımı ve tekrar edilmesi gereken kazanımı çıkar.
-Doğru sonuca hatalı yöntemle gelindiyse bunu açıkça belirt. Okunamayan el yazısını tahmin etme.
-PDF içinde basılı bir cevap anahtarı varsa yerini ve bunun öğrenci işaretlerinden neden ayrı olduğunu answerKeyEvidence alanında belirt. Manuel cevap anahtarı verilmişse onu kullan. Güvenilir cevap anahtarı yoksa doğru/yanlış uydurma; ilgili soruları uncertain yap ve needsTeacherReview=true üret.
-Belgede birden fazla test varsa hepsini belge kapsamında analiz et; program dışarıdan soru sayısı dayatmayacak. Soru kimliği yalnız basılı/orijinal soru numarasıdır.
-Üst düzey öğrenci karnesini reasoningProfile içinde strengths, recurringErrors, conceptualGaps, proceduralGaps, attentionPatterns, recommendedActions ve summary alanlarıyla üret.
+function lunaHomeworkDirectInstruction(){return `LUNA MALİYET-OPTİMİZE ÖDEV ANALİZ PROTOKOLÜ:
+Yüklenen öğrenci PDF/görselinin tamamını doğrudan analiz et; ilk sayfada durma ve tüm fiziksel sayfaları sırayla tara.
+Önce her basılı soruyu yalnız correct|wrong|blank|uncertain olarak sınıflandır. Soru kimliği yalnız basılı/orijinal soru numarasıdır.
+DOĞRU sorular için çözüm açıklaması, yaklaşım, adım analizi, pedagojik yorum veya övgü üretme. Yalnız correctQuestionNumbers listesine soru numarasını yaz.
+BOŞ sorular için neden tahmini veya çözüm analizi üretme. Yalnız blankQuestionNumbers listesine soru numarasını yaz.
+UNCERTAIN/okunamayan sorular için tahmin yapma. Yalnız uncertainQuestionNumbers listesine soru numarasını yaz ve gerekiyorsa needsTeacherReview=true yap.
+YALNIZ WRONG sorular için items dizisinde ayrıntılı analiz üret: studentAnswer, correctAnswer, approach, stepsSummary, firstErrorStep, errorCategory, conceptualIssue, arithmeticIssue, attentionIssue, methodQuality, unnecessarySteps, missingSteps, betterApproach, learningObjective, solutionConfidence ve kısa note.
+El yazısında ilk yanlış adımı özellikle bul. Bu sürümün hedefi gerçek yanlışların nedenini anlamaktır.
+PDF içinde güvenilir basılı cevap anahtarı varsa yerini answerKeyEvidence ile belirt. Manuel cevap anahtarı verilmişse onu kullan. Güvenilir cevap anahtarı yoksa doğru/yanlış uydurma; ilgili soruları uncertain yap.
+reasoningProfile yalnız WRONG sorulardan türetilsin: recurringErrors, conceptualGaps, proceduralGaps, attentionPatterns, recommendedActions ve kısa summary. Gereksiz uzun metin üretme. strengths yalnız yanlış analizinden açıkça çıkarılabiliyorsa kısa olsun.
 `}

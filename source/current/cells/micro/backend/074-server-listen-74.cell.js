@@ -1,7 +1,7 @@
 http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.10.5",integrations:integrationStatus()});
+    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.10.6",integrations:integrationStatus()});
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
     if(u.pathname==="/api/drive/status"&&req.method==="GET"){const d=integrationStatus().drive;return json(res,200,{ok:true,...d})}
@@ -27,6 +27,8 @@ http.createServer(async(req,res)=>{
     if(u.pathname==="/api/ai/ping"&&req.method==="POST") return await handleAiPing(req,res);
     if(u.pathname==="/api/ai/plan"&&req.method==="POST") return await handleAiPlan(req,res);
     if(u.pathname==="/api/ai/analyze-homework"&&req.method==="POST") return await handleHomework(req,res);
+    if(u.pathname==="/api/reports/homework-pdf"&&req.method==="POST") return await handleHomeworkReportPdf(req,res);
+    if(u.pathname.startsWith("/api/reports/homework-pdf/")&&req.method==="GET") return handleHomeworkReportDownload(u,res);
     if(u.pathname==="/api/youtube/search"&&req.method==="POST") return await handleYoutube(req,res);
     let p=u.pathname==="/"?"/index.html":u.pathname;
     const f=path.normalize(path.join(pub,p));

@@ -1,0 +1,1 @@
+async function createHomeworkPdfReport(a,analysis,cost){return await apiJson('/api/reports/homework-pdf',{student:{name:studentName(a.studentId),grade:db.students.find(s=>s.id===a.studentId)?.grade||''},assignment:{title:a.title,course:a.course,topic:a.topic,date:new Date().toISOString().slice(0,10)},analysis,costTry:Number(cost?.try||0)})}

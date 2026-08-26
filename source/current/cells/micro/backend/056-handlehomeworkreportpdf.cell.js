@@ -1,0 +1,1 @@
+async function handleHomeworkReportPdf(req,res){const body=await readJson(req,1024*1024),safe=sanitizeHomeworkReportPayload(body),out=generateHomeworkReportPdf(safe);return json(res,200,{ok:true,...out})}

@@ -8,7 +8,9 @@ window.submitHomeworkAnalysis=async id=>{
   const fileData=studentFileSource==="local"?await fileToBase64(file):null,answerKey=q("answerKey").value.trim()||null,rawContext=assignmentResourceContext(a),resourceContext=rawContext?{resourceId:rawContext.resourceId,course:rawContext.course,unit:rawContext.unit,topic:rawContext.topic,level:rawContext.level,title:rawContext.title}:null;
   const data=await apiJson("/api/ai/analyze-homework",{studentFileSource,studentDriveFileId,fileData,mimeType:file?.type||"application/pdf",fileName:file?.name||"drive_odev.pdf",assignment:{id:a.id,studentId:a.studentId,course:a.course,topic:a.topic,title:a.title},answerKey,resourceContext});
   const an=data.analysis||{},score=Math.round(Number(an.scorePercent)||0),reviewRequired=!!an.needsTeacherReview||data.autoFinalize===false;
-  db.homeworkAnalyses.push({id:Date.now(),assignmentId:a.id,studentId:a.studentId,course:a.course,topic:a.topic,date:new Date().toISOString().slice(0,10),fileName:file?.name||"Drive ödevi",fileSize:file?.size||0,mimeType:file?.type||"application/pdf",studentFileSource,costTry:Number(data.cost?.try||0),...an});
+  let pdfReport=null;try{pdfReport=await createHomeworkPdfReport(a,an,data.cost)}catch(pdfError){console.warn("PDF_KARNE_ERROR",pdfError.message)}
+  window.lastHomeworkPdfUrl=pdfReport?.downloadUrl||null;
+  db.homeworkAnalyses.push({id:Date.now(),assignmentId:a.id,studentId:a.studentId,course:a.course,topic:a.topic,date:new Date().toISOString().slice(0,10),fileName:file?.name||"Drive ödevi",fileSize:file?.size||0,mimeType:file?.type||"application/pdf",studentFileSource,costTry:Number(data.cost?.try||0),pdfReportUrl:pdfReport?.downloadUrl||null,...an});
   a.completedAt=new Date().toISOString().slice(0,10);a.score=score;a.aiConfidence=Number(an.confidence||0);
   if(reviewRequired){
     a.status="Öğretmen Kontrolü";
@@ -23,15 +25,15 @@ window.submitHomeworkAnalysis=async id=>{
    <div class="section"><h3>Luna Analiz Mimarisi</h3><div class="cell-sub">${an.analysisArchitecture==="direct_luna_vision"?"PDF doğrudan Luna Vision tarafından analiz edildi":"—"}</div></div>
    <div class="section"><h3>Sayfa Kapsamı</h3><div class="cell-sub">Taranan öğrenci sayfaları: ${(an.analyzedStudentPages||[]).join(", ")||"—"} / beklenen ${an.expectedStudentPages||"?"}${an.missingStudentPages?.length?` · Eksik: ${an.missingStudentPages.join(", ")}`:""}</div></div>
    <div class="section"><h3>Cevap Anahtarı Kanıtı</h3><div class="cell-sub">${an.answerKeyEvidence||"—"}</div></div>
-   <div class="section"><h3>Çözüm Yaklaşımı ve Hatalar</h3>${(an.items||[]).map(x=>'<div class="card" style="margin:8px 0"><div class="cell-title">Soru '+(x.question||"?")+' · '+(x.status||"uncertain")+'</div><div class="cell-sub">Yaklaşım: '+(x.approach||"—")+'<br>İlk hata: '+(x.firstErrorStep||"—")+'<br>Hata sınıfı: '+(x.errorCategory||"—")+'<br>Daha iyi yaklaşım: '+(x.betterApproach||"—")+'<br>Kazanım: '+(x.learningObjective||"—")+'</div></div>').join("")||"—"}</div>
+   <div class="section"><h3>Yanlış Soruların Ayrıntılı Analizi</h3>${(an.items||[]).map(x=>'<div class="card" style="margin:8px 0"><div class="cell-title">Soru '+(x.question||"?")+' · '+(x.status||"uncertain")+'</div><div class="cell-sub">Yaklaşım: '+(x.approach||"—")+'<br>İlk hata: '+(x.firstErrorStep||"—")+'<br>Hata sınıfı: '+(x.errorCategory||"—")+'<br>Daha iyi yaklaşım: '+(x.betterApproach||"—")+'<br>Kazanım: '+(x.learningObjective||"—")+'</div></div>').join("")||"—"}</div>
    <div class="section"><h3>Pedagojik Karne</h3><div class="cell-sub"><b>Özet:</b> ${an.reasoningProfile?.summary||an.summary||"—"}<br><br><b>Güçlü yönler:</b> ${(an.reasoningProfile?.strengths||[]).join(", ")||"—"}<br><b>Tekrarlayan hatalar:</b> ${(an.reasoningProfile?.recurringErrors||[]).join(", ")||"—"}<br><b>Kavramsal eksikler:</b> ${(an.reasoningProfile?.conceptualGaps||[]).join(", ")||"—"}<br><b>İşlem/prosedür eksikleri:</b> ${(an.reasoningProfile?.proceduralGaps||[]).join(", ")||"—"}<br><b>Dikkat örüntüleri:</b> ${(an.reasoningProfile?.attentionPatterns||[]).join(", ")||"—"}<br><b>Önerilen çalışma:</b> ${(an.reasoningProfile?.recommendedActions||[]).join(", ")||"—"}</div></div>
    <div class="section"><h3>Zayıf Alanlar</h3>${(an.weaknesses||[]).map(x=>`<span class="course-chip">${x}</span>`).join("")||"—"}</div>
    <div class="section"><h3>Hata Türleri</h3>${(an.errorTypes||[]).map(x=>`<span class="course-chip">${typeof x==="string"?x:(x.type||x.label||JSON.stringify(x))}</span>`).join("")||"—"}</div>
-   <div class="modal-actions"><button class="btn primary" onclick="closeModal();assignments()">Tamam</button></div>`;
+   <div class="notice"><div><b>PDF Karne</b>Analiz tamamlandığında PDF karne yerel olarak hazırlanır; ek AI maliyeti yoktur.</div></div><div class="modal-actions"><button class="btn primary" onclick="openLastHomeworkPdf()">PDF Karnesini İndir</button><button class="btn ghost" onclick="closeModal();assignments()">Tamam</button></div>`;
  }catch(e){alert("Ödev analizi başarısız: "+e.message)}
  finally{if(btn){btn.disabled=false;btn.textContent="Dosyayı Tara"}}
 }
 
-/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.10.5 */
+/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.10.6 */
 
 /* CELL:130-ui-runtime | layer:frontend | generated-from:v0.7.2 */
