@@ -1,6 +1,6 @@
 {
   "protocol": "micro-cell-v2-ast",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "rule": "one-Program.body-node-per-cell",
   "frontend": [
     {
@@ -358,287 +358,287 @@
       "nodeType": "ExpressionStatement",
       "name": "assignmentModal",
       "start": 25209,
-      "end": 25882
+      "end": 25909
     },
     {
       "file": "cells/micro/frontend/052-refreshassignmentitems.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "refreshAssignmentItems",
-      "start": 25883,
-      "end": 26105
+      "start": 25910,
+      "end": 26132
     },
     {
       "file": "cells/micro/frontend/053-addassignment.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "addAssignment",
-      "start": 26106,
-      "end": 26557
+      "start": 26133,
+      "end": 26584
     },
     {
       "file": "cells/micro/frontend/054-reviewhomeworkanalysis.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "reviewHomeworkAnalysis",
-      "start": 26558,
-      "end": 27957
+      "start": 26585,
+      "end": 27984
     },
     {
       "file": "cells/micro/frontend/055-approvehomeworkanalysis.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "approveHomeworkAnalysis",
-      "start": 27958,
-      "end": 29188
+      "start": 27985,
+      "end": 29215
     },
     {
       "file": "cells/micro/frontend/056-completeassignment.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "completeAssignment",
-      "start": 29189,
-      "end": 29604
+      "start": 29216,
+      "end": 29631
     },
     {
       "file": "cells/micro/frontend/057-saveassignmentresult.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "saveAssignmentResult",
-      "start": 29605,
-      "end": 30343
+      "start": 29632,
+      "end": 30370
     },
     {
       "file": "cells/micro/frontend/058-results.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "results",
-      "start": 30344,
-      "end": 32077
+      "start": 30371,
+      "end": 32104
     },
     {
       "file": "cells/micro/frontend/059-resultmodal.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "resultModal",
-      "start": 32078,
-      "end": 32718
+      "start": 32105,
+      "end": 32745
     },
     {
       "file": "cells/micro/frontend/060-addresult.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "addResult",
-      "start": 32719,
-      "end": 33035
+      "start": 32746,
+      "end": 33062
     },
     {
       "file": "cells/micro/frontend/061-selectedstudentid.cell.js",
       "nodeType": "VariableDeclaration",
       "name": "selectedStudentId",
-      "start": 33164,
-      "end": 33191
+      "start": 33191,
+      "end": 33218
     },
     {
       "file": "cells/micro/frontend/062-day_names.cell.js",
       "nodeType": "VariableDeclaration",
       "name": "DAY_NAMES",
-      "start": 33194,
-      "end": 33280
+      "start": 33221,
+      "end": 33307
     },
     {
       "file": "cells/micro/frontend/063-buildplanitems.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "buildPlanItems",
-      "start": 33283,
-      "end": 34587
+      "start": 33310,
+      "end": 34614
     },
     {
       "file": "cells/micro/frontend/064-generateweeklyplan.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "generateWeeklyPlan",
-      "start": 34590,
-      "end": 34933
+      "start": 34617,
+      "end": 34960
     },
     {
       "file": "cells/micro/frontend/065-program.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "program",
-      "start": 34936,
-      "end": 37453
+      "start": 34963,
+      "end": 37480
     },
     {
       "file": "cells/micro/frontend/066-apijson.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "apiJson",
-      "start": 37588,
-      "end": 37897
+      "start": 37615,
+      "end": 37924
     },
     {
       "file": "cells/micro/frontend/067-integrations.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "integrations",
-      "start": 38036,
-      "end": 38775
+      "start": 38063,
+      "end": 38802
     },
     {
       "file": "cells/micro/frontend/068-loadintegrationstatus.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "loadIntegrationStatus",
-      "start": 38778,
-      "end": 41935
+      "start": 38805,
+      "end": 41962
     },
     {
       "file": "cells/micro/frontend/069-integrationsettingsmodal.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "integrationSettingsModal",
-      "start": 41938,
-      "end": 43642
+      "start": 41965,
+      "end": 43669
     },
     {
       "file": "cells/micro/frontend/070-saveintegrationsettings.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "saveIntegrationSettings",
-      "start": 43643,
-      "end": 44456
+      "start": 43670,
+      "end": 44483
     },
     {
       "file": "cells/micro/frontend/071-testopenaiconnection.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "testOpenAIConnection",
-      "start": 44457,
-      "end": 45083
+      "start": 44484,
+      "end": 45110
     },
     {
       "file": "cells/micro/frontend/072-generateaimasterplan.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "generateAiMasterPlan",
-      "start": 45220,
-      "end": 46868
+      "start": 45247,
+      "end": 46895
     },
     {
       "file": "cells/micro/frontend/073-findtopicvideo.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "findTopicVideo",
-      "start": 46999,
-      "end": 47992
+      "start": 47026,
+      "end": 48019
     },
     {
       "file": "cells/micro/frontend/074-analyzeassignment.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "analyzeAssignment",
-      "start": 48131,
-      "end": 49328
+      "start": 48158,
+      "end": 49355
     },
     {
       "file": "cells/micro/frontend/075-filetobase64.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "fileToBase64",
-      "start": 49329,
-      "end": 49514
+      "start": 49356,
+      "end": 49541
     },
     {
       "file": "cells/micro/frontend/076-assignmentresourcecontext.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "assignmentResourceContext",
-      "start": 49515,
-      "end": 49929
+      "start": 49542,
+      "end": 49956
     },
     {
       "file": "cells/micro/frontend/077-homeworkanswerkeysourcelabel.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "homeworkAnswerKeySourceLabel",
-      "start": 49930,
-      "end": 50290
+      "start": 49957,
+      "end": 50317
     },
     {
       "file": "cells/micro/frontend/078-submithomeworkanalysis.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "submitHomeworkAnalysis",
-      "start": 50291,
-      "end": 53962
+      "start": 50318,
+      "end": 53989
     },
     {
       "file": "cells/micro/frontend/079-q.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "q",
-      "start": 54099,
-      "end": 54149
+      "start": 54126,
+      "end": 54176
     },
     {
       "file": "cells/micro/frontend/080-modal.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "modal",
-      "start": 54150,
-      "end": 54322
+      "start": 54177,
+      "end": 54349
     },
     {
       "file": "cells/micro/frontend/081-closemodal.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "closeModal",
-      "start": 54323,
-      "end": 54389
+      "start": 54350,
+      "end": 54416
     },
     {
       "file": "cells/micro/frontend/082-resetdemo.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "resetDemo",
-      "start": 54390,
-      "end": 54453
+      "start": 54417,
+      "end": 54480
     },
     {
       "file": "cells/micro/frontend/083-loaddrivestatus.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "loadDriveStatus",
-      "start": 54499,
-      "end": 55798
+      "start": 54526,
+      "end": 55825
     },
     {
       "file": "cells/micro/frontend/084-connectgoogledrive.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "connectGoogleDrive",
-      "start": 55799,
-      "end": 56114
+      "start": 55826,
+      "end": 56141
     },
     {
       "file": "cells/micro/frontend/085-disconnectgoogledrive.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "disconnectGoogleDrive",
-      "start": 56115,
-      "end": 56336
+      "start": 56142,
+      "end": 56363
     },
     {
       "file": "cells/micro/frontend/086-upsertdriveresource.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "upsertDriveResource",
-      "start": 56337,
-      "end": 57122
+      "start": 56364,
+      "end": 57149
     },
     {
       "file": "cells/micro/frontend/087-indexgoogledrive.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "indexGoogleDrive",
-      "start": 57123,
-      "end": 57793
+      "start": 57150,
+      "end": 57820
     },
     {
       "file": "cells/micro/frontend/088-applyviewportprofile.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "applyViewportProfile",
-      "start": 57795,
-      "end": 58387
+      "start": 57822,
+      "end": 58414
     },
     {
       "file": "cells/micro/frontend/089-window-addeventlistener.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "window-addEventListener",
-      "start": 58388,
-      "end": 58457
+      "start": 58415,
+      "end": 58484
     },
     {
       "file": "cells/micro/frontend/090-frontend-statement-90.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "frontend-statement-90",
-      "start": 58458,
-      "end": 58480
+      "start": 58485,
+      "end": 58507
     },
     {
       "file": "cells/micro/frontend/091-frontend-statement-91.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "frontend-statement-91",
-      "start": 58481,
-      "end": 58493
+      "start": 58508,
+      "end": 58520
     }
   ],
   "backend": [

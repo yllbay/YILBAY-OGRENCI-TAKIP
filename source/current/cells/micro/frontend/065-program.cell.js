@@ -10,6 +10,6 @@ function program(){
  <div class="section"><div class="weekgrid">${DAY_NAMES.map(d=>`<div class="daycard"><h3>${d}</h3>${preview[d].map(x=>`<div class="task"><div class="task-title">${x.type} · ${x.course}</div><div class="task-sub">${x.topic}<br>${x.resource!=="—"?x.resource:x.exam}</div><div class="task-actions"><span class="badge ${x.type==="Tekrar"?"low":"mid"}">${x.reason}</span><button class="link-btn" onclick='findTopicVideo(${JSON.stringify(x.course)},${JSON.stringify(x.topic)})'>Video bul</button></div></div>`).join("")||`<div class="muted">Görev yok</div>`}</div>`).join("")}</div></div>`,"program")
 }
 
-/* CELL:80-api-client | layer:frontend | generated-from:v0.9.8 */
+/* CELL:80-api-client | layer:frontend | generated-from:v0.9.9 */
 
 /* CELL:80-api-client | layer:frontend | generated-from:v0.7.2 */
