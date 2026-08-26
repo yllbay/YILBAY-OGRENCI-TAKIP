@@ -1,0 +1,1 @@
+window.clearHomeworkAnalyses=async()=>{if(!db.homeworkAnalyses.length||!confirm('Tüm AI ödev analiz geçmişi ve yerel PDF karneleri silinsin mi? Akademik sonuçlar korunur.'))return;for(const x of db.homeworkAnalyses){if(x.pdfReportUrl){try{await fetch(x.pdfReportUrl,{method:'DELETE'})}catch{}}}db.homeworkAnalyses=[];save();results()}

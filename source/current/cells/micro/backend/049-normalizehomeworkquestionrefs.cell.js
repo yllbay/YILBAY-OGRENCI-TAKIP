@@ -1,0 +1,1 @@
+function normalizeHomeworkQuestionRefs(a=[]){const out=[],seen=new Set();for(const x of Array.isArray(a)?a:[]){const q=normalizeHomeworkQuestionRef(x);if(q&&!seen.has(q.questionId)){seen.add(q.questionId);out.push(q)}}return out}

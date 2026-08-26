@@ -1,11 +1,11 @@
 function lunaHomeworkDirectInstruction(){return `LUNA MALİYET-OPTİMİZE ÖDEV ANALİZ PROTOKOLÜ:
 Yüklenen öğrenci PDF/görselinin tamamını doğrudan analiz et; ilk sayfada durma ve tüm fiziksel sayfaları sırayla tara.
-Önce her basılı soruyu yalnız correct|wrong|blank|uncertain olarak sınıflandır. Soru kimliği yalnız basılı/orijinal soru numarasıdır.
-DOĞRU sorular için çözüm açıklaması, yaklaşım, adım analizi, pedagojik yorum veya övgü üretme. Yalnız correctQuestionNumbers listesine soru numarasını yaz.
-BOŞ sorular için neden tahmini veya çözüm analizi üretme. Yalnız blankQuestionNumbers listesine soru numarasını yaz.
-UNCERTAIN/okunamayan sorular için tahmin yapma. Yalnız uncertainQuestionNumbers listesine soru numarasını yaz ve gerekiyorsa needsTeacherReview=true yap.
-YALNIZ WRONG sorular için items dizisinde ayrıntılı analiz üret: studentAnswer, correctAnswer, approach, stepsSummary, firstErrorStep, errorCategory, conceptualIssue, arithmeticIssue, attentionIssue, methodQuality, unnecessarySteps, missingSteps, betterApproach, learningObjective, solutionConfidence ve kısa note.
-El yazısında ilk yanlış adımı özellikle bul. Bu sürümün hedefi gerçek yanlışların nedenini anlamaktır.
-PDF içinde güvenilir basılı cevap anahtarı varsa yerini answerKeyEvidence ile belirt. Manuel cevap anahtarı verilmişse onu kullan. Güvenilir cevap anahtarı yoksa doğru/yanlış uydurma; ilgili soruları uncertain yap.
-reasoningProfile yalnız WRONG sorulardan türetilsin: recurringErrors, conceptualGaps, proceduralGaps, attentionPatterns, recommendedActions ve kısa summary. Gereksiz uzun metin üretme. strengths yalnız yanlış analizinden açıkça çıkarılabiliyorsa kısa olsun.
+ÖNCE PDF'deki bölüm/test başlıklarını belirle. Soru numaraları yeni bölüm/testte 1'den yeniden başlayabilir. Aynı basılı soru numarası farklı bölüm/testlerde FARKLI sorudur.
+Soru kimliği kesinlikle yalnız basılı sayı değildir. Her fiziksel soru için sectionKey + printedNumber kullan. sectionKey aynı bölüm/test boyunca sabit, kısa ve benzersiz olsun. Örnek: sayi-problemleri:1, kesir-problemleri:1 ve bos-dolu-problemleri:1 üç ayrı sorudur. Başlık yoksa fallback olarak page<sayfa>:q<basılıNo> kullan. Kesme/görünme sırasını kimlik yapma.
+DOĞRU sorular için yalnız {sectionKey,section,page,printedNumber} kaydını correctQuestions listesine yaz; çözüm açıklaması üretme.
+BOŞ sorular için yalnız aynı kimlik alanlarını blankQuestions listesine yaz; neden tahmini yapma.
+UNCERTAIN sorular için yalnız aynı kimlik alanlarını uncertainQuestions listesine yaz; tahmin yapma.
+YALNIZ WRONG sorular için items içinde kimlik alanlarıyla birlikte studentAnswer, correctAnswer, approach, stepsSummary, firstErrorStep, errorCategory, conceptualIssue, arithmeticIssue, attentionIssue, methodQuality, unnecessarySteps, missingSteps, betterApproach, learningObjective, solutionConfidence ve kısa note üret.
+El yazısında ilk yanlış adımı özellikle bul. PDF içinde güvenilir basılı cevap anahtarı varsa yerini answerKeyEvidence ile belirt. Güvenilir anahtar yoksa doğru/yanlış uydurma; uncertain yap.
+reasoningProfile yalnız WRONG sorulardan türetilsin ve kısa olsun.
 `}

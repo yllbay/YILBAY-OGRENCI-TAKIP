@@ -1,0 +1,1 @@
+window.deleteHomeworkAnalysis=async id=>{const x=db.homeworkAnalyses.find(v=>Number(v.id)===Number(id));if(!x||!confirm('Bu AI analiz kaydı silinsin mi? Akademik sonuç kaydı korunur.'))return;if(x.pdfReportUrl){try{await fetch(x.pdfReportUrl,{method:'DELETE'})}catch{}}db.homeworkAnalyses=db.homeworkAnalyses.filter(v=>Number(v.id)!==Number(id));save();results()}

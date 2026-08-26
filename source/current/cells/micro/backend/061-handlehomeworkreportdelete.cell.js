@@ -1,0 +1,1 @@
+function handleHomeworkReportDelete(u,res){const m=String(u.pathname||'').match(/^\/api\/reports\/homework-pdf\/([0-9]+_[a-f0-9]{1,16})$/i);if(!m)return json(res,400,{ok:false,error:'Geçersiz PDF kimliği'});const f=path.join(runtime,'homework_reports',m[1]+'.pdf');fs.rmSync(f,{force:true});return json(res,200,{ok:true,deleted:true})}
