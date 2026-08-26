@@ -32,6 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sed -i "s/const as=s.indexOf/const as=a.indexOf/; s/ae=s.indexOf/ae=a.indexOf/" release_build/v0.11.1/patch_v0111.mjs
           node release_build/v0.11.1/patch_v0111.mjs
           grep -q 'renderHomeworkTargetPages' /tmp/yilbay0111/app/server.js
           grep -q 'high_res_page_png' /tmp/yilbay0111/app/server.js
