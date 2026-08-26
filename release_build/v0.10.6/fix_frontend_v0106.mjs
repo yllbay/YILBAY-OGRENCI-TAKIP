@@ -10,6 +10,9 @@ const helpers='window.lastHomeworkPdfUrl=null;\nwindow.openLastHomeworkPdf=()=>{
 s=s.replace(mark,helpers+mark);
 s=s.replace('  let pdfReport=null;try{pdfReport=await createHomeworkPdfReport(a,an,data.cost)}catch(pdfError){console.warn("PDF_KARNE_ERROR",pdfError.message)}','  let pdfReport=null;try{pdfReport=await createHomeworkPdfReport(a,an,data.cost)}catch(pdfError){console.warn("PDF_KARNE_ERROR",pdfError.message)}\n  window.lastHomeworkPdfUrl=pdfReport?.downloadUrl||null;');
 fs.writeFileSync(p,s,'utf8');
-console.log('v0.10.6 frontend PDF state/action fixed');
-const lines=s.split(/\r?\n/);for(let i=394;i<=402&&i<=lines.length;i++)console.log('APPJS_LINE_'+i+': '+lines[i-1]);
-const srv=fs.readFileSync('/tmp/yilbay0106/app/server.js','utf8').split(/\r?\n/);for(let i=394;i<=404&&i<=srv.length;i++)console.log('SERVERJS_LINE_'+i+': '+srv[i-1]);
+const serverPath='/tmp/yilbay0106/app/server.js';let server=fs.readFileSync(serverPath,'utf8');
+const malformed="html.replace(/\\/g,'/')";
+if(!server.includes(malformed))throw new Error('malformed backend PDF path conversion not found');
+server=server.replace(malformed,"html.split(path.sep).join('/')");
+fs.writeFileSync(serverPath,server,'utf8');
+console.log('v0.10.6 frontend PDF state/action and backend path fixed');
