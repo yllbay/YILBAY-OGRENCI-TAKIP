@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.10.6/**'
+      - 'release_build/v0.10.7/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,28 +20,24 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.10.5 source
+      - name: Copy verified v0.10.6 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay0106 /tmp/microtools
-          cp -a source/current /tmp/yilbay0106
-          test "$(cat /tmp/yilbay0106/app/VERSION | tr -d '\r\n')" = "0.10.5"
+          rm -rf /tmp/yilbay0107 /tmp/microtools
+          cp -a source/current /tmp/yilbay0107
+          test "$(cat /tmp/yilbay0107/app/VERSION | tr -d '\r\n')" = "0.10.6"
 
-      - name: Patch wrong-only Luna and PDF report
+      - name: Patch diagnostics
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.6/patch_cells_v0106b.mjs
-          node release_build/v0.10.6/fix_frontend_v0106.mjs
-          grep -q 'LUNA MALİYET-OPTİMİZE ÖDEV ANALİZ PROTOKOLÜ' /tmp/yilbay0106/app/server.js
-          grep -q 'function sanitizeHomeworkReportPayload' /tmp/yilbay0106/app/server.js
-          grep -q 'function buildHomeworkReportHtml' /tmp/yilbay0106/app/server.js
-          grep -q 'function generateHomeworkReportPdf' /tmp/yilbay0106/app/server.js
-          grep -q '/api/reports/homework-pdf' /tmp/yilbay0106/app/server.js
-          grep -q 'PDF Karnesini İndir' /tmp/yilbay0106/app/public/app.js
-          grep -q 'window.openLastHomeworkPdf' /tmp/yilbay0106/app/public/app.js
-          grep -q 'YILBAY_BROWSER_PATH' /tmp/yilbay0106/app/bootstrap/orchestrator_node.js
+          node release_build/v0.10.7/patch_v0107.mjs
+          grep -q 'correctQuestionNumbers:Array.isArray' /tmp/yilbay0107/app/server.js
+          grep -q 'wrongQuestionNumbers:Array.isArray' /tmp/yilbay0107/app/server.js
+          grep -q 'function writeHomeworkPdfDiagnostic' /tmp/yilbay0107/app/server.js
+          grep -q 'last_homework_pdf.json' /tmp/yilbay0107/app/bootstrap/orchestrator_node.js
+          grep -q '2.1.4-node' /tmp/yilbay0107/app/bootstrap/orchestrator_node.js
 
       - name: Install AST parser
         shell: bash
@@ -54,50 +50,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.10.6/microcellularize.mjs
+          node release_build/v0.10.7/microcellularize.mjs
 
-      - name: Strict compact analysis and PDF tests
+      - name: Strict diagnostics tests
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
-          import fs from 'fs';import path from 'path';import os from 'os';import vm from 'vm';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay0106',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.version!=='0.10.6'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
-          for(const e of [...m.frontend,...m.backend]){const s=fs.readFileSync(root+'/'+e.file,'utf8'),ast=parse(s,{ecmaVersion:'latest',sourceType:'script'});if(ast.body.length!==1||ast.body[0].type!==e.nodeType)throw new Error(e.file)}
+          import fs from 'fs';import vm from 'vm';import path from 'path';import os from 'os';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
+          const root='/tmp/yilbay0107',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
+          if(m.version!=='0.10.7'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
+          for(const e of [...m.frontend,...m.backend]){const src=fs.readFileSync(root+'/'+e.file,'utf8'),ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});if(ast.body.length!==1||ast.body[0].type!==e.nodeType)throw new Error(e.file)}
           const cell=n=>m.backend.find(x=>x.name===n);
-          for(const n of ['lunaHomeworkDirectInstruction','normalizeQuestionNumberList','sanitizeHomeworkReportPayload','reportHtmlEscape','buildHomeworkReportHtml','findHomeworkPdfBrowser','generateHomeworkReportPdf','handleHomeworkReportPdf','handleHomeworkReportDownload'])if(!cell(n))throw new Error('missing cell '+n);
-          const promptCtx={};vm.createContext(promptCtx);vm.runInContext(fs.readFileSync(root+'/'+cell('lunaHomeworkDirectInstruction').file,'utf8'),promptCtx);const txt=promptCtx.lunaHomeworkDirectInstruction();
-          for(const k of ['DOĞRU sorular için çözüm açıklaması','BOŞ sorular için neden tahmini','YALNIZ WRONG sorular','reasoningProfile yalnız WRONG'])if(!txt.includes(k))throw new Error('compact prompt '+k);
-          const handle=fs.readFileSync(root+'/'+cell('handleHomework').file,'utf8');if(!handle.includes('reasoning:"low"')||handle.includes('reasoning:"medium"'))throw new Error('homework reasoning is not low');if(!handle.includes('direct_luna_wrong_only'))throw new Error('architecture marker');
-          const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'yilbaypdf-')),fakeBrowser=path.join(tmp,'browser.exe');fs.writeFileSync(fakeBrowser,'x');
-          const pdfCells=['reportText','reportNums','sanitizeHomeworkReportPayload','reportHtmlEscape','buildHomeworkReportHtml','findHomeworkPdfBrowser','generateHomeworkReportPdf'];
-          const fakeProcess={env:{YILBAY_BROWSER_PATH:fakeBrowser}};
-          const fakeCp={spawnSync:(exe,args)=>{const p=args.find(x=>String(x).startsWith('--print-to-pdf='))?.slice('--print-to-pdf='.length);if(p)fs.writeFileSync(p,'%PDF-1.4\n'+('0'.repeat(1500)));return {status:0,stdout:'',stderr:''}}};
-          const pctx={fs,path,runtime:tmp,process:fakeProcess,cp:fakeCp,Math,Date,encodeURI};vm.createContext(pctx);for(const n of pdfCells)vm.runInContext(fs.readFileSync(root+'/'+cell(n).file,'utf8'),pctx);
-          const safe=pctx.sanitizeHomeworkReportPayload({fileData:'SECRETBASE64',student:{name:'Ali <Test>'},assignment:{title:'Ödev',course:'Matematik',topic:'Problemler'},analysis:{totalQuestions:10,correct:7,wrong:2,blank:1,scorePercent:70,correctQuestionNumbers:[1,2,3,4,5,6,7],blankQuestionNumbers:[10],items:[{question:8,status:'wrong',studentAnswer:'B',correctAnswer:'C',errorCategory:'conceptual',firstErrorStep:'oran',learningObjective:'oran-orantı',approach:'denklem',betterApproach:'oran kur',stepsSummary:['a','b']},{question:9,status:'correct',note:'BU DETAY RAPORA GİRMEMELİ'}],reasoningProfile:{recurringErrors:['oran'],summary:'Kısa özet'}},costTry:.2});
-          const serialized=JSON.stringify(safe);if(serialized.includes('SECRETBASE64')||serialized.includes('BU DETAY'))throw new Error('report sanitizer leak');if(safe.analysis.items.length!==1||safe.analysis.items[0].question!==8)throw new Error('wrong-only sanitizer');
-          const html=pctx.buildHomeworkReportHtml(safe);for(const k of ['Ödev Analiz Karnesi','Yanlış Sorular – Özet Tablo','Pedagojik Karne','Ali &lt;Test&gt;'])if(!html.includes(k))throw new Error('report html '+k);
-          const pdf=pctx.generateHomeworkReportPdf(safe);if(!pdf.downloadUrl.startsWith('/api/reports/homework-pdf/')||pdf.size<1000)throw new Error('pdf generation contract');
-          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),be=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||be!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
-          if(!f.includes('PDF Karnesini İndir')||!f.includes('Yanlış Soruların Ayrıntılı Analizi')||!f.includes('openLastHomeworkPdf'))throw new Error('frontend report contract');
-          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('2.1.3-node')||!boot.includes('YILBAY_BROWSER_PATH:browser')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('bootstrap/browser regression');
-          console.log('WRONG-ONLY + PDF REPORT OK',m.counts,pdf.size);
+          for(const n of ['writeHomeworkDiagnostic','writeHomeworkPdfDiagnostic','handleHomeworkReportPdf'])if(!cell(n))throw new Error('missing '+n);
+          const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'yilbaydiag-'));const ctx={fs,path,runtime:tmp,Date,JSON,Number,String,Array};vm.createContext(ctx);
+          vm.runInContext(fs.readFileSync(root+'/'+cell('writeHomeworkDiagnostic').file,'utf8'),ctx);
+          const d=ctx.writeHomeworkDiagnostic({correctQuestionNumbers:[1,2,3],blankQuestionNumbers:[5],uncertainQuestionNumbers:[7],items:[{question:4,status:'wrong',note:'PRIVATE'}],analysisArchitecture:'direct_luna_wrong_only'}, {try:.25},{id:9});
+          if(JSON.stringify(d).includes('PRIVATE'))throw new Error('diagnostic content leak');if(d.correctQuestionNumbers.join(',')!=='1,2,3'||d.wrongQuestionNumbers.join(',')!=='4'||d.blankQuestionNumbers[0]!==5||d.uncertainQuestionNumbers[0]!==7)throw new Error('question lists');
+          vm.runInContext(fs.readFileSync(root+'/'+cell('writeHomeworkPdfDiagnostic').file,'utf8'),ctx);const p=ctx.writeHomeworkPdfDiagnostic({generated:true,reportId:'123_abcd',sizeBytes:4567,error:'SECRET'.repeat(200)});if(!p.generated||p.sizeBytes!==4567||p.error.length>300||p.secretsCollected!==false)throw new Error('pdf diagnostic');
+          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')||b!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
+          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('2.1.4-node')||!boot.includes('homework_pdf.json')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('bootstrap regression');
+          console.log('V0107 DIAGNOSTICS OK',m.counts);
           NODE
-          node --check /tmp/yilbay0106/app/public/app.js
-          node --check /tmp/yilbay0106/app/server.js
-          node --check /tmp/yilbay0106/app/bootstrap/orchestrator_node.js
-          node /tmp/yilbay0106/app/tests.js
+          node --check /tmp/yilbay0107/app/server.js
+          node --check /tmp/yilbay0107/app/public/app.js
+          node --check /tmp/yilbay0107/app/bootstrap/orchestrator_node.js
+          node /tmp/yilbay0107/app/tests.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay0106/app/server.js >/tmp/v0106_server.log 2>/tmp/v0106_server.err &
+          PORT=43127 node /tmp/yilbay0107/app/server.js >/tmp/v0107_server.log 2>/tmp/v0107_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0106_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
-          grep -q '"version":"0.10.6"' /tmp/v0106_health.json
+          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0107_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
+          grep -q '"version":"0.10.7"' /tmp/v0107_health.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -106,14 +94,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.10.6.zip
-          (cd /tmp/yilbay0106 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.6.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.10.6.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.10.7.zip
+          (cd /tmp/yilbay0107 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.10.7.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.10.7.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
-          {"version":"0.10.6","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.6.zip","sha256":"$SHA"}
+          {"version":"0.10.7","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.10.7.zip","sha256":"$SHA"}
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay0106 source/current
+          cp -a /tmp/yilbay0107 source/current
 
       - name: Commit verified release
         shell: bash
@@ -121,6 +109,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.10.6.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.10.6 wrong-only analysis and PDF report [skip ci]'
+          git add release/YILBAY_APP_v0.10.7.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.10.7 diagnostics [skip ci]'
           git push origin main
