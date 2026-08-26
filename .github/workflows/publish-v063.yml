@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_patches/v0.6.3.patch'
+      - 'release_patches/build_v063.py'
       - '.github/workflows/publish-v063.yml'
 
 permissions:
@@ -28,20 +28,19 @@ jobs:
           mkdir -p /tmp/yilbay063/src
           unzip -q release/YILBAY_APP_v0.6.2.zip -d /tmp/yilbay063/src
 
-      - name: Apply v0.6.3 patch
+      - name: Apply deterministic v0.6.3 patch
         shell: bash
         run: |
           set -euo pipefail
-          cd /tmp/yilbay063/src
-          patch -p1 < "$GITHUB_WORKSPACE/release_patches/v0.6.3.patch"
+          python release_patches/build_v063.py
 
       - name: Validate patched application
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'CredEnumerateW' /tmp/yilbay063/src/app/server.js
-          grep -q 'LegacyGeneric' "$GITHUB_WORKSPACE/release_patches/v0.6.3.patch" || true
           grep -q 'version:"0.6.3"' /tmp/yilbay063/src/app/server.js
+          grep -q 'yilbay_mvp_063' /tmp/yilbay063/src/app/public/app.js
           node --check /tmp/yilbay063/src/app/server.js
           node --check /tmp/yilbay063/src/app/public/app.js
           node /tmp/yilbay063/src/app/tests.js
