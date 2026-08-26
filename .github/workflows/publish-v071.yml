@@ -1,0 +1,94 @@
+name: Publish v0.7.1 homework vision hardening
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release_build/v0.7.1/**'
+      - '.github/workflows/publish-v071.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Copy verified v0.7.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/yilbay071
+          cp -a source/current /tmp/yilbay071
+          test -f /tmp/yilbay071/app/server.js
+          grep -q '0.7.0' /tmp/yilbay071/VERSION
+
+      - name: Apply v0.7.1 patch
+        run: python release_build/v0.7.1/patch_v071.py
+
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check /tmp/yilbay071/app/server.js
+          node --check /tmp/yilbay071/app/public/app.js
+          node /tmp/yilbay071/app/tests.js
+          ! grep -qi 'powershell.exe' /tmp/yilbay071/app/server.js
+          grep -q 'homeworkAnalyses' /tmp/yilbay071/app/public/app.js
+          grep -q 'repeatSignals' /tmp/yilbay071/app/public/app.js
+          grep -q 'needsTeacherReview' /tmp/yilbay071/app/server.js
+
+      - name: Runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=43127 node /tmp/yilbay071/app/server.js >/tmp/v071_server.log 2>/tmp/v071_server.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          OK=0
+          for i in $(seq 1 20); do
+            CODE=$(curl -sS -o /tmp/v071_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
+            sleep 0.5
+          done
+          cat /tmp/v071_health.json
+          test "$OK" = "1"
+          grep -q '"version":"0.7.1"' /tmp/v071_health.json
+          curl -fsS http://127.0.0.1:43127/api/integrations/status >/tmp/v071_integrations.json
+          CODE=$(curl -sS -o /tmp/v071_hw.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:43127/api/ai/analyze-homework || true)
+          test "$CODE" = "400"
+          grep -q 'Ödev dosyası gerekli' /tmp/v071_hw.json
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+
+      - name: Build verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.7.1.zip
+          (cd /tmp/yilbay071 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.7.1.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.7.1.zip | awk '{print $1}')
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.7.1",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.7.1.zip",
+            "sha256": "$SHA"
+          }
+          JSON
+          rm -rf source/current
+          cp -a /tmp/yilbay071 source/current
+
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.7.1.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.7.1 homework vision hardening [skip ci]'
+          git push origin main
