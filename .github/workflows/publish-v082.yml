@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.11.1/**'
+      - 'release_build/v0.11.2/**'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,26 +20,26 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.11.0 source
+      - name: Copy verified v0.11.1 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay0111 /tmp/microtools
-          cp -a source/current /tmp/yilbay0111
-          test "$(cat /tmp/yilbay0111/app/VERSION | tr -d '\r\n')" = "0.11.0"
+          rm -rf /tmp/yilbay0112 /tmp/microtools
+          cp -a source/current /tmp/yilbay0112
+          test "$(cat /tmp/yilbay0112/app/VERSION | tr -d '\r\n')" = "0.11.1"
+          npm install --prefix /tmp/yilbay0112/app --no-audit --no-fund --no-package-lock --no-save pngjs@7.0.0
 
-      - name: Patch high resolution math verification
+      - name: Patch question crop verification
         shell: bash
         run: |
           set -euo pipefail
-          sed -i "s/const as=s.indexOf/const as=a.indexOf/; s/ae=s.indexOf/ae=a.indexOf/" release_build/v0.11.1/patch_v0111.mjs
-          node release_build/v0.11.1/patch_v0111.mjs
-          grep -q 'renderHomeworkTargetPages' /tmp/yilbay0111/app/server.js
-          grep -q 'high_res_page_png' /tmp/yilbay0111/app/server.js
-          grep -q "type:'input_image'" /tmp/yilbay0111/app/server.js
-          grep -q 'Atama Listesini Temizle' /tmp/yilbay0111/app/public/app.js
-          grep -q 'window.deleteAssignment' /tmp/yilbay0111/app/public/app.js
-          grep -q 'window.clearAssignments' /tmp/yilbay0111/app/public/app.js
+          node release_build/v0.11.2/patch_v0112.mjs
+          grep -q 'cropHomeworkTargetImages' /tmp/yilbay0112/app/server.js
+          grep -q 'high_res_question_crop_png' /tmp/yilbay0112/app/server.js
+          grep -q 'bboxMap' /tmp/yilbay0112/app/server.js
+          grep -q 'hasStudentWork' /tmp/yilbay0112/app/server.js
+          grep -q 'blankQuestions' /tmp/yilbay0112/app/server.js
+          test -f /tmp/yilbay0112/app/node_modules/pngjs/lib/png.js
 
       - name: Install AST parser
         shell: bash
@@ -52,42 +52,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.11.1/microcellularize.mjs
+          node release_build/v0.11.2/microcellularize.mjs
 
-      - name: Strict v0.11.1 tests
+      - name: Strict v0.11.2 tests
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
-          import fs from 'fs';import vm from 'vm';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay0111',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.version!=='0.11.1'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
+          import fs from 'fs';import vm from 'vm';import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';import {createRequire} from 'module';
+          const require=createRequire('file:///tmp/yilbay0112/app/server.js'),root='/tmp/yilbay0112',m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
+          if(m.version!=='0.11.2'||m.protocol!=='micro-cell-v2-ast')throw new Error('manifest');
           for(const e of [...m.frontend,...m.backend]){const src=fs.readFileSync(root+'/'+e.file,'utf8'),ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});if(ast.body.length!==1||ast.body[0].type!==e.nodeType)throw new Error(e.file)}
-          const cell=n=>m.backend.find(x=>x.name===n);for(const n of ['normalizeHomeworkQuestionRef','normalizeHomeworkQuestionRefs','finalizeHomeworkQuestionSets','homeworkMathVerificationTargets','applyHomeworkMathVerification','renderHomeworkTargetPages','writeHomeworkDiagnostic'])if(!cell(n))throw new Error('missing '+n);
-          const ctx={Set,Map,String,Number,Array,Math};vm.createContext(ctx);for(const n of ['normalizeHomeworkQuestionRef','normalizeHomeworkQuestionRefs','finalizeHomeworkQuestionSets','homeworkMathVerificationTargets','applyHomeworkMathVerification'])vm.runInContext(fs.readFileSync(root+'/'+cell(n).file,'utf8'),ctx);
+          const cell=n=>m.backend.find(x=>x.name===n);for(const n of ['normalizeHomeworkQuestionRef','normalizeHomeworkQuestionRefs','finalizeHomeworkQuestionSets','homeworkMathVerificationTargets','normalizeHomeworkBbox','cropHomeworkTargetImages','applyHomeworkMathVerification','writeHomeworkDiagnostic'])if(!cell(n))throw new Error('missing '+n);
+          const {PNG}=require('pngjs'),ctx={Set,Map,String,Number,Array,Math,Buffer,PNG};vm.createContext(ctx);for(const n of ['normalizeHomeworkQuestionRef','normalizeHomeworkQuestionRefs','finalizeHomeworkQuestionSets','homeworkMathVerificationTargets','normalizeHomeworkBbox','cropHomeworkTargetImages','applyHomeworkMathVerification'])vm.runInContext(fs.readFileSync(root+'/'+cell(n).file,'utf8'),ctx);
           const refs=[];for(let i=1;i<=9;i++)refs.push({sectionKey:'sayi',section:'Sayı Problemleri',page:i<=5?1:2,printedNumber:i});for(let i=1;i<=11;i++)refs.push({sectionKey:'kesir',section:'Kesir Problemleri',page:i<=6?3:4,printedNumber:i});for(let i=1;i<=13;i++)refs.push({sectionKey:'bos-dolu',section:'Boş-Dolu Problemleri',page:i<=6?5:i<=9?6:7,printedNumber:i});
-          const wrong=refs.find(x=>x.sectionKey==='kesir'&&x.printedNumber===10),correct=refs.filter(x=>x!==wrong);let q=ctx.finalizeHomeworkQuestionSets({correctQuestions:correct,blankQuestions:[],uncertainQuestions:[],items:[{...wrong,status:'wrong'}],autoFinalize:true});if(q.totalQuestions!==33||q.wrong!==1)throw new Error('33 first pass');q.pdfCoverageVerified=true;q.answerKeyFound=true;q.answerKeyConfidence=.99;q=ctx.applyHomeworkMathVerification(q,[{...wrong,finalStatus:'wrong',symbolConfidence:.96,transcriptionLines:['2x=12','x=5']}]);if(q.totalQuestions!==33||q.wrong!==1||q.uncertain!==0||!q.mathVerificationComplete||q.needsTeacherReview)throw new Error('verified merge');
-          q=ctx.finalizeHomeworkQuestionSets({correctQuestions:correct,blankQuestions:[],uncertainQuestions:[],items:[{...wrong,status:'wrong'}]});q.pdfCoverageVerified=true;q.answerKeyFound=true;q.answerKeyConfidence=.99;q=ctx.applyHomeworkMathVerification(q,[{...wrong,finalStatus:'wrong',symbolConfidence:.60,transcriptionLines:['[BELİRSİZ]']}]);if(q.wrong!==0||q.uncertain!==1||q.mathVerificationComplete||!q.needsTeacherReview)throw new Error('low symbol guard');
-          const front=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join(''),back=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');if(front!==fs.readFileSync(root+'/app/public/app.js','utf8')||back!==fs.readFileSync(root+'/app/server.js','utf8'))throw new Error('bundle mismatch');
-          const p=back.indexOf('if(targets.length)'),qend=back.indexOf('const totalMs',p),second=back.slice(p,qend);if(!second.includes("type:'input_image'")||second.includes("type:'input_file'"))throw new Error('second pass must be image-only');
-          for(const token of ['--force-device-scale-factor=2','--screenshot=','--window-size=1700,2200','mathVerificationRenderedPages'])if(!back.includes(token))throw new Error('render '+token);
-          for(const token of ['Atama Listesini Temizle','window.deleteAssignment','window.clearAssignments','Taranmış PDFler'])if(!front.includes(token))throw new Error('assignment cleanup '+token);
-          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('YILBAY_BROWSER_PATH')||!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('launcher regression');
-          console.log('V0111 HIGH RES MATH OK',m.counts);
+          const q4=refs.find(x=>x.sectionKey==='sayi'&&x.printedNumber===4),b5=refs.find(x=>x.sectionKey==='kesir'&&x.printedNumber===5),correct=refs.filter(x=>x!==q4&&x!==b5);let q=ctx.finalizeHomeworkQuestionSets({correctQuestions:correct,blankQuestions:[{...b5,bbox:[.52,.05,.96,.38]}],uncertainQuestions:[],items:[{...q4,status:'wrong',bbox:[.52,.05,.96,.48]}],autoFinalize:true});if(q.totalQuestions!==33||q.wrong!==1||q.blank!==1)throw new Error('33 first pass');
+          const targets=ctx.homeworkMathVerificationTargets(q);if(targets.length!==2)throw new Error('blank must be verified too');
+          q.pdfCoverageVerified=true;q.answerKeyFound=true;q.answerKeyConfidence=.99;q=ctx.applyHomeworkMathVerification(q,[{...q4,finalStatus:'wrong',symbolConfidence:.97,hasStudentWork:true,transcriptionLines:['8(6x-4x)=12x+8','16x=12x+8','x=2']},{...b5,finalStatus:'blank',symbolConfidence:.98,hasStudentWork:false,transcriptionLines:[]}]);if(q.totalQuestions!==33||q.wrong!==1||q.blank!==1||q.uncertain!==0||!q.mathVerificationComplete)throw new Error('verified merge');
+          const src=new PNG({width:100,height:100});src.data.fill(255);const raw=PNG.sync.write(src),crop=ctx.cropHomeworkTargetImages({images:[{page:1,base64:raw.toString('base64')}]},[{...q4,questionId:'sayi:4',bbox:[.5,.1,.9,.6]}]);if(crop.crops.length!==1||crop.crops[0].width>=100||crop.crops[0].height>=100)throw new Error('real crop');
+          const back=fs.readFileSync(root+'/app/server.js','utf8'),front=fs.readFileSync(root+'/app/public/app.js','utf8');for(const t of ['bbox:[x0,y0,x1,y1]','high_res_question_crop_png','hasStudentWork','homework_math_verify_crop'])if(!back.includes(t))throw new Error('missing '+t);const p=back.indexOf('if(targets.length)'),e=back.indexOf('const totalMs',p),second=back.slice(p,e);if(!second.includes("type:'input_image'")||second.includes("type:'input_file'"))throw new Error('second pass image only');for(const t of ['Atama Listesini Temizle','window.deleteAssignment','window.clearAssignments'])if(!front.includes(t))throw new Error('cleanup regression');
+          console.log('V0112 QUESTION CROP OK',m.counts);
           NODE
-          node --check /tmp/yilbay0111/app/server.js
-          node --check /tmp/yilbay0111/app/public/app.js
-          node /tmp/yilbay0111/app/tests.js
+          node --check /tmp/yilbay0112/app/server.js
+          node --check /tmp/yilbay0112/app/public/app.js
+          node /tmp/yilbay0112/app/tests.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay0111/app/server.js >/tmp/v0111_server.log 2>/tmp/v0111_server.err &
+          PORT=43127 node /tmp/yilbay0112/app/server.js >/tmp/v0112_server.log 2>/tmp/v0112_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0111_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
-          grep -q '"version":"0.11.1"' /tmp/v0111_health.json
+          for i in $(seq 1 30); do CODE=$(curl -sS -o /tmp/v0112_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true); [ "$CODE" = "200" ] && break; sleep 0.5; done
+          grep -q '"version":"0.11.2"' /tmp/v0112_health.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -96,14 +94,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.11.1.zip
-          (cd /tmp/yilbay0111 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.11.1.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.11.1.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.11.2.zip
+          (cd /tmp/yilbay0112 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.11.2.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.11.2.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
-          {"version":"0.11.1","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.11.1.zip","sha256":"$SHA"}
+          {"version":"0.11.2","zip_url":"https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.11.2.zip","sha256":"$SHA"}
           JSON
+          rm -rf /tmp/yilbay0112/app/node_modules /tmp/yilbay0112/app/package.json /tmp/yilbay0112/app/package-lock.json
           rm -rf source/current
-          cp -a /tmp/yilbay0111 source/current
+          cp -a /tmp/yilbay0112 source/current
 
       - name: Commit verified release
         shell: bash
@@ -111,6 +110,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.11.1.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.11.1 high resolution math verification [skip ci]'
+          git add release/YILBAY_APP_v0.11.2.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.11.2 question crop math verification [skip ci]'
           git push origin main
