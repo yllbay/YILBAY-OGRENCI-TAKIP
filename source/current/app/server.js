@@ -1,23 +1,45 @@
 /* CELL:00-runtime | layer:backend | generated-from:v0.7.2 */
 const http=require("http"),fs=require("fs"),path=require("path"),cp=require("child_process");
+
+
 const port=Number(process.env.PORT||43127), pub=path.join(__dirname,"public");
+
+
 const root=path.resolve(__dirname,"..");
+
+
 const runtime=path.join(root,"runtime");
+
+
 const secretFile=path.join(runtime,"api_secrets.json");
+
+
 const usageFile=path.join(runtime,"ai_usage.jsonl");
+
+
 fs.mkdirSync(runtime,{recursive:true});
+
+
 
 /* CELL:10-secrets-integrations | layer:backend | generated-from:v0.7.2 */
 
 /* CELL:10-secrets-integrations | layer:backend | generated-from:v0.7.2 */
 const OPENAI_CREDENTIAL_TARGET="YILBAY-OPENAI-API-HOME";
+
+
 const OPENAI_CREDENTIAL_USERNAME="YILBAY-DEVELOPMENT-HOME";
+
+
 function readStoredSecrets(){
   try{return JSON.parse(fs.readFileSync(secretFile,"utf8"))}catch{return {}}
 }
+
+
 function readWindowsCredential(){
   return {value:null,diagnostic:{method:"disabled-environment-mode",found:false,userMatch:false,targetMatched:false}};
 }
+
+
 function readSecrets(){
   const stored=readStoredSecrets();
   const envKey=String(process.env.OPENAI_API_KEY||"").trim();
@@ -27,6 +49,8 @@ function readSecrets(){
   else if(manual){ openaiApiKey=manual; openaiApiSource="manual"; }
   return {...stored,openaiApiKey,openaiApiSource,credentialTarget:OPENAI_CREDENTIAL_TARGET,credentialDiagnostic:{method:"disabled-environment-mode",found:false,userMatch:false,targetMatched:false}};
 }
+
+
 function writeSecrets(next){
   const clean={
     openaiApiKey:String(next.openaiApiKey||"").trim(),
@@ -38,6 +62,8 @@ function writeSecrets(next){
   fs.writeFileSync(secretFile,JSON.stringify(clean,null,2),"utf8");
   return clean;
 }
+
+
 function integrationStatus(){
   const s=readSecrets();
   return {
@@ -56,12 +82,16 @@ const OPENAI_PRICES={
   "gpt-5.6-terra":{input:2.00,cached:0.20,output:12.00},
   "gpt-5.6-sol":{input:4.00,cached:0.40,output:20.00}
 };
+
+
 function usageNumbers(usage={}){
   const input=Number(usage.input_tokens||0);
   const output=Number(usage.output_tokens||0);
   const cached=Number(usage.input_tokens_details?.cached_tokens||0);
   return {input,output,cached,uncached:Math.max(0,input-cached)};
 }
+
+
 function estimateCost(model,usage={}){
   const p=OPENAI_PRICES[model]||OPENAI_PRICES["gpt-5.6-luna"];
   const u=usageNumbers(usage);
@@ -69,6 +99,8 @@ function estimateCost(model,usage={}){
   const fx=integrationStatus().cost.usdTry;
   return {...u,usd,try:usd*fx};
 }
+
+
 function appendUsage(operation,model,usage,meta={}){
   try{
     const cost=estimateCost(model,usage);
@@ -77,11 +109,15 @@ function appendUsage(operation,model,usage,meta={}){
     return row;
   }catch{return null}
 }
+
+
 function readUsageRows(){
   try{
     return fs.readFileSync(usageFile,"utf8").split(/\r?\n/).filter(Boolean).map(x=>JSON.parse(x));
   }catch{return []}
 }
+
+
 function costSummary(){
   const rows=readUsageRows(), now=new Date(), ym=now.toISOString().slice(0,7);
   const month=rows.filter(r=>String(r.ts||"").slice(0,7)===ym);
@@ -111,6 +147,8 @@ function json(res,status,obj){
   res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});
   res.end(JSON.stringify(obj));
 }
+
+
 async function readJson(req,max=18*1024*1024){
   return await new Promise((resolve,reject)=>{
     let size=0,chunks=[];
@@ -119,6 +157,8 @@ async function readJson(req,max=18*1024*1024){
     req.on("error",reject);
   });
 }
+
+
 function extractOutputText(data){
   if(typeof data?.output_text==="string") return data.output_text;
   const out=[];
@@ -129,6 +169,8 @@ function extractOutputText(data){
   }
   return out.join("\n");
 }
+
+
 function parseJsonText(txt){
   const raw=String(txt||"").trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");
   try{return JSON.parse(raw)}catch{}
@@ -136,6 +178,8 @@ function parseJsonText(txt){
   if(a>=0&&b>a) return JSON.parse(raw.slice(a,b+1));
   throw new Error("AI yanıtı JSON olarak ayrıştırılamadı");
 }
+
+
 async function openaiRequest({instructions,input,reasoning="low"}){
   const s=readSecrets();
   if(!s.openaiApiKey) throw new Error("OpenAI API anahtarı ayarlanmamış");
@@ -155,6 +199,8 @@ async function openaiRequest({instructions,input,reasoning="low"}){
   if(!r.ok) throw new Error(data?.error?.message||`OpenAI API HTTP ${r.status}`);
   return {data,text:extractOutputText(data),model:body.model};
 }
+
+
 async function handleAiPing(req,res){
   const status=integrationStatus();
   if(!status.openai.configured) return json(res,400,{ok:false,error:"OpenAI API anahtarı bağlı değil"});
@@ -177,6 +223,8 @@ function flattenCurriculum(curriculum,courses){
   }
   return rows;
 }
+
+
 function deterministicPlan(student,curriculum,resources=[]){
   const topics=flattenCurriculum(curriculum,student.courses);
   const start=new Date(student.registeredAt||new Date().toISOString().slice(0,10));
@@ -214,6 +262,8 @@ function deterministicPlan(student,curriculum,resources=[]){
   const requiredMinutes=topics.length*baseTopicMinutes;
   return {mode:"deterministic",weeks,totalTopics:topics.length,weeklyCapacityMinutes:weeklyCapacity,totalCapacityMinutes,requiredMinutes,overload:overflowTopics.length>0,overflowCount:overflowTopics.length,overflowTopics};
 }
+
+
 async function handleAiPlan(req,res){
   const body=await readJson(req,2*1024*1024);
   const {student,curriculum,results=[],resources=[]}=body;
@@ -276,6 +326,8 @@ function normalizeHomeworkAnalysis(x={}){
     notes:Array.isArray(x.notes)?x.notes.slice(0,20):[]
   };
 }
+
+
 async function handleHomework(req,res){
   const body=await readJson(req,18*1024*1024);
   const {fileData,mimeType="application/pdf",fileName="odev.pdf",assignment,answerKey=null}=body;
@@ -328,7 +380,7 @@ async function handleYoutube(req,res){
 http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.8.0",integrations:integrationStatus()});
+    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.8.1",integrations:integrationStatus()});
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
     if(u.pathname==="/api/integrations/settings"&&req.method==="POST"){
