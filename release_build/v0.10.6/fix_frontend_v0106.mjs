@@ -1,0 +1,12 @@
+import fs from 'fs';
+const p='/tmp/yilbay0106/app/public/app.js';let s=fs.readFileSync(p,'utf8');
+const bad='${pdfReport?.downloadUrl?`<div class="notice"><div><b>PDF Karne hazır</b>Karne yerel olarak oluşturuldu; ek AI maliyeti yoktur.</div></div><div class="modal-actions"><button class="btn primary" onclick="window.open(\'${pdfReport.downloadUrl}\',\'_blank\')">PDF Karnesini İndir</button><button class="btn ghost" onclick="closeModal();assignments()">Tamam</button></div>`:`<div class="notice error"><div><b>PDF Karne oluşturulamadı</b>Analiz kaydedildi; PDF motoru ayrıca kontrol edilecek.</div></div><div class="modal-actions"><button class="btn primary" onclick="closeModal();assignments()">Tamam</button></div>`}';
+const good='<div class="notice"><div><b>PDF Karne</b>Analiz tamamlandığında PDF karne yerel olarak hazırlanır; ek AI maliyeti yoktur.</div></div><div class="modal-actions"><button class="btn primary" onclick="openLastHomeworkPdf()">PDF Karnesini İndir</button><button class="btn ghost" onclick="closeModal();assignments()">Tamam</button></div>';
+if(!s.includes(bad))throw new Error('malformed PDF action fragment not found');
+s=s.replace(bad,good);
+const mark='window.submitHomeworkAnalysis=async id=>{';
+if(!s.includes(mark))throw new Error('submit mark missing');
+const helpers='window.lastHomeworkPdfUrl=null;\nwindow.openLastHomeworkPdf=()=>{if(window.lastHomeworkPdfUrl)return window.open(window.lastHomeworkPdfUrl,"_blank");alert("PDF karne oluşturulamadı. Analiz sonucu kaydedildi.")}\n';
+s=s.replace(mark,helpers+mark);
+s=s.replace('  let pdfReport=null;try{pdfReport=await createHomeworkPdfReport(a,an,data.cost)}catch(pdfError){console.warn("PDF_KARNE_ERROR",pdfError.message)}','  let pdfReport=null;try{pdfReport=await createHomeworkPdfReport(a,an,data.cost)}catch(pdfError){console.warn("PDF_KARNE_ERROR",pdfError.message)}\n  window.lastHomeworkPdfUrl=pdfReport?.downloadUrl||null;');
+fs.writeFileSync(p,s,'utf8');console.log('v0.10.6 frontend PDF state/action fixed');
