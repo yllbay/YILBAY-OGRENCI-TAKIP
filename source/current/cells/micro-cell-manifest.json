@@ -1,6 +1,6 @@
 {
   "protocol": "micro-cell-v2-ast",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "rule": "one-Program.body-node-per-cell",
   "frontend": [
     {
@@ -519,140 +519,140 @@
       "nodeType": "ExpressionStatement",
       "name": "analyzeAssignment",
       "start": 48170,
-      "end": 49937
+      "end": 49865
     },
     {
       "file": "cells/micro/frontend/075-filetobase64.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "fileToBase64",
-      "start": 49938,
-      "end": 50123
+      "start": 49866,
+      "end": 50051
     },
     {
       "file": "cells/micro/frontend/076-assignmentresourcecontext.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "assignmentResourceContext",
-      "start": 50124,
-      "end": 50538
+      "start": 50052,
+      "end": 50466
     },
     {
       "file": "cells/micro/frontend/077-homeworkanswerkeysourcelabel.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "homeworkAnswerKeySourceLabel",
-      "start": 50539,
-      "end": 50899
+      "start": 50467,
+      "end": 50827
     },
     {
       "file": "cells/micro/frontend/078-togglehomeworksource.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "toggleHomeworkSource",
-      "start": 50900,
-      "end": 51125
+      "start": 50828,
+      "end": 51053
     },
     {
       "file": "cells/micro/frontend/079-drivefileidfrominput.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "driveFileIdFromInput",
-      "start": 51126,
-      "end": 51345
+      "start": 51054,
+      "end": 51273
     },
     {
       "file": "cells/micro/frontend/080-submithomeworkanalysis.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "submitHomeworkAnalysis",
-      "start": 51346,
-      "end": 56655
+      "start": 51274,
+      "end": 57242
     },
     {
       "file": "cells/micro/frontend/081-q.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "q",
-      "start": 56793,
-      "end": 56843
+      "start": 57380,
+      "end": 57430
     },
     {
       "file": "cells/micro/frontend/082-modal.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "modal",
-      "start": 56844,
-      "end": 57016
+      "start": 57431,
+      "end": 57603
     },
     {
       "file": "cells/micro/frontend/083-closemodal.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "closeModal",
-      "start": 57017,
-      "end": 57083
+      "start": 57604,
+      "end": 57670
     },
     {
       "file": "cells/micro/frontend/084-resetdemo.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "resetDemo",
-      "start": 57084,
-      "end": 57147
+      "start": 57671,
+      "end": 57734
     },
     {
       "file": "cells/micro/frontend/085-loaddrivestatus.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "loadDriveStatus",
-      "start": 57193,
-      "end": 58492
+      "start": 57780,
+      "end": 59079
     },
     {
       "file": "cells/micro/frontend/086-connectgoogledrive.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "connectGoogleDrive",
-      "start": 58493,
-      "end": 58808
+      "start": 59080,
+      "end": 59395
     },
     {
       "file": "cells/micro/frontend/087-disconnectgoogledrive.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "disconnectGoogleDrive",
-      "start": 58809,
-      "end": 59030
+      "start": 59396,
+      "end": 59617
     },
     {
       "file": "cells/micro/frontend/088-upsertdriveresource.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "upsertDriveResource",
-      "start": 59031,
-      "end": 59816
+      "start": 59618,
+      "end": 60403
     },
     {
       "file": "cells/micro/frontend/089-indexgoogledrive.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "indexGoogleDrive",
-      "start": 59817,
-      "end": 60487
+      "start": 60404,
+      "end": 61074
     },
     {
       "file": "cells/micro/frontend/090-applyviewportprofile.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "applyViewportProfile",
-      "start": 60489,
-      "end": 61081
+      "start": 61076,
+      "end": 61668
     },
     {
       "file": "cells/micro/frontend/091-window-addeventlistener.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "window-addEventListener",
-      "start": 61082,
-      "end": 61151
+      "start": 61669,
+      "end": 61738
     },
     {
       "file": "cells/micro/frontend/092-frontend-statement-92.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "frontend-statement-92",
-      "start": 61152,
-      "end": 61174
+      "start": 61739,
+      "end": 61761
     },
     {
       "file": "cells/micro/frontend/093-frontend-statement-93.cell.js",
       "nodeType": "ExpressionStatement",
       "name": "frontend-statement-93",
-      "start": 61175,
-      "end": 61187
+      "start": 61762,
+      "end": 61774
     }
   ],
   "backend": [
@@ -958,136 +958,157 @@
       "end": 26287
     },
     {
-      "file": "cells/micro/backend/044-handlehomework.cell.js",
+      "file": "cells/micro/backend/044-lunahomeworkdirectinstruction.cell.js",
+      "nodeType": "FunctionDeclaration",
+      "name": "lunaHomeworkDirectInstruction",
+      "start": 26288,
+      "end": 27711
+    },
+    {
+      "file": "cells/micro/backend/045-validatelunaquestionaccounting.cell.js",
+      "nodeType": "FunctionDeclaration",
+      "name": "validateLunaQuestionAccounting",
+      "start": 27712,
+      "end": 28482
+    },
+    {
+      "file": "cells/micro/backend/046-validatelunadirectanswerkey.cell.js",
+      "nodeType": "FunctionDeclaration",
+      "name": "validateLunaDirectAnswerKey",
+      "start": 28483,
+      "end": 29391
+    },
+    {
+      "file": "cells/micro/backend/047-handlehomework.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "handleHomework",
-      "start": 26288,
-      "end": 31829
+      "start": 29392,
+      "end": 33193
     },
     {
-      "file": "cells/micro/backend/045-handleyoutube.cell.js",
+      "file": "cells/micro/backend/048-handleyoutube.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "handleYoutube",
-      "start": 31956,
-      "end": 33216
+      "start": 33320,
+      "end": 34580
     },
     {
-      "file": "cells/micro/backend/046-driveredirecturi.cell.js",
+      "file": "cells/micro/backend/049-driveredirecturi.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "driveRedirectUri",
-      "start": 33342,
-      "end": 33429
+      "start": 34706,
+      "end": 34793
     },
     {
-      "file": "cells/micro/backend/047-drivetokensavepatch.cell.js",
+      "file": "cells/micro/backend/050-drivetokensavepatch.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "driveTokenSavePatch",
-      "start": 33430,
-      "end": 33535
+      "start": 34794,
+      "end": 34899
     },
     {
-      "file": "cells/micro/backend/048-driverefreshaccesstoken.cell.js",
+      "file": "cells/micro/backend/051-driverefreshaccesstoken.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "driveRefreshAccessToken",
-      "start": 33536,
-      "end": 34376
+      "start": 34900,
+      "end": 35740
     },
     {
-      "file": "cells/micro/backend/049-normalizecoursename.cell.js",
+      "file": "cells/micro/backend/052-normalizecoursename.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "normalizeCourseName",
-      "start": 34377,
-      "end": 34852
+      "start": 35741,
+      "end": 36216
     },
     {
-      "file": "cells/micro/backend/050-parsedriveresourcefilename.cell.js",
+      "file": "cells/micro/backend/053-parsedriveresourcefilename.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "parseDriveResourceFilename",
-      "start": 34853,
-      "end": 35456
+      "start": 36217,
+      "end": 36820
     },
     {
-      "file": "cells/micro/backend/051-drivemetadatafromfile.cell.js",
+      "file": "cells/micro/backend/054-drivemetadatafromfile.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "driveMetadataFromFile",
-      "start": 35457,
-      "end": 36316
+      "start": 36821,
+      "end": 37680
     },
     {
-      "file": "cells/micro/backend/052-isdriveanswerkeyfile.cell.js",
+      "file": "cells/micro/backend/055-isdriveanswerkeyfile.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "isDriveAnswerKeyFile",
-      "start": 36317,
-      "end": 36444
+      "start": 37681,
+      "end": 37808
     },
     {
-      "file": "cells/micro/backend/053-drivepairkey.cell.js",
+      "file": "cells/micro/backend/056-drivepairkey.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "drivePairKey",
-      "start": 36445,
-      "end": 36635
+      "start": 37809,
+      "end": 37999
     },
     {
-      "file": "cells/micro/backend/054-pairdriveanswerkeys.cell.js",
+      "file": "cells/micro/backend/057-pairdriveanswerkeys.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "pairDriveAnswerKeys",
-      "start": 36636,
-      "end": 37603
+      "start": 38000,
+      "end": 38967
     },
     {
-      "file": "cells/micro/backend/055-drivelistpdfindex.cell.js",
+      "file": "cells/micro/backend/058-drivelistpdfindex.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "driveListPdfIndex",
-      "start": 37604,
-      "end": 38524
+      "start": 38968,
+      "end": 39888
     },
     {
-      "file": "cells/micro/backend/056-handledriveoauthstart.cell.js",
+      "file": "cells/micro/backend/059-handledriveoauthstart.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "handleDriveOauthStart",
-      "start": 38525,
-      "end": 39337
+      "start": 39889,
+      "end": 40701
     },
     {
-      "file": "cells/micro/backend/057-handledriveoauthcallback.cell.js",
+      "file": "cells/micro/backend/060-handledriveoauthcallback.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "handleDriveOauthCallback",
-      "start": 39338,
-      "end": 40530
+      "start": 40702,
+      "end": 41894
     },
     {
-      "file": "cells/micro/backend/058-handledriveindex.cell.js",
+      "file": "cells/micro/backend/061-handledriveindex.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "handleDriveIndex",
-      "start": 40531,
-      "end": 40974
+      "start": 41895,
+      "end": 42338
     },
     {
-      "file": "cells/micro/backend/059-installlaunchpreferences.cell.js",
+      "file": "cells/micro/backend/062-installlaunchpreferences.cell.js",
       "nodeType": "FunctionDeclaration",
       "name": "installLaunchPreferences",
-      "start": 40976,
-      "end": 41569
+      "start": 42340,
+      "end": 42933
     },
     {
-      "file": "cells/micro/backend/060-backend-statement-60.cell.js",
+      "file": "cells/micro/backend/063-backend-statement-63.cell.js",
       "nodeType": "ExpressionStatement",
-      "name": "backend-statement-60",
-      "start": 41570,
-      "end": 41596
+      "name": "backend-statement-63",
+      "start": 42934,
+      "end": 42960
     },
     {
-      "file": "cells/micro/backend/061-server-listen-61.cell.js",
+      "file": "cells/micro/backend/064-server-listen-64.cell.js",
       "nodeType": "ExpressionStatement",
-      "name": "server-listen-61",
-      "start": 41597,
-      "end": 44788
+      "name": "server-listen-64",
+      "start": 42961,
+      "end": 46152
     }
   ],
   "counts": {
     "frontend": 93,
-    "backend": 61,
-    "totalJs": 154
+    "backend": 64,
+    "totalJs": 157
   },
   "designSystem": [
     "cells/design-system/00-design-system.cell.css"

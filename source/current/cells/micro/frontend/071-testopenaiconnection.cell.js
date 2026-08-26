@@ -9,6 +9,6 @@ window.testOpenAIConnection=async()=>{
  finally{if(btn){btn.disabled=false;btn.textContent=old||"OpenAI Bağlantısını Test Et"}}
 }
 
-/* CELL:100-ai-planner | layer:frontend | generated-from:v0.10.4 */
+/* CELL:100-ai-planner | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:100-ai-planner | layer:frontend | generated-from:v0.7.2 */

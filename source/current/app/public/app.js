@@ -107,7 +107,7 @@ function emptyState(title,text){return `<div class="empty"><strong>${title}</str
 function pageHead(title,desc,actions=""){return `<div class="page-head"><div class="page-title"><h1>${title}</h1><p>${desc}</p></div><div class="page-actions">${actions}</div></div>`}
 
 
-function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.10.4</span></div></div><div class="layout"><aside>
+function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.10.5</span></div></div><div class="layout"><aside>
 <div class="nav-section">Yönetim</div>${nav("dashboard","Genel Bakış",active)}${nav("students","Öğrenciler",active)}${nav("profile","Öğrenci Profili",active)}
 <div class="nav-section">Akademik İçerik</div>${nav("curriculum","Ders ve Üniteler",active)}${nav("resources","Kaynak Havuzu",active)}${nav("exams","Online Sınavlar",active)}
 <div class="nav-section">Operasyon</div>${nav("assignments","Atamalar",active)}${nav("results","Başarı Sonuçları",active)}${nav("program","Haftalık Program",active)}
@@ -121,7 +121,7 @@ function nav(k,t,a){return `<button class="nav ${a===k?"active":""}" onclick="go
 window.go=k=>{view=k;render()}
 function render(){({dashboard,students,profile,curriculum,resources,exams,assignments,results,program,integrations}[view]||dashboard)()}
 
-/* CELL:10-dashboard | layer:frontend | generated-from:v0.10.4 */
+/* CELL:10-dashboard | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:10-dashboard | layer:frontend | generated-from:v0.7.2 */
 function dashboard(){
@@ -139,7 +139,7 @@ function dashboard(){
 }
 function studentName(id){return db.students.find(s=>s.id===id)?.name||"Bilinmeyen"}
 
-/* CELL:20-students-profile | layer:frontend | generated-from:v0.10.4 */
+/* CELL:20-students-profile | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:20-students-profile | layer:frontend | generated-from:v0.7.2 */
 function students(){
@@ -205,7 +205,7 @@ function profile(){
  <h2>Son sonuçlar</h2><table><thead><tr><th>Tarih</th><th>Tür</th><th>Ders / Konu</th><th>Başarı</th></tr></thead><tbody>${rs.slice(0,12).map(r=>`<tr><td>${r.date}</td><td>${r.kind}</td><td>${r.course} / ${r.topic}</td><td><span class="badge ${scoreClass(r.score)}">%${r.score}</span></td></tr>`).join("")||`<tr><td colspan="4">Sonuç yok.</td></tr>`}</tbody></table>`,"profile")
 }
 
-/* CELL:30-curriculum | layer:frontend | generated-from:v0.10.4 */
+/* CELL:30-curriculum | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:30-curriculum | layer:frontend | generated-from:v0.7.2 */
 function curriculum(){
@@ -216,7 +216,7 @@ window.currModal=()=>modal(`<h2>Müfredat Ekle</h2><div class="formgrid"><div cl
 window.addCurr=()=>{let c=q("ccourse").value.trim(),u=q("cunit").value.trim(),t=q("ctopic").value.trim();if(!c||!u||!t)return alert("Tüm alanlar gerekli");db.curriculum[c]??={};db.curriculum[c][u]??=[];if(!db.curriculum[c][u].includes(t))db.curriculum[c][u].push(t);save();closeModal();curriculum()}
 function topicOptions(){let out="";for(const [c,units] of Object.entries(db.curriculum))for(const topics of Object.values(units))for(const t of topics)out+=`<option data-course="${c}" value="${c}|||${t}">${c} — ${t}</option>`;return out}
 
-/* CELL:40-resources | layer:frontend | generated-from:v0.10.4 */
+/* CELL:40-resources | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:40-resources | layer:frontend | generated-from:v0.7.2 */
 function resources(){
@@ -234,7 +234,7 @@ function exams(){
 window.examModal=()=>modal(`<h2>Online Sınav Ekle</h2><div class="formgrid"><div class="field"><label>Başlık</label><input id="etitle"></div><div class="field"><label>Konu</label><select id="etopic">${topicOptions()}</select></div><div class="field"><label>Link</label><input id="eurl"></div></div><div class="modal-actions"><button class="btn primary" onclick="addExam()">Kaydet</button></div>`)
 window.addExam=()=>{const [course,topic]=q("etopic").value.split("|||");db.exams.push({id:Date.now(),course,topic,title:q("etitle").value||topic+" Online Test",url:q("eurl").value});save();closeModal();exams()}
 
-/* CELL:60-assignments-results | layer:frontend | generated-from:v0.10.4 */
+/* CELL:60-assignments-results | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:60-assignments-results | layer:frontend | generated-from:v0.7.2 */
 function assignments(){
@@ -281,7 +281,7 @@ function results(){
 window.resultModal=()=>modal(`<h2>Sonuç Gir</h2><div class="formgrid"><div class="field"><label>Öğrenci</label><select id="xstudent">${db.students.map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}</select></div><div class="field"><label>Tür</label><select id="xkind"><option>Ödev</option><option>Online Sınav</option></select></div><div class="field"><label>Konu</label><select id="xtopic">${topicOptions()}</select></div><div class="field"><label>Başarı %</label><input id="xscore" type="number" min="0" max="100"></div></div><div class="modal-actions"><button class="btn primary" onclick="addResult()">Kaydet</button></div>`)
 window.addResult=()=>{const [course,topic]=q("xtopic").value.split("|||"),score=Math.max(0,Math.min(100,Number(q("xscore").value)));db.results.push({id:Date.now(),studentId:Number(q("xstudent").value),kind:q("xkind").value,course,topic,score,date:new Date().toISOString().slice(0,10)});save();closeModal();results()}
 
-/* CELL:70-planner | layer:frontend | generated-from:v0.10.4 */
+/* CELL:70-planner | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:70-planner | layer:frontend | generated-from:v0.7.2 */
 let selectedStudentId=null;
@@ -332,7 +332,7 @@ function program(){
  <div class="section"><div class="weekgrid">${DAY_NAMES.map(d=>`<div class="daycard"><h3>${d}</h3>${preview[d].map(x=>`<div class="task"><div class="task-title">${x.type} · ${x.course}</div><div class="task-sub">${x.topic}<br>${x.resource!=="—"?x.resource:x.exam}</div><div class="task-actions"><span class="badge ${x.type==="Tekrar"?"low":"mid"}">${x.reason}</span><button class="link-btn" onclick='findTopicVideo(${JSON.stringify(x.course)},${JSON.stringify(x.topic)})'>Video bul</button></div></div>`).join("")||`<div class="muted">Görev yok</div>`}</div>`).join("")}</div></div>`,"program")
 }
 
-/* CELL:80-api-client | layer:frontend | generated-from:v0.10.4 */
+/* CELL:80-api-client | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:80-api-client | layer:frontend | generated-from:v0.7.2 */
 async function apiJson(url,body=null){
@@ -342,7 +342,7 @@ async function apiJson(url,body=null){
  return data
 }
 
-/* CELL:90-integrations | layer:frontend | generated-from:v0.10.4 */
+/* CELL:90-integrations | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:90-integrations | layer:frontend | generated-from:v0.7.2 */
 function integrations(){
@@ -402,7 +402,7 @@ window.testOpenAIConnection=async()=>{
  finally{if(btn){btn.disabled=false;btn.textContent=old||"OpenAI Bağlantısını Test Et"}}
 }
 
-/* CELL:100-ai-planner | layer:frontend | generated-from:v0.10.4 */
+/* CELL:100-ai-planner | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:100-ai-planner | layer:frontend | generated-from:v0.7.2 */
 window.generateAiMasterPlan=async()=>{
@@ -428,7 +428,7 @@ window.generateAiMasterPlan=async()=>{
  finally{if(btn){btn.disabled=false;btn.textContent=oldText||"AI ile Dönem Planı Üret"}}
 }
 
-/* CELL:110-youtube | layer:frontend | generated-from:v0.10.4 */
+/* CELL:110-youtube | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:110-youtube | layer:frontend | generated-from:v0.7.2 */
 window.findTopicVideo=async(course,topic)=>{
@@ -441,7 +441,7 @@ window.findTopicVideo=async(course,topic)=>{
  }catch(e){if(q("videoResults"))q("videoResults").innerHTML=`<div class="notice error">${e.message}</div>`;else alert(e.message)}
 }
 
-/* CELL:120-ai-homework | layer:frontend | generated-from:v0.10.4 */
+/* CELL:120-ai-homework | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:120-ai-homework | layer:frontend | generated-from:v0.7.2 */
 window.analyzeAssignment=id=>{
@@ -451,7 +451,7 @@ window.analyzeAssignment=id=>{
  <div id="homeworkLocalWrap" class="field"><label>Öğrencinin tamamladığı PDF veya görsel</label><input id="homeworkFile" type="file" accept=".pdf,image/png,image/jpeg,image/webp"></div>
  <div id="homeworkDriveWrap" class="field" style="display:none"><label>Drive dosya bağlantısı veya kimliği</label><input id="homeworkDriveInput" placeholder="https://drive.google.com/file/d/... veya dosya kimliği"></div>
  <div class="field"><label>Cevap anahtarı (opsiyonel)</label><textarea id="answerKey" rows="4" placeholder="Örn: 1-A, 2-C, 3-B..."></textarea></div>
- <div class="notice"><div><b>Kaynak bağlantısı</b>${rc?.driveFileId?`Drive kaynak PDF bağlı${rc.answerKeyDriveFileId?" · Cevap anahtarı bağlı":""}${rc.questionCount?` · ${rc.questionCount} soru`:""}`:"Drive kaynak PDF bağlı değil"}</div></div>
+ <div class="notice"><div><b>Doğrudan Luna Vision</b>Seçtiğiniz öğrenci PDF/görseli doğrudan Luna’ya gönderilir. Bilgisayardan yüklemede Drive kontrol edilmez.</div></div>
  <div class="notice"><div><b>Analiz kapsamı</b>AI; doğru, yanlış ve boşları belirler. Ayrıca öğrencinin el yazısı çözüm adımlarını, kullandığı yöntemi, ilk hata adımını, kavramsal/işlemsel/dikkat hatalarını, gereksiz veya eksik adımları ve daha uygun çözüm yaklaşımını soru bazında değerlendirir.</div></div>
  <div class="modal-actions"><button class="btn primary" onclick="submitHomeworkAnalysis(${id})">Dosyayı Tara</button><button class="btn ghost" onclick="closeModal()">İptal</button></div>`)
 }
@@ -467,7 +467,7 @@ window.submitHomeworkAnalysis=async id=>{
  if(file&&file.size>14*1024*1024)return alert("Bu sürümde dosya en fazla 14 MB olabilir.");
  const btn=document.querySelector(".modal-actions .btn.primary");if(btn){btn.disabled=true;btn.textContent="AI tarıyor…"}
  try{
-  const fileData=studentFileSource==="local"?await fileToBase64(file):null,answerKey=q("answerKey").value.trim()||null,resourceContext=assignmentResourceContext(a);
+  const fileData=studentFileSource==="local"?await fileToBase64(file):null,answerKey=q("answerKey").value.trim()||null,rawContext=assignmentResourceContext(a),resourceContext=rawContext?{resourceId:rawContext.resourceId,course:rawContext.course,unit:rawContext.unit,topic:rawContext.topic,level:rawContext.level,title:rawContext.title}:null;
   const data=await apiJson("/api/ai/analyze-homework",{studentFileSource,studentDriveFileId,fileData,mimeType:file?.type||"application/pdf",fileName:file?.name||"drive_odev.pdf",assignment:{id:a.id,studentId:a.studentId,course:a.course,topic:a.topic,title:a.title},answerKey,resourceContext});
   const an=data.analysis||{},score=Math.round(Number(an.scorePercent)||0),reviewRequired=!!an.needsTeacherReview||data.autoFinalize===false;
   db.homeworkAnalyses.push({id:Date.now(),assignmentId:a.id,studentId:a.studentId,course:a.course,topic:a.topic,date:new Date().toISOString().slice(0,10),fileName:file?.name||"Drive ödevi",fileSize:file?.size||0,mimeType:file?.type||"application/pdf",studentFileSource,costTry:Number(data.cost?.try||0),...an});
@@ -482,11 +482,11 @@ window.submitHomeworkAnalysis=async id=>{
   save();
   q("modalbg").querySelector(".modal").innerHTML=`<h2>${reviewRequired?"Öğretmen Kontrolü Gerekli":"Ödev Analizi Tamamlandı"}</h2><div class="result-hero"><div class="kpi">%${score}</div><div><div class="cell-title">${an.correct||0} doğru · ${an.wrong||0} yanlış · ${an.blank||0} boş</div><div class="cell-sub">Güven: %${Math.round((Number(an.confidence)||0)*100)} · Cevap anahtarı: ${homeworkAnswerKeySourceLabel(an.answerKeySource)} (%${Math.round((Number(an.answerKeyConfidence)||0)*100)})${data.cost?` · AI maliyeti ${Number(data.cost.try||0).toFixed(4)} TL`:""}</div></div></div>
    ${reviewRequired?`<div class="notice error"><div><b>Otomatik sonuç kesinleştirilmedi</b>${an.reviewReasons?.length?`Kontrol nedenleri: ${an.reviewReasons.join(", ")}. `:""}Bu analiz başarı sonuçlarına ve tekrar motoruna otomatik aktarılmadı. Atamalar ekranından “Manuel sonuç” ile öğretmen onayı verin.</div></div>`:`<div class="notice"><div><b>${score<db.threshold?"Tekrar sinyali oluşturuldu":"Başarı yeterli"}</b>${score<db.threshold?`%${db.threshold} eşiğinin altında olduğu için ${a.topic} konusu sonraki programda tekrar önceliği alacak.`:"Konu için otomatik tekrar sinyali oluşturulmadı."}</div></div>`}
-   <div class="section"><h3>Atama Soru Kapsamı</h3><div class="cell-sub">Eşleşen soru sayısı: ${an.matchedQuestionCount||0}${an.matchedQuestionNumbers?.length?` · Basılı numaralar: ${an.matchedQuestionNumbers.join(", ")}`:""}<br>${an.assignmentMatchEvidence||"—"}</div></div>
+   <div class="section"><h3>Luna Analiz Mimarisi</h3><div class="cell-sub">${an.analysisArchitecture==="direct_luna_vision"?"PDF doğrudan Luna Vision tarafından analiz edildi":"—"}</div></div>
    <div class="section"><h3>Sayfa Kapsamı</h3><div class="cell-sub">Taranan öğrenci sayfaları: ${(an.analyzedStudentPages||[]).join(", ")||"—"} / beklenen ${an.expectedStudentPages||"?"}${an.missingStudentPages?.length?` · Eksik: ${an.missingStudentPages.join(", ")}`:""}</div></div>
    <div class="section"><h3>Cevap Anahtarı Kanıtı</h3><div class="cell-sub">${an.answerKeyEvidence||"—"}</div></div>
    <div class="section"><h3>Çözüm Yaklaşımı ve Hatalar</h3>${(an.items||[]).map(x=>'<div class="card" style="margin:8px 0"><div class="cell-title">Soru '+(x.question||"?")+' · '+(x.status||"uncertain")+'</div><div class="cell-sub">Yaklaşım: '+(x.approach||"—")+'<br>İlk hata: '+(x.firstErrorStep||"—")+'<br>Hata sınıfı: '+(x.errorCategory||"—")+'<br>Daha iyi yaklaşım: '+(x.betterApproach||"—")+'<br>Kazanım: '+(x.learningObjective||"—")+'</div></div>').join("")||"—"}</div>
-   <div class="section"><h3>Pedagojik Özet</h3><div class="cell-sub">${an.reasoningProfile?.summary||an.summary||"—"}</div></div>
+   <div class="section"><h3>Pedagojik Karne</h3><div class="cell-sub"><b>Özet:</b> ${an.reasoningProfile?.summary||an.summary||"—"}<br><br><b>Güçlü yönler:</b> ${(an.reasoningProfile?.strengths||[]).join(", ")||"—"}<br><b>Tekrarlayan hatalar:</b> ${(an.reasoningProfile?.recurringErrors||[]).join(", ")||"—"}<br><b>Kavramsal eksikler:</b> ${(an.reasoningProfile?.conceptualGaps||[]).join(", ")||"—"}<br><b>İşlem/prosedür eksikleri:</b> ${(an.reasoningProfile?.proceduralGaps||[]).join(", ")||"—"}<br><b>Dikkat örüntüleri:</b> ${(an.reasoningProfile?.attentionPatterns||[]).join(", ")||"—"}<br><b>Önerilen çalışma:</b> ${(an.reasoningProfile?.recommendedActions||[]).join(", ")||"—"}</div></div>
    <div class="section"><h3>Zayıf Alanlar</h3>${(an.weaknesses||[]).map(x=>`<span class="course-chip">${x}</span>`).join("")||"—"}</div>
    <div class="section"><h3>Hata Türleri</h3>${(an.errorTypes||[]).map(x=>`<span class="course-chip">${typeof x==="string"?x:(x.type||x.label||JSON.stringify(x))}</span>`).join("")||"—"}</div>
    <div class="modal-actions"><button class="btn primary" onclick="closeModal();assignments()">Tamam</button></div>`;
@@ -494,7 +494,7 @@ window.submitHomeworkAnalysis=async id=>{
  finally{if(btn){btn.disabled=false;btn.textContent="Dosyayı Tara"}}
 }
 
-/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.10.4 */
+/* CELL:130-ui-runtime | layer:frontend | generated-from:v0.10.5 */
 
 /* CELL:130-ui-runtime | layer:frontend | generated-from:v0.7.2 */
 function q(id){return document.getElementById(id)}
