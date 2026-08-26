@@ -1,0 +1,81 @@
+name: Publish v0.6.1 verified package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release_staging/v0.6.1/**'
+      - '.github/workflows/publish-v061.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild exact ZIP from staged base64
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release /tmp/yilbay061
+          cat release_staging/v0.6.1/part00.txt \
+              release_staging/v0.6.1/part01.txt \
+              release_staging/v0.6.1/part02.txt \
+              release_staging/v0.6.1/part03.txt \
+              release_staging/v0.6.1/part04.txt > /tmp/yilbay061/package.b64
+          base64 --decode /tmp/yilbay061/package.b64 > release/YILBAY_APP_v0.6.1.zip
+
+      - name: Verify SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED='62142a4c8a7c67fbe31badee75870a9c5f07b20d49ad58f60bef9a232326444c'
+          ACTUAL="$(sha256sum release/YILBAY_APP_v0.6.1.zip | awk '{print $1}')"
+          echo "Expected: $EXPECTED"
+          echo "Actual:   $ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Validate ZIP and application code
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -t release/YILBAY_APP_v0.6.1.zip
+          rm -rf /tmp/yilbay061/extract
+          mkdir -p /tmp/yilbay061/extract
+          unzip -q release/YILBAY_APP_v0.6.1.zip -d /tmp/yilbay061/extract
+          test -f /tmp/yilbay061/extract/app/server.js
+          test -f /tmp/yilbay061/extract/app/public/app.js
+          node --check /tmp/yilbay061/extract/app/server.js
+          node --check /tmp/yilbay061/extract/app/public/app.js
+          node /tmp/yilbay061/extract/app/tests.js
+
+      - name: Write updater manifest
+        shell: bash
+        run: |
+          cat > release/latest.json <<'JSON'
+          {
+            "version": "0.6.1",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.6.1.zip",
+            "sha256": "62142a4c8a7c67fbe31badee75870a9c5f07b20d49ad58f60bef9a232326444c"
+          }
+          JSON
+
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.6.1.zip release/latest.json
+          if git diff --cached --quiet; then
+            echo 'Release already published.'
+            exit 0
+          fi
+          git commit -m 'Publish verified v0.6.1 release [skip ci]'
+          git push origin main
