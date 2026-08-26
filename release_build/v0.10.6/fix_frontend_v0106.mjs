@@ -9,4 +9,6 @@ if(!s.includes(mark))throw new Error('submit mark missing');
 const helpers='window.lastHomeworkPdfUrl=null;\nwindow.openLastHomeworkPdf=()=>{if(window.lastHomeworkPdfUrl)return window.open(window.lastHomeworkPdfUrl,"_blank");alert("PDF karne oluşturulamadı. Analiz sonucu kaydedildi.")}\n';
 s=s.replace(mark,helpers+mark);
 s=s.replace('  let pdfReport=null;try{pdfReport=await createHomeworkPdfReport(a,an,data.cost)}catch(pdfError){console.warn("PDF_KARNE_ERROR",pdfError.message)}','  let pdfReport=null;try{pdfReport=await createHomeworkPdfReport(a,an,data.cost)}catch(pdfError){console.warn("PDF_KARNE_ERROR",pdfError.message)}\n  window.lastHomeworkPdfUrl=pdfReport?.downloadUrl||null;');
-fs.writeFileSync(p,s,'utf8');console.log('v0.10.6 frontend PDF state/action fixed');
+fs.writeFileSync(p,s,'utf8');
+console.log('v0.10.6 frontend PDF state/action fixed');
+const lines=s.split(/\r?\n/);for(let i=394;i<=402&&i<=lines.length;i++)console.log('APPJS_LINE_'+i+': '+lines[i-1]);
