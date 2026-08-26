@@ -64,7 +64,7 @@ function initials(name=""){return name.split(/\s+/).filter(Boolean).slice(0,2).m
 function tableWrap(html){return `<div class="table-wrap">${html}</div>`}
 function emptyState(title,text){return `<div class="empty"><strong>${title}</strong>${text}</div>`}
 function pageHead(title,desc,actions=""){return `<div class="page-head"><div class="page-title"><h1>${title}</h1><p>${desc}</p></div><div class="page-actions">${actions}</div></div>`}
-function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.6.1</span></div></div><div class="layout"><aside>
+function shell(content,active=view){app().innerHTML=`<div class="top"><div class="brand-wrap"><div class="brandmark">Y</div><div><div class="brand">YILBAY Öğrenci Takip</div><div class="brand-sub">Akademik Koçluk Yönetim Sistemi</div></div></div><div class="top-right"><span class="version">v0.7.0</span></div></div><div class="layout"><aside>
 <div class="nav-section">Yönetim</div>${nav("dashboard","Genel Bakış",active)}${nav("students","Öğrenciler",active)}${nav("profile","Öğrenci Profili",active)}
 <div class="nav-section">Akademik İçerik</div>${nav("curriculum","Ders ve Üniteler",active)}${nav("resources","Kaynak Havuzu",active)}${nav("exams","Online Sınavlar",active)}
 <div class="nav-section">Operasyon</div>${nav("assignments","Atamalar",active)}${nav("results","Başarı Sonuçları",active)}${nav("program","Haftalık Program",active)}
@@ -225,7 +225,7 @@ function program(){
  const total=Object.values(preview).reduce((n,a)=>n+a.length,0);
  const actions=`<div class="toolbar-group"><select onchange="selectedStudentId=Number(this.value);program()">${db.students.map(x=>`<option value="${x.id}" ${x.id===s.id?"selected":""}>${x.name}</option>`).join("")}</select><button class="btn ghost" onclick="generateWeeklyPlan()">Kural Tabanlı Plan</button><button class="btn primary" onclick="generateAiMasterPlan()">AI ile Dönem Planı Üret</button></div>`;
  shell(`${pageHead("Haftalık Program","Adaptif planlayıcı tekrar ihtiyaçlarını ve bekleyen atamaları 7 güne dengeli dağıtır.",actions)}
- <div class="notice"><div><b>Planlama kuralı</b>Önce %${db.threshold} altındaki konular, ardından bekleyen atamalar. Toplam görev: ${total}. ${saved?`Son kayıt: ${new Date(saved.generatedAt).toLocaleString("tr-TR")}`:"Henüz kaydedilmedi; aşağıdaki görünüm önizlemedir."}${db.aiPlans?.[key]?`<br><b>AI dönem planı:</b> ${db.aiPlans[key].usedAi?"OpenAI ile üretildi":"kural tabanlı fallback"} · ${db.aiPlans[key].plan?.weeks?.length||0} hafta`:""}</div></div>
+ <div class="notice"><div><b>Planlama kuralı</b>Önce %${db.threshold} altındaki konular, ardından bekleyen atamalar. Toplam görev: ${total}. ${saved?`Son kayıt: ${new Date(saved.generatedAt).toLocaleString("tr-TR")}`:"Henüz kaydedilmedi; aşağıdaki görünüm önizlemedir."}${db.aiPlans?.[key]?`<br><b>Dönem planı:</b> ${db.aiPlans[key].usedAi?"OpenAI ile üretildi":"kural tabanlı fallback"} · ${db.aiPlans[key].plan?.weeks?.length||0} hafta${db.aiPlans[key].plan?.weeklyCapacityMinutes?` · haftalık kapasite ${db.aiPlans[key].plan.weeklyCapacityMinutes} dk`:""}${db.aiPlans[key].plan?.overload?` · <span class="badge low">${db.aiPlans[key].plan.overflowCount} konu kapasite dışı</span>`:""}`:""}</div></div>
  <div class="section"><div class="weekgrid">${DAY_NAMES.map(d=>`<div class="daycard"><h3>${d}</h3>${preview[d].map(x=>`<div class="task"><div class="task-title">${x.type} · ${x.course}</div><div class="task-sub">${x.topic}<br>${x.resource!=="—"?x.resource:x.exam}</div><div class="task-actions"><span class="badge ${x.type==="Tekrar"?"low":"mid"}">${x.reason}</span><button class="link-btn" onclick='findTopicVideo(${JSON.stringify(x.course)},${JSON.stringify(x.topic)})'>Video bul</button></div></div>`).join("")||`<div class="muted">Görev yok</div>`}</div>`).join("")}</div></div>`,"program")
 }
 
@@ -236,7 +236,7 @@ async function apiJson(url,body=null){
  return data
 }
 function integrations(){
- shell(`${pageHead("AI ve API Entegrasyonları","OpenAI ile adaptif planlama/ödev analizi, YouTube ile konu anlatım videosu seçimi. API anahtarları tarayıcıya kaydedilmez.")}
+ shell(`${pageHead("AI ve API Entegrasyonları","OpenAI ile adaptif planlama/ödev analizi, YouTube ile konu anlatım videosu seçimi. API anahtarları tarayıcıya kaydedilmez.",`<button class="btn primary" onclick="testOpenAIConnection()">OpenAI Bağlantısını Test Et</button>`)}
  <div id="integrationStatus"><div class="card">Entegrasyon durumu okunuyor…</div></div>
  <div class="section"><div class="section-head"><h2>Güvenlik</h2></div><div class="notice"><div><b>Sunucu tarafı anahtar saklama</b>Anahtarlar LocalStorage veya uygulama JavaScript dosyasına yazılmaz. Kalıcı paketin <code>runtime</code> alanında tutulur ve mevcut teşhis raporuna eklenmez.</div></div></div>`,"integrations");
  loadIntegrationStatus()
@@ -273,6 +273,16 @@ window.saveIntegrationSettings=async()=>{
   await apiJson("/api/integrations/settings",{openaiApiKey:openaiApiKey||"__KEEP__",youtubeApiKey:youtubeApiKey||"__KEEP__",openaiModel,usdTry,monthlyBudgetTry});
   closeModal();integrations()
  }catch(e){alert("Ayar kaydedilemedi: "+e.message)}
+}
+window.testOpenAIConnection=async()=>{
+ const btn=[...document.querySelectorAll("button")].find(x=>x.textContent.includes("OpenAI Bağlantısını Test Et"));
+ const old=btn?.textContent;if(btn){btn.disabled=true;btn.textContent="Test ediliyor…"}
+ try{
+  const r=await apiJson("/api/ai/ping",{});
+  alert(`OpenAI bağlantısı başarılı.\nModel: ${r.model}\nGecikme: ${r.latencyMs} ms${r.cost?`\nMaliyet: ${Number(r.cost.try||0).toFixed(4)} TL`:""}`);
+  loadIntegrationStatus();
+ }catch(e){alert("OpenAI bağlantı testi başarısız: "+e.message)}
+ finally{if(btn){btn.disabled=false;btn.textContent=old||"OpenAI Bağlantısını Test Et"}}
 }
 window.generateAiMasterPlan=async()=>{
  const s=db.students.find(x=>x.id===selectedStudentId);if(!s)return;

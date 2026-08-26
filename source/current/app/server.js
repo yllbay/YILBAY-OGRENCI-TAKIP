@@ -8,86 +8,20 @@ fs.mkdirSync(runtime,{recursive:true});
 
 const OPENAI_CREDENTIAL_TARGET="YILBAY-OPENAI-API-HOME";
 const OPENAI_CREDENTIAL_USERNAME="YILBAY-DEVELOPMENT-HOME";
-let credentialCache={at:0,value:null};
 function readStoredSecrets(){
   try{return JSON.parse(fs.readFileSync(secretFile,"utf8"))}catch{return {}}
 }
-function readWindowsCredential(target=OPENAI_CREDENTIAL_TARGET){
-  if(process.platform!=="win32") return {value:null,diagnostic:{method:"not-windows",found:false,userMatch:false}};
-  const now=Date.now();
-  if(now-credentialCache.at<30000) return credentialCache.value;
-  const ps=`$ErrorActionPreference='Stop'
-$src=@'
-using System;
-using System.Runtime.InteropServices;
-public static class YilbayCredNative {
-  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
-  public struct CREDENTIAL {
-    public UInt32 Flags; public UInt32 Type; public IntPtr TargetName; public IntPtr Comment;
-    public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
-    public UInt32 CredentialBlobSize; public IntPtr CredentialBlob; public UInt32 Persist;
-    public UInt32 AttributeCount; public IntPtr Attributes; public IntPtr TargetAlias; public IntPtr UserName;
-  }
-  [DllImport("advapi32.dll", EntryPoint="CredReadW", CharSet=CharSet.Unicode, SetLastError=true)]
-  public static extern bool CredRead(string target, UInt32 type, UInt32 reservedFlag, out IntPtr credentialPtr);
-  [DllImport("advapi32.dll", EntryPoint="CredEnumerateW", CharSet=CharSet.Unicode, SetLastError=true)]
-  public static extern bool CredEnumerate(string filter, UInt32 flags, out UInt32 count, out IntPtr credentials);
-  [DllImport("advapi32.dll", SetLastError=true)] public static extern void CredFree(IntPtr credentialPtr);
-}
-'@
-Add-Type -TypeDefinition $src -ErrorAction SilentlyContinue
-function Convert-Cred([IntPtr]$p,[string]$method){
-  $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[type][YilbayCredNative+CREDENTIAL])
-  $t=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.TargetName)
-  $u=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.UserName)
-  $bytes=New-Object byte[] $c.CredentialBlobSize
-  if($c.CredentialBlobSize -gt 0){[Runtime.InteropServices.Marshal]::Copy($c.CredentialBlob,$bytes,0,$c.CredentialBlobSize)}
-  $secret=[Text.Encoding]::Unicode.GetString($bytes).Trim([char]0)
-  if([string]::IsNullOrWhiteSpace($secret) -or $secret.Contains([char]0)){$secret=[Text.Encoding]::UTF8.GetString($bytes).Trim([char]0)}
-  [pscustomobject]@{target=$t;username=$u;secret=$secret;method=$method}
-}
-$p=[IntPtr]::Zero
-if([YilbayCredNative]::CredRead('${target.replace(/'/g,"''")}',1,0,[ref]$p)){
-  try{Convert-Cred $p 'direct'}finally{[YilbayCredNative]::CredFree($p)}
-  exit 0
-}
-$count=0;$arr=[IntPtr]::Zero
-if([YilbayCredNative]::CredEnumerate($null,0,[ref]$count,[ref]$arr)){
-  try{
-    for($i=0;$i -lt $count;$i++){
-      $cp=[Runtime.InteropServices.Marshal]::ReadIntPtr($arr,$i*[IntPtr]::Size)
-      $c=[Runtime.InteropServices.Marshal]::PtrToStructure($cp,[type][YilbayCredNative+CREDENTIAL])
-      $t=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.TargetName)
-      if($t -eq '${target.replace(/'/g,"''")}' -or $t.EndsWith('${target.replace(/'/g,"''")}')){Convert-Cred $cp 'enumerate'; exit 0}
-    }
-  }finally{[YilbayCredNative]::CredFree($arr)}
-}
-exit 3`;
-  try{
-    const encoded=Buffer.from(ps,"utf16le").toString("base64");
-    const out=cp.execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-EncodedCommand",encoded],{encoding:"utf8",windowsHide:true,timeout:7000,stdio:["ignore","pipe","ignore"]}).trim();
-    const parsed=JSON.parse(out||"null");
-    const user=String(parsed?.username||""); const secret=String(parsed?.secret||"");
-    const userMatch=!OPENAI_CREDENTIAL_USERNAME||user===OPENAI_CREDENTIAL_USERNAME;
-    const result={value:(secret&&userMatch)?{username:user,secret}:null,diagnostic:{method:String(parsed?.method||"unknown"),found:!!secret,userMatch,targetMatched:String(parsed?.target||"").endsWith(target)}};
-    credentialCache={at:now,value:result}; return result;
-  }catch{
-    const result={value:null,diagnostic:{method:"not-found",found:false,userMatch:false,targetMatched:false}};
-    credentialCache={at:now,value:result}; return result;
-  }
+function readWindowsCredential(){
+  return {value:null,diagnostic:{method:"disabled-environment-mode",found:false,userMatch:false,targetMatched:false}};
 }
 function readSecrets(){
   const stored=readStoredSecrets();
-  const credResult=readWindowsCredential();
-  const cred=credResult.value;
   const envKey=String(process.env.OPENAI_API_KEY||"").trim();
   const manual=String(stored.openaiApiKey||"").trim();
   let openaiApiKey="",openaiApiSource="none";
-  if(cred?.secret && (!OPENAI_CREDENTIAL_USERNAME || cred.username===OPENAI_CREDENTIAL_USERNAME)){
-    openaiApiKey=cred.secret; openaiApiSource="windows-credential-manager";
-  }else if(envKey){ openaiApiKey=envKey; openaiApiSource="environment"; }
+  if(envKey){ openaiApiKey=envKey; openaiApiSource="environment"; }
   else if(manual){ openaiApiKey=manual; openaiApiSource="manual"; }
-  return {...stored,openaiApiKey,openaiApiSource,credentialTarget:OPENAI_CREDENTIAL_TARGET,credentialDiagnostic:credResult.diagnostic};
+  return {...stored,openaiApiKey,openaiApiSource,credentialTarget:OPENAI_CREDENTIAL_TARGET,credentialDiagnostic:{method:"disabled-environment-mode",found:false,userMatch:false,targetMatched:false}};
 }
 function writeSecrets(next){
   const clean={
@@ -211,6 +145,14 @@ async function openaiRequest({instructions,input,reasoning="low"}){
   if(!r.ok) throw new Error(data?.error?.message||`OpenAI API HTTP ${r.status}`);
   return {data,text:extractOutputText(data),model:body.model};
 }
+async function handleAiPing(req,res){
+  const status=integrationStatus();
+  if(!status.openai.configured) return json(res,400,{ok:false,error:"OpenAI API anahtarı bağlı değil"});
+  const started=Date.now();
+  const ai=await openaiRequest({instructions:"Yalnızca OK yaz.",input:"Bağlantı testi",reasoning:"low"});
+  const cost=appendUsage("connection_test",ai.model,ai.data?.usage||{},{});
+  return json(res,200,{ok:true,connected:true,model:ai.model,latencyMs:Date.now()-started,response:String(ai.text||"").trim().slice(0,80),usage:ai.data?.usage||null,cost});
+}
 function flattenCurriculum(curriculum,courses){
   const rows=[];
   for(const course of courses||[]){
@@ -225,15 +167,38 @@ function deterministicPlan(student,curriculum,resources=[]){
   const topics=flattenCurriculum(curriculum,student.courses);
   const start=new Date(student.registeredAt||new Date().toISOString().slice(0,10));
   const end=new Date(student.courseEndDate||start);
-  const diff=Math.max(1,Math.floor((end-start)/(7*864e5))+1);
-  const weeks=Array.from({length:diff},(_,i)=>({week:i+1,startDate:new Date(start.getTime()+i*7*864e5).toISOString().slice(0,10),items:[]}));
-  topics.forEach((x,i)=>{
+  const weekMs=7*864e5;
+  const weekCount=Math.max(1,Math.floor((end-start)/weekMs)+1);
+  const studyDays=Math.max(1,Math.min(7,Number(student.weeklyStudyDays||6)));
+  const dailyMinutes=Math.max(30,Number(student.dailyMinutes||120));
+  const weeklyCapacity=studyDays*dailyMinutes;
+  const levelOrder=["Başlangıç","Kolay","Orta","Orta-Zor","Zor","İleri"];
+  function pickResource(course,topic,wanted){
+    const same=resources.filter(r=>r.course===course&&r.topic===topic);
+    if(!same.length) return null;
+    const wi=Math.max(0,levelOrder.indexOf(wanted));
+    same.sort((a,b)=>{
+      const ai=levelOrder.indexOf(a.level),bi=levelOrder.indexOf(b.level);
+      const ad=ai<0?99:Math.abs(ai-wi),bd=bi<0?99:Math.abs(bi-wi);
+      return ad-bd;
+    });
+    return same[0];
+  }
+  const weeks=Array.from({length:weekCount},(_,i)=>({week:i+1,startDate:new Date(start.getTime()+i*weekMs).toISOString().slice(0,10),capacityMinutes:weeklyCapacity,plannedMinutes:0,items:[]}));
+  const baseTopicMinutes=Math.min(120,Math.max(35,Math.round(dailyMinutes*0.55)));
+  let wi=0,overflowTopics=[];
+  for(const x of topics){
     const level=student.levels?.[x.course]||"Orta";
-    const res=resources.find(r=>r.course===x.course&&r.topic===x.topic&&r.level===level)
-      ||resources.find(r=>r.course===x.course&&r.topic===x.topic)||null;
-    weeks[i%weeks.length].items.push({...x,type:"Yeni Konu",priority:"normal",resourceId:res?.id??null,estimatedMinutes:Math.min(90,Math.max(30,Math.round((student.dailyMinutes||120)/2)))});
-  });
-  return {mode:"deterministic",weeks,totalTopics:topics.length};
+    const res=pickResource(x.course,x.topic,level);
+    const estimatedMinutes=baseTopicMinutes;
+    while(wi<weeks.length && weeks[wi].plannedMinutes+estimatedMinutes>weeks[wi].capacityMinutes) wi++;
+    if(wi>=weeks.length){overflowTopics.push({...x,estimatedMinutes});continue}
+    weeks[wi].items.push({...x,type:"Yeni Konu",priority:"normal",resourceId:res?.id??null,resourceTitle:res?.title||null,resourceLevel:res?.level||null,studentLevel:level,estimatedMinutes});
+    weeks[wi].plannedMinutes+=estimatedMinutes;
+  }
+  const totalCapacityMinutes=weekCount*weeklyCapacity;
+  const requiredMinutes=topics.length*baseTopicMinutes;
+  return {mode:"deterministic",weeks,totalTopics:topics.length,weeklyCapacityMinutes:weeklyCapacity,totalCapacityMinutes,requiredMinutes,overload:overflowTopics.length>0,overflowCount:overflowTopics.length,overflowTopics};
 }
 async function handleAiPlan(req,res){
   const body=await readJson(req,2*1024*1024);
@@ -308,56 +273,12 @@ async function handleYoutube(req,res){
   }));
   json(res,200,{ok:true,videos});
 }
-function scheduleBootstrapMigration(){
-  try{
-    if(process.platform!=="win32") return;
-    const ps1=path.join(runtime,"bootstrap_migrate_041.ps1");
-    const batPath=path.join(root,"PROGRAMI_CALISTIR.bat");
-    const bat=`@echo off
-chcp 65001 >nul
-setlocal
-cd /d "%~dp0"
-title YILBAY OGRENCI TAKIP SISTEMI
 
-echo ================================================================
-echo       YILBAY OGRENCI TAKIP SISTEMI - KALICI BASLATICI
-echo ================================================================
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0bootstrap\\orchestrator.ps1"
-set EXITCODE=%ERRORLEVEL%
-exit /b %EXITCODE%
-`;
-    const esc=s=>s.replace(/'/g,"''");
-    const script=`$ErrorActionPreference='SilentlyContinue'
-$Root='${esc(root)}'
-$Bat='${esc(batPath)}'
-$Content=@'
-${bat.replace(/\r/g,"")}
-'@
-for($i=0;$i -lt 900;$i++){
-  $running=Get-CimInstance Win32_Process | Where-Object {
-    $_.Name -eq 'powershell.exe' -and $_.CommandLine -like '*bootstrap\\orchestrator.ps1*' -and $_.CommandLine -like ('*'+$Root+'*')
-  }
-  if(-not $running){break}
-  Start-Sleep -Milliseconds 500
-}
-[System.IO.File]::WriteAllText($Bat,$Content,(New-Object System.Text.UTF8Encoding($false)))
-Start-Sleep -Milliseconds 300
-Get-CimInstance Win32_Process | Where-Object {
-  $_.Name -eq 'cmd.exe' -and $_.CommandLine -like '*PROGRAMI_CALISTIR.bat*' -and $_.CommandLine -like ('*'+$Root+'*')
-} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-`;
-    fs.writeFileSync(ps1,script,"utf8");
-    const child=cp.spawn("powershell.exe",["-NoProfile","-ExecutionPolicy","Bypass","-WindowStyle","Hidden","-File",ps1],{detached:true,stdio:"ignore",windowsHide:true});
-    child.on("error",e=>console.error("BOOTSTRAP_MIGRATION_SPAWN_ERROR",e.message));child.unref();
-  }catch(e){console.error("BOOTSTRAP_MIGRATION_ERROR",e.message)}
-}
-scheduleBootstrapMigration();
 
 http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
-    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.6.8",integrations:integrationStatus()});
+    if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.7.0",integrations:integrationStatus()});
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
     if(u.pathname==="/api/integrations/settings"&&req.method==="POST"){
@@ -371,6 +292,7 @@ http.createServer(async(req,res)=>{
       });
       return json(res,200,{ok:true,...integrationStatus()});
     }
+    if(u.pathname==="/api/ai/ping"&&req.method==="POST") return await handleAiPing(req,res);
     if(u.pathname==="/api/ai/plan"&&req.method==="POST") return await handleAiPlan(req,res);
     if(u.pathname==="/api/ai/analyze-homework"&&req.method==="POST") return await handleHomework(req,res);
     if(u.pathname==="/api/youtube/search"&&req.method==="POST") return await handleYoutube(req,res);
@@ -390,20 +312,4 @@ http.createServer(async(req,res)=>{
 }).listen(port,"127.0.0.1",()=>console.log("READY 0.6.8"));
 
 
-(function installNodeBootstrap(){
-  if(process.platform!=="win32") return;
-  try{
-    const _fs=require("fs"),_path=require("path");
-    const _root=_path.resolve(__dirname,"..");
-    const _src=_path.join(__dirname,"bootstrap","orchestrator_node.js");
-    const _dst=_path.join(_root,"bootstrap","orchestrator.js");
-    if(_fs.existsSync(_src)){
-      _fs.mkdirSync(_path.dirname(_dst),{recursive:true});
-      _fs.copyFileSync(_src,_dst);
-      const bat='@echo off\r\nsetlocal\r\nwhere node >nul 2>nul\r\nif %ERRORLEVEL%==0 (\r\n  node "%~dp0bootstrap\\orchestrator.js"\r\n  exit /b %ERRORLEVEL%\r\n)\r\necho Node.js bulunamadi. Eski baslatma yontemine geciliyor.\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0bootstrap\\orchestrator.ps1"\r\nexit /b %ERRORLEVEL%\r\n';
-      _fs.writeFileSync(_path.join(_root,"PROGRAMI_CALISTIR.bat"),bat,"utf8");
-      _fs.writeFileSync(_path.join(_root,"BOOTSTRAP_VERSION"),'2.0.0-node\n','utf8');
-      console.log('NODE_BOOTSTRAP_MIGRATION_READY');
-    }
-  }catch(e){ console.error('NODE_BOOTSTRAP_MIGRATION_ERROR',e.message); }
-})();
+
