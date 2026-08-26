@@ -1,0 +1,117 @@
+name: Publish v0.6.5 safe recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v065.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract stable v0.6.3 base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f release/YILBAY_APP_v0.6.3.zip
+          rm -rf /tmp/yilbay065
+          mkdir -p /tmp/yilbay065/src
+          unzip -q release/YILBAY_APP_v0.6.3.zip -d /tmp/yilbay065/src
+
+      - name: Apply safe recovery version patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          root=Path('/tmp/yilbay065/src')
+          server=root/'app/server.js'
+          s=server.read_text(encoding='utf-8')
+          s=s.replace('version:"0.6.3"','version:"0.6.5"')
+          s=s.replace('READY 0.6.3','READY 0.6.5')
+          server.write_text(s,encoding='utf-8')
+
+          app=root/'app/public/app.js'
+          a=app.read_text(encoding='utf-8')
+          if 'const STORAGE="yilbay_mvp_063";' in a:
+              a=a.replace('const STORAGE="yilbay_mvp_063";', 'const STORAGE="yilbay_mvp_065";\nconst PREV_STORAGE_063="yilbay_mvp_063";',1)
+              anchor=' const current=localStorage.getItem(STORAGE);\n if(current) return normalizeDb(JSON.parse(current));\n'
+              if anchor in a:
+                  a=a.replace(anchor, anchor+' const p63=localStorage.getItem(PREV_STORAGE_063);\n if(p63){const migrated=normalizeDb(JSON.parse(p63));localStorage.setItem(STORAGE,JSON.stringify(migrated));return migrated;}\n',1)
+          app.write_text(a,encoding='utf-8')
+          (root/'VERSION').write_text('0.6.5\n',encoding='utf-8')
+          (root/'README.md').write_text('''# YILBAY Öğrenci Takip — v0.6.5\n\n- v0.6.4 başlangıç regresyonu geri alındı.\n- Çalışan v0.6.3 sunucu tabanı kullanıldı.\n- Credential Manager entegrasyonu uygulama başlangıcını etkileyemez.\n- Yayın öncesi gerçek sunucu başlatma ve /health smoke testi zorunludur.\n''',encoding='utf-8')
+          PY
+
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check /tmp/yilbay065/src/app/server.js
+          node --check /tmp/yilbay065/src/app/public/app.js
+          node /tmp/yilbay065/src/app/tests.js
+
+      - name: Mandatory runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/yilbay065/src
+          node app/server.js > /tmp/yilbay065/server.log 2> /tmp/yilbay065/server.err &
+          PID=$!
+          cleanup(){ kill "$PID" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ok=0
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:43127/health > /tmp/yilbay065/health.json 2>/dev/null; then ok=1; break; fi
+            sleep 0.5
+          done
+          if [ "$ok" != "1" ]; then
+            echo 'Server log:'; cat /tmp/yilbay065/server.log || true
+            echo 'Server error:'; cat /tmp/yilbay065/server.err || true
+            exit 1
+          fi
+          cat /tmp/yilbay065/health.json
+          grep -q '"version":"0.6.5"' /tmp/yilbay065/health.json
+
+      - name: Build ZIP and calculate SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.6.5.zip
+          cd /tmp/yilbay065/src
+          zip -q -r "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.6.5.zip" .
+          cd "$GITHUB_WORKSPACE"
+          unzip -t release/YILBAY_APP_v0.6.5.zip
+          SHA="$(sha256sum release/YILBAY_APP_v0.6.5.zip | awk '{print $1}')"
+          echo "V065_SHA=$SHA" >> "$GITHUB_ENV"
+
+      - name: Write updater manifest
+        shell: bash
+        run: |
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.6.5",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.6.5.zip",
+            "sha256": "$V065_SHA"
+          }
+          JSON
+
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.6.5.zip release/latest.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Publish verified v0.6.5 safe recovery [skip ci]'
+          git push origin main
