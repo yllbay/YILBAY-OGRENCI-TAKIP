@@ -4,7 +4,11 @@ import { parse } from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
 const ROOT='/tmp/yilbay094';
 const serverPath=path.join(ROOT,'app','server.js');
 let serverSource=fs.readFileSync(serverPath,'utf8');
-serverSource=serverSource.replaceAll('%~dp0bootstrap\\orchestrator_node.js','%~dp0bootstrap/orchestrator_node.js');
+const launchStart=serverSource.indexOf('function installLaunchPreferences(){');
+const launchCall=serverSource.indexOf('\ninstallLaunchPreferences()',launchStart);
+if(launchStart<0||launchCall<0)throw new Error('launcher install function boundaries missing');
+const safeLaunch=`function installLaunchPreferences(){if(process.platform!=='win32')return {skipped:true};const src=path.join(__dirname,'bootstrap','orchestrator_node.js'),dstDir=path.join(root,'bootstrap'),dst=path.join(dstDir,'orchestrator_node.js');fs.mkdirSync(dstDir,{recursive:true});if(fs.existsSync(src))fs.copyFileSync(src,dst);const bat='@echo off\\r\\nsetlocal\\r\\ncd /d "%~dp0"\\r\\nstart "YILBAY" /MAX powershell.exe -NoLogo -NoProfile -Command "node \\'%~dp0bootstrap/orchestrator_node.js\\'"\\r\\nexit /b 0\\r\\n';fs.writeFileSync(path.join(root,'PROGRAMI_CALISTIR.bat'),bat,'utf8');return {installed:true}}\n`;
+serverSource=serverSource.slice(0,launchStart)+safeLaunch+serverSource.slice(launchCall+1);
 fs.writeFileSync(serverPath,serverSource,'utf8');
 const cellsRoot=path.join(ROOT,'cells','micro');
 function slug(s){return String(s||'statement').replace(/[^A-Za-z0-9_$-]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase()||'statement'}
