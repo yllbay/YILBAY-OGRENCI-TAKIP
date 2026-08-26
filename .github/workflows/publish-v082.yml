@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release_build/v0.9.7/**'
+      - 'release_build/v0.9.8/**'
+      - 'CELL_PROTOCOL.md'
       - '.github/workflows/publish-v082.yml'
   workflow_dispatch:
 
@@ -20,27 +21,25 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Copy verified v0.9.6 source
+      - name: Copy verified v0.9.7 source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/yilbay097 /tmp/microtools
-          cp -a source/current /tmp/yilbay097
-          test "$(cat /tmp/yilbay097/app/VERSION | tr -d '\r\n')" = "0.9.6"
-          test -s /tmp/yilbay097/app/public/app.js
-          test -s /tmp/yilbay097/app/server.js
-          test -s /tmp/yilbay097/app/bootstrap/orchestrator_node.js
+          rm -rf /tmp/yilbay098 /tmp/microtools
+          cp -a source/current /tmp/yilbay098
+          test "$(cat /tmp/yilbay098/app/VERSION | tr -d '\r\n')" = "0.9.7"
+          test -s /tmp/yilbay098/app/public/app.js
+          test -s /tmp/yilbay098/app/server.js
 
-      - name: Patch automatic Drive answer-key pairing
+      - name: Patch embedded answer-key evidence
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.7/patch_cells_v097.mjs
-          grep -q 'function isDriveAnswerKeyFile' /tmp/yilbay097/app/server.js
-          grep -q 'function drivePairKey' /tmp/yilbay097/app/server.js
-          grep -q 'function pairDriveAnswerKeys' /tmp/yilbay097/app/server.js
-          grep -q 'Otomatik eşleşen cevap anahtarı' /tmp/yilbay097/app/public/app.js
-          grep -q '__CEVAP' /tmp/yilbay097/app/public/app.js
+          node release_build/v0.9.8/patch_cells_v098.mjs
+          grep -q 'function homeworkAnswerKeySearchInstruction' /tmp/yilbay098/app/server.js
+          grep -q 'function validateHomeworkAnswerKeyEvidence' /tmp/yilbay098/app/server.js
+          grep -q 'embedded_adjacent_page' /tmp/yilbay098/app/server.js
+          grep -q 'Cevap Anahtarı Kanıtı' /tmp/yilbay098/app/public/app.js
 
       - name: Install build-only AST parser
         shell: bash
@@ -53,9 +52,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node release_build/v0.9.7/microcellularize.mjs
+          node release_build/v0.9.8/microcellularize.mjs
 
-      - name: Strict micro-cell and answer-key pairing tests
+      - name: Strict micro-cell and answer-key evidence tests
         shell: bash
         run: |
           set -euo pipefail
@@ -63,11 +62,11 @@ jobs:
           import fs from 'fs';
           import vm from 'vm';
           import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
-          const root='/tmp/yilbay097';
+          const root='/tmp/yilbay098';
           const m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
-          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.7') throw new Error('manifest protocol/version');
-          if(m.counts.frontend<90) throw new Error('frontend regression '+m.counts.frontend);
-          if(m.counts.backend<50) throw new Error('answer-key backend cells missing '+m.counts.backend);
+          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.8') throw new Error('manifest protocol/version');
+          if(m.counts.frontend<91) throw new Error('frontend evidence label cell missing');
+          if(m.counts.backend<52) throw new Error('backend evidence cells missing');
           for(const entry of [...m.frontend,...m.backend]){
             const src=fs.readFileSync(root+'/'+entry.file,'utf8');
             const ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});
@@ -78,54 +77,46 @@ jobs:
           const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
           if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')) throw new Error('frontend bundle mismatch');
           if(b!==fs.readFileSync(root+'/app/server.js','utf8')) throw new Error('backend bundle mismatch');
-          const need=['normalizeCourseName','parseDriveResourceFilename','driveMetadataFromFile','isDriveAnswerKeyFile','drivePairKey','pairDriveAnswerKeys'];
-          const ctx={};vm.createContext(ctx);
-          for(const name of need){const e=m.backend.find(x=>x.name===name);if(!e)throw new Error(name+' cell missing');vm.runInContext(fs.readFileSync(root+'/'+e.file,'utf8'),ctx)}
-          const source={id:'s1',name:'LgsMatematik__Sayılar__Mutlak Değer__Orta__20__Test 01.pdf',webViewLink:'x'};
-          const key={id:'k1',name:'LgsMatematik__Sayılar__Mutlak Değer__Orta__20__Test 01__CEVAP.pdf'};
-          let r=ctx.pairDriveAnswerKeys([source,key]);
-          if(r.items.length!==1||r.answerKeyCount!==1||r.pairedAnswerKeyCount!==1||r.ambiguousAnswerKeyCount!==0)throw new Error('pair counts failed '+JSON.stringify(r));
-          if(r.items[0].answerKeyDriveFileId!=='k1'||!r.items[0].answerKeyAutoMatched)throw new Error('automatic pair failed '+JSON.stringify(r.items[0]));
-          const k2={id:'k2',name:'LgsMatematik__Sayılar__Mutlak Değer__Orta__20__Test 01__CEVAP_ANAHTARI.pdf'};
-          r=ctx.pairDriveAnswerKeys([source,key,k2]);
-          if(r.items[0].answerKeyDriveFileId||!r.items[0].answerKeyAmbiguous||r.ambiguousAnswerKeyCount!==1)throw new Error('ambiguous pair guard failed '+JSON.stringify(r));
-          const explicit={...source,appProperties:{yilbayAnswerKeyDriveFileId:'manual-key'}};
-          r=ctx.pairDriveAnswerKeys([explicit,key,k2]);
-          if(r.items[0].answerKeyDriveFileId!=='manual-key'||r.items[0].answerKeyAmbiguous)throw new Error('explicit metadata priority failed '+JSON.stringify(r.items[0]));
-          if(!ctx.isDriveAnswerKeyFile({name:'x__ANSWER_KEY.pdf'})||ctx.isDriveAnswerKeyFile({name:'x.pdf'}))throw new Error('answer-key filename classifier failed');
-          if(!f.includes('__CEVAP')||!f.includes('Otomatik eşleşen cevap anahtarı'))throw new Error('Drive UI hint/result missing');
-          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');
-          if(!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('maximized launch regression');
-          const css=fs.readFileSync(root+'/app/public/styles.css','utf8');
-          if(!css.includes('100dvh')||!css.includes('clamp('))throw new Error('responsive UI regression');
-          console.log('STRICT MICRO CELLS',m.counts,'ANSWER KEY PAIRING OK');
+          const evidence=m.backend.find(x=>x.name==='validateHomeworkAnswerKeyEvidence');
+          const search=m.backend.find(x=>x.name==='homeworkAnswerKeySearchInstruction');
+          if(!evidence||!search)throw new Error('answer-key evidence cells missing');
+          const ctx={};vm.createContext(ctx);vm.runInContext(fs.readFileSync(root+'/'+evidence.file,'utf8'),ctx);vm.runInContext(fs.readFileSync(root+'/'+search.file,'utf8'),ctx);
+          let a={needsTeacherReview:false,autoFinalize:true,answerKeyFound:true,answerKeySource:'embedded_end_pages',answerKeyConfidence:.9,answerKeyEvidence:'Test 01 son sayfa'};
+          let r=ctx.validateHomeworkAnswerKeyEvidence(a,null,{});if(r.needsTeacherReview||!r.autoFinalize||r.answerKeySource!=='embedded_end_pages')throw new Error('embedded key valid case failed');
+          r=ctx.validateHomeworkAnswerKeyEvidence({...a,answerKeyConfidence:.6},null,{});if(!r.needsTeacherReview||r.autoFinalize)throw new Error('low-confidence embedded key guard failed');
+          r=ctx.validateHomeworkAnswerKeyEvidence({...a,answerKeyFound:false,answerKeySource:'ambiguous',answerKeyConfidence:.8},null,{});if(!r.needsTeacherReview||r.answerKeySource!=='ambiguous')throw new Error('ambiguous guard failed');
+          r=ctx.validateHomeworkAnswerKeyEvidence({needsTeacherReview:false,autoFinalize:true},'A B C',{});if(r.answerKeySource!=='manual'||r.answerKeyConfidence!==1)throw new Error('manual priority failed');
+          r=ctx.validateHomeworkAnswerKeyEvidence({needsTeacherReview:false,autoFinalize:true},null,{answerKeyDriveFileId:'k1'});if(r.answerKeySource!=='external_drive'||r.answerKeyConfidence!==1)throw new Error('external priority failed');
+          const instruction=ctx.homeworkAnswerKeySearchInstruction();for(const s of ['aynı sayfanın üstünde veya altında','bir sonraki sayfanın üstünde veya altında','son sayfalarda test isimleriyle toplu'])if(!instruction.includes(s))throw new Error('search instruction missing '+s);
+          if(!b.includes('answerKeyFound')||!b.includes('answerKeyEvidence')||!f.includes('Cevap Anahtarı Kanıtı'))throw new Error('evidence contract UI/backend missing');
+          const protocol=fs.readFileSync('CELL_PROTOCOL.md','utf8');if(!protocol.includes('PDF içi cevap anahtarı protokolü')||!protocol.includes('embedded_end_pages'))throw new Error('protocol missing');
+          const boot=fs.readFileSync(root+'/app/bootstrap/orchestrator_node.js','utf8');if(!boot.includes('--start-maximized')||boot.includes('--start-fullscreen'))throw new Error('launch regression');
+          console.log('STRICT MICRO CELLS',m.counts,'EMBEDDED ANSWER KEY EVIDENCE OK');
           NODE
-          while IFS= read -r f; do node --check "/tmp/yilbay097/$f"; done < <(node -e "const m=require('/tmp/yilbay097/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
-          node --check /tmp/yilbay097/app/public/app.js
-          node --check /tmp/yilbay097/app/server.js
-          node --check /tmp/yilbay097/app/bootstrap/orchestrator_node.js
-          node /tmp/yilbay097/app/tests.js
-          grep -q 'drive.readonly' /tmp/yilbay097/app/server.js
-          grep -q 'resourceContext?.answerKeyDriveFileId' /tmp/yilbay097/app/server.js
+          while IFS= read -r f; do node --check "/tmp/yilbay098/$f"; done < <(node -e "const m=require('/tmp/yilbay098/cells/micro-cell-manifest.json'); console.log([...m.frontend,...m.backend].map(x=>x.file).join('\\n'))")
+          node --check /tmp/yilbay098/app/public/app.js
+          node --check /tmp/yilbay098/app/server.js
+          node /tmp/yilbay098/app/tests.js
+          grep -q 'drive.readonly' /tmp/yilbay098/app/server.js
 
       - name: Runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          PORT=43127 node /tmp/yilbay097/app/server.js >/tmp/v097_server.log 2>/tmp/v097_server.err &
+          PORT=43127 node /tmp/yilbay098/app/server.js >/tmp/v098_server.log 2>/tmp/v098_server.err &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
           OK=0
           for i in $(seq 1 30); do
-            CODE=$(curl -sS -o /tmp/v097_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            CODE=$(curl -sS -o /tmp/v098_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
             if [ "$CODE" = "200" ]; then OK=1; break; fi
             sleep 0.5
           done
           test "$OK" = "1"
-          cat /tmp/v097_health.json
-          grep -q '"version":"0.9.7"' /tmp/v097_health.json
-          curl -fsS http://127.0.0.1:43127/app.js >/tmp/v097_app.js
-          grep -q '__CEVAP' /tmp/v097_app.js
+          grep -q '"version":"0.9.8"' /tmp/v098_health.json
+          CODE=$(curl -sS -o /tmp/v098_homework.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' http://127.0.0.1:43127/api/ai/analyze-homework)
+          test "$CODE" = "400"
+          grep -q 'Ödev dosyası gerekli' /tmp/v098_homework.json
           kill $PID 2>/dev/null || true
           wait $PID 2>/dev/null || true
           trap - EXIT
@@ -134,18 +125,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release/YILBAY_APP_v0.9.7.zip
-          (cd /tmp/yilbay097 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.7.zip" .)
-          SHA=$(sha256sum release/YILBAY_APP_v0.9.7.zip | awk '{print $1}')
+          rm -f release/YILBAY_APP_v0.9.8.zip
+          (cd /tmp/yilbay098 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.8.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.9.8.zip | awk '{print $1}')
           cat > release/latest.json <<JSON
           {
-            "version": "0.9.7",
-            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.7.zip",
+            "version": "0.9.8",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.8.zip",
             "sha256": "$SHA"
           }
           JSON
           rm -rf source/current
-          cp -a /tmp/yilbay097 source/current
+          cp -a /tmp/yilbay098 source/current
 
       - name: Commit verified release
         shell: bash
@@ -153,6 +144,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add release/YILBAY_APP_v0.9.7.zip release/latest.json source/current
-          git commit -m 'Publish verified v0.9.7 automatic Drive answer-key pairing [skip ci]'
+          git add release/YILBAY_APP_v0.9.8.zip release/latest.json source/current CELL_PROTOCOL.md
+          git commit -m 'Publish verified v0.9.8 embedded answer-key evidence [skip ci]'
           git push origin main
