@@ -21,6 +21,7 @@ Sadece JSON döndür:
   const ai=await openaiRequest({instructions,input:[{role:"user",content}],reasoning:"medium"});
   const parsed=validateHomeworkPageCoverage(validateHomeworkAnswerKeyEvidence(validateHomeworkQuestionCount(normalizeHomeworkAnalysis(parseJsonText(ai.text)),resourceContext?.questionCount),answerKey,resourceContext),expectedStudentPages,expectedSourcePages);
   const cost=appendUsage("homework_analysis",ai.model,ai.data?.usage||{}, {studentId:assignment?.studentId||null,assignmentId:assignment?.id||null});
+  writeHomeworkDiagnostic(parsed,cost,assignment);
   return json(res,200,{ok:true,analysis:parsed,autoFinalize:parsed.autoFinalize,usage:ai.data?.usage||null,cost});
 }
 
