@@ -1,0 +1,113 @@
+name: Publish v0.9.0 Google Drive integration
+on:
+  push:
+    paths:
+      - 'release_build/v0.9.0/**'
+      - '.github/workflows/publish-v090.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Copy verified v0.8.2 source
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/yilbay090 /tmp/microtools
+          cp -a source/current /tmp/yilbay090
+          test -s /tmp/yilbay090/app/public/app.js
+          test -s /tmp/yilbay090/app/server.js
+      - name: Apply v0.9.0 Drive patch
+        run: |
+          set -euo pipefail
+          python3 release_build/v0.9.0/patch_v090.py
+      - name: Install build-only AST parser
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/microtools
+          npm install --prefix /tmp/microtools --no-audit --no-fund acorn@8
+      - name: Rebuild strict micro cells
+        run: |
+          set -euo pipefail
+          node release_build/v0.9.0/microcellularize.mjs
+      - name: Micro-cell and security tests
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'fs';
+          import {parse} from '/tmp/microtools/node_modules/acorn/dist/acorn.mjs';
+          const root='/tmp/yilbay090';
+          const m=JSON.parse(fs.readFileSync(root+'/cells/micro-cell-manifest.json','utf8'));
+          if(m.protocol!=='micro-cell-v2-ast'||m.version!=='0.9.0') throw new Error('manifest protocol/version');
+          if(m.counts.frontend<82) throw new Error('Drive frontend cells missing: '+m.counts.frontend);
+          if(m.counts.backend<40) throw new Error('Drive backend cells missing: '+m.counts.backend);
+          for(const entry of [...m.frontend,...m.backend]){
+            const src=fs.readFileSync(root+'/'+entry.file,'utf8');
+            const ast=parse(src,{ecmaVersion:'latest',sourceType:'script'});
+            if(ast.body.length!==1) throw new Error(entry.file+' not single behavior');
+          }
+          const f=m.frontend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
+          const b=m.backend.map(x=>fs.readFileSync(root+'/'+x.file,'utf8')).join('');
+          if(f!==fs.readFileSync(root+'/app/public/app.js','utf8')) throw new Error('frontend bundle mismatch');
+          if(b!==fs.readFileSync(root+'/app/server.js','utf8')) throw new Error('backend bundle mismatch');
+          console.log('MICRO CELLS',m.counts);
+          NODE
+          node --check /tmp/yilbay090/app/public/app.js
+          node --check /tmp/yilbay090/app/server.js
+          node /tmp/yilbay090/app/tests.js
+          ! grep -qi 'powershell.exe' /tmp/yilbay090/app/server.js
+          ! grep -RIl --exclude='*.json' --exclude='*.md' -E 'driveRefreshToken|driveAccessToken' /tmp/yilbay090/app/public || true
+          grep -q 'drive.readonly' /tmp/yilbay090/app/server.js
+          grep -q '/api/drive/index' /tmp/yilbay090/app/server.js
+          grep -q 'DERS__KONU__SEVIYE__BASLIK.pdf' /tmp/yilbay090/app/public/app.js
+      - name: Runtime smoke test
+        run: |
+          set -euo pipefail
+          PORT=43127 node /tmp/yilbay090/app/server.js >/tmp/v090_server.log 2>/tmp/v090_server.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          OK=0
+          for i in $(seq 1 30); do
+            CODE=$(curl -sS -o /tmp/v090_health.json -w '%{http_code}' http://127.0.0.1:43127/health || true)
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
+            sleep 0.5
+          done
+          cat /tmp/v090_health.json || true
+          cat /tmp/v090_server.err || true
+          test "$OK" = "1"
+          grep -q '"version":"0.9.0"' /tmp/v090_health.json
+          curl -fsS http://127.0.0.1:43127/api/drive/status >/tmp/v090_drive.json
+          grep -q '"configured":false' /tmp/v090_drive.json
+          CODE=$(curl -sS -o /tmp/v090_drive_start.json -w '%{http_code}' -X POST http://127.0.0.1:43127/api/drive/oauth/start)
+          test "$CODE" = "400"
+          grep -q 'OAuth Client ID/Secret' /tmp/v090_drive_start.json
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          trap - EXIT
+      - name: Build verified release
+        run: |
+          set -euo pipefail
+          rm -f release/YILBAY_APP_v0.9.0.zip
+          (cd /tmp/yilbay090 && zip -qr "$GITHUB_WORKSPACE/release/YILBAY_APP_v0.9.0.zip" .)
+          SHA=$(sha256sum release/YILBAY_APP_v0.9.0.zip | awk '{print $1}')
+          cat > release/latest.json <<JSON
+          {
+            "version": "0.9.0",
+            "zip_url": "https://raw.githubusercontent.com/yllbay/YILBAY-OGRENCI-TAKIP/main/release/YILBAY_APP_v0.9.0.zip",
+            "sha256": "$SHA"
+          }
+          JSON
+          rm -rf source/current
+          cp -a /tmp/yilbay090 source/current
+      - name: Commit verified release
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/YILBAY_APP_v0.9.0.zip release/latest.json source/current
+          git commit -m 'Publish verified v0.9.0 Drive integration [skip ci]'
+          git push origin main
