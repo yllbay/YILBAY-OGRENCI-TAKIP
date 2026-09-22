@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "cloudflare/inventory-trigger.txt"
+      - ".github/workflows/cloudflare-genesis-inventory.yml"
 
 permissions:
   contents: read
@@ -17,10 +18,9 @@ env:
 jobs:
   inventory:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Verify Cloudflare secrets
+      - name: Verify configured secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -28,28 +28,119 @@ jobs:
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN secret eksik"; exit 10; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID secret eksik"; exit 11; }
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          test "${#ACCOUNT_ID}" -eq 32 || { echo "::error::CLOUDFLARE_ACCOUNT_ID 32 karakterlik Account ID değil (uzunluk=${#ACCOUNT_ID})"; exit 12; }
+          printf '%s' "$ACCOUNT_ID" | grep -Eq '^[0-9A-Fa-f]{32}$' || { echo "::error::CLOUDFLARE_ACCOUNT_ID biçimi geçersiz"; exit 13; }
 
-      - name: Read current Worker inventory
+      - name: Verify Cloudflare token and account
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/cf-inventory
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
           AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
-          curl -fsS "$CF_API_BASE/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME" -H "$AUTH" -o /tmp/cf-inventory/script.json
-          curl -fsS "$CF_API_BASE/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/settings" -H "$AUTH" -o /tmp/cf-inventory/settings.json
-          curl -fsS "$CF_API_BASE/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/deployments" -H "$AUTH" -o /tmp/cf-inventory/deployments.json
-          curl -fsS "$CF_API_BASE/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/cf-inventory/worker-content.bin
+
+          call_json() {
+            name="$1"; url="$2"
+            code=$(curl -sS -o "/tmp/cf-inventory/$name.json" -w '%{http_code}' "$url" -H "$AUTH" || true)
+            echo "$name HTTP $code"
+            if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+              jq -c '{success,errors:[.errors[]? | {code,message}]}' "/tmp/cf-inventory/$name.json" 2>/dev/null || true
+              return 1
+            fi
+          }
+
+          call_json token "$CF_API_BASE/user/tokens/verify" || exit 20
+          jq -e '.success == true and .result.status == "active"' /tmp/cf-inventory/token.json >/dev/null || { echo "::error::Cloudflare API token aktif değil"; exit 21; }
+
+          call_json account "$CF_API_BASE/accounts/$ACCOUNT_ID" || exit 22
+          jq -e '.success == true' /tmp/cf-inventory/account.json >/dev/null || { echo "::error::Account ID bu token ile erişilebilir değil"; exit 23; }
+
+          call_json scripts "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts" || exit 24
+          jq -e --arg name "$CF_SCRIPT_NAME" '.result[]? | select(.id == $name)' /tmp/cf-inventory/scripts.json >/dev/null || { echo "::error::genesis-web-0152 Worker bu hesapta bulunamadı"; exit 25; }
+
+      - name: Read GENESIS Worker metadata
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/settings" -H "$AUTH" -o /tmp/cf-inventory/settings.json
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/script-settings" -H "$AUTH" -o /tmp/cf-inventory/script-settings.json
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/deployments" -H "$AUTH" -o /tmp/cf-inventory/deployments.json
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/cf-inventory/worker-content.bin
           sha256sum /tmp/cf-inventory/worker-content.bin | awk '{print $1}' > /tmp/cf-inventory/worker-content.sha256
 
       - name: Produce sanitized inventory
         run: |
           set -euo pipefail
-          jq '{success,result:{id:.result.id,created_on:.result.created_on,modified_on:.result.modified_on,compatibility_date:.result.compatibility_date,compatibility_flags:.result.compatibility_flags,usage_model:.result.usage_model,etag:.result.etag}}' /tmp/cf-inventory/script.json > /tmp/cf-inventory/script.safe.json
-          jq '{success,result:{compatibility_date:.result.compatibility_date,compatibility_flags:.result.compatibility_flags,main_module:.result.main_module,usage_model:.result.usage_model,placement:.result.placement,limits:.result.limits,observability:.result.observability,migration_tag:.result.migration_tag,bindings:[.result.bindings[]?|{name,type,class_name,service,environment,bucket_name,database_name,namespace_id}]}}' /tmp/cf-inventory/settings.json > /tmp/cf-inventory/settings.safe.json
-          jq '{success,deployments:[.result.deployments[]?|{id,created_on,source,strategy,versions}]}' /tmp/cf-inventory/deployments.json > /tmp/cf-inventory/deployments.safe.json
-          echo "### Cloudflare production inventory" >> "$GITHUB_STEP_SUMMARY"
+          jq --arg name "$CF_SCRIPT_NAME" '{
+            success,
+            worker: ([.result[]? | select(.id == $name) | {
+              id,
+              created_on,
+              modified_on,
+              compatibility_date,
+              compatibility_flags,
+              usage_model,
+              placement,
+              last_deployed_from
+            }] | first)
+          }' /tmp/cf-inventory/scripts.json > /tmp/cf-inventory/worker.safe.json
+
+          jq '{
+            success,
+            result: {
+              compatibility_date,
+              compatibility_flags,
+              main_module,
+              usage_model,
+              placement,
+              limits,
+              observability,
+              migrations,
+              bindings: [.bindings[]? | {
+                name,
+                type,
+                class_name,
+                service,
+                environment,
+                bucket_name,
+                database_name,
+                namespace_id
+              }]
+            }
+          }' /tmp/cf-inventory/settings.json > /tmp/cf-inventory/settings.safe.json
+
+          jq '{
+            success,
+            result: {
+              logpush,
+              observability,
+              tags,
+              tail_consumers
+            }
+          }' /tmp/cf-inventory/script-settings.json > /tmp/cf-inventory/script-settings.safe.json
+
+          jq '{
+            success,
+            deployments: [.result.deployments[]? | {
+              id,
+              created_on,
+              source,
+              strategy,
+              versions
+            }]
+          }' /tmp/cf-inventory/deployments.json > /tmp/cf-inventory/deployments.safe.json
+
+          echo "### Cloudflare GENESIS inventory" >> "$GITHUB_STEP_SUMMARY"
+          echo "Token: active" >> "$GITHUB_STEP_SUMMARY"
+          echo "Account ID: valid and accessible" >> "$GITHUB_STEP_SUMMARY"
           echo "Worker: $CF_SCRIPT_NAME" >> "$GITHUB_STEP_SUMMARY"
           echo "Worker content SHA256: $(cat /tmp/cf-inventory/worker-content.sha256)" >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/cf-inventory/settings.safe.json >> "$GITHUB_STEP_SUMMARY"
@@ -59,8 +150,10 @@ jobs:
         with:
           name: cloudflare-production-inventory
           path: |
-            /tmp/cf-inventory/script.safe.json
+            /tmp/cf-inventory/worker.safe.json
             /tmp/cf-inventory/settings.safe.json
+            /tmp/cf-inventory/script-settings.safe.json
             /tmp/cf-inventory/deployments.safe.json
             /tmp/cf-inventory/worker-content.sha256
+          if-no-files-found: error
           retention-days: 7
