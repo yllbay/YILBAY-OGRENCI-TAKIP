@@ -5,8 +5,7 @@ on:
     branches:
       - cloudflare-release
     paths:
-      - "cloudflare/package/**"
-      - ".github/workflows/cloudflare-fast-package-deploy.yml"
+      - "cloudflare/release-trigger.txt"
 
 concurrency:
   group: genesis-web-0152-production
@@ -15,15 +14,23 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Verify required secrets
         env:
@@ -35,37 +42,87 @@ jobs:
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID secret eksik"; exit 11; }
 
       - name: Validate deployment package
+        working-directory: cloudflare/package
         run: |
           set -euo pipefail
-          test -d cloudflare/package || { echo "::error::cloudflare/package bulunamadı"; exit 20; }
-          if [ ! -f cloudflare/package/wrangler.jsonc ] && [ ! -f cloudflare/package/wrangler.toml ]; then
-            echo "::error::Wrangler production config bulunamadı"
-            exit 21
-          fi
-          if [ -f cloudflare/package/verify.sh ]; then
-            bash cloudflare/package/verify.sh
-          fi
+          test -f wrangler.jsonc
+          test -f Dockerfile
+          test -f index.js
+          test -f curriculum_step1.py
+          test -f patch_app.py
+          python -m py_compile curriculum_step1.py patch_app.py
+          node --check coaching-curriculum.js
+          grep -q 'class GenesisContainer extends Container' index.js
+          grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' patch_app.py
+          npx --yes wrangler@4 deploy --dry-run --outdir /tmp/genesis-wrangler-dry --containers-rollout=none --keep-vars
 
-      - name: Deploy to Cloudflare
+      - name: Login to Cloudflare Container Registry
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          curl -fsS -X POST "$CF_API_BASE/accounts/$ACCOUNT_ID/containers/registries/registry.cloudflare.com/credentials" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"expiration_minutes":10,"permissions":["pull","push"]}' \
+            -o /tmp/registry-creds.json
+          REG_USER="$(jq -r '.result.username // empty' /tmp/registry-creds.json)"
+          REG_PASS="$(jq -r '.result.password // empty' /tmp/registry-creds.json)"
+          test -n "$REG_USER" && test -n "$REG_PASS"
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
+
+      - name: Deploy one tested package
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: cloudflare/package
-          command: deploy
+          command: deploy --keep-vars --containers-rollout=immediate
 
-      - name: Smoke test
+      - name: Wait for container rollout
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev/"
+          for i in $(seq 1 18); do
+            npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container-info.json
+            STATE="$(jq -r '.state // empty' /tmp/container-info.json)"
+            ACTIVE="$(jq -r '.health.instances.active // 0' /tmp/container-info.json)"
+            FAILED="$(jq -r '.health.instances.failed // 0' /tmp/container-info.json)"
+            if [ "$ACTIVE" -ge 1 ] && [ "$FAILED" -eq 0 ]; then
+              echo "Container active"
+              break
+            fi
+            sleep 5
+          done
+          test "$(jq -r '.health.instances.active // 0' /tmp/container-info.json)" -ge 1
+          test "$(jq -r '.health.instances.failed // 0' /tmp/container-info.json)" -eq 0
+
+      - name: Smoke test production and auth guard
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
           OK=0
-          for i in $(seq 1 12); do
-            CODE=$(curl -sS -L -o /tmp/genesis.html -w '%{http_code}' "$URL" || true)
+          for i in $(seq 1 18); do
+            CODE=$(curl -sS -L -o /tmp/genesis.html -w '%{http_code}' "$URL/" || true)
             if [ "$CODE" = "200" ] && grep -qi "GENESIS" /tmp/genesis.html; then
               OK=1
               break
             fi
             sleep 5
           done
-          test "$OK" = "1" || { echo "::error::Production smoke test başarısız"; exit 30; }
-          echo "GENESIS production smoke test OK"
+          test "$OK" = "1" || { echo "::error::Production root smoke test başarısız"; exit 30; }
+
+          API_CODE=$(curl -sS -o /tmp/curriculum.json -w '%{http_code}' "$URL/api/coaching/curriculum/tree" || true)
+          test "$API_CODE" = "401" || { echo "::error::Curriculum auth guard beklenen 401 yerine HTTP $API_CODE"; cat /tmp/curriculum.json; exit 31; }
+          grep -q 'AUTH_REQUIRED' /tmp/curriculum.json || { echo "::error::Curriculum auth guard kodu bulunamadı"; exit 32; }
+
+          STATIC_CODE=$(curl -sS -o /tmp/curriculum.html -w '%{http_code}' "$URL/static/coaching-curriculum.html" || true)
+          test "$STATIC_CODE" = "200" || { echo "::error::Curriculum UI HTTP $STATIC_CODE"; exit 33; }
+          grep -q 'Ders.*Ünite.*Alt Başlık' /tmp/curriculum.html || { echo "::error::Curriculum UI doğrulanamadı"; exit 34; }
+
+          echo "GENESIS Step 1 smoke tests OK"
