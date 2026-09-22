@@ -1,0 +1,54 @@
+name: GENESIS Production Smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/smoke-trigger.txt"
+      - ".github/workflows/genesis-production-smoke.yml"
+
+permissions:
+  contents: read
+
+env:
+  URL: https://genesis-web-0152.yilbayonurcelik.workers.dev
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify production HTTP and Step 1 guard
+        run: |
+          set -euo pipefail
+          ROOT_CODE=$(curl -sS -L -o /tmp/root.html -w '%{http_code}' "$URL/")
+          test "$ROOT_CODE" = "200"
+          grep -qi "GENESIS" /tmp/root.html
+
+          API_CODE=$(curl -sS -o /tmp/curriculum.json -w '%{http_code}' "$URL/api/coaching/curriculum/tree")
+          test "$API_CODE" = "403" || { echo "::error::Curriculum guard HTTP $API_CODE"; cat /tmp/curriculum.json; exit 31; }
+          grep -q 'Koçluk alanı için GENESIS oturumu gerekli' /tmp/curriculum.json
+
+          STATIC_CODE=$(curl -sS -o /tmp/curriculum.html -w '%{http_code}' "$URL/static/coaching-curriculum.html")
+          test "$STATIC_CODE" = "200" || { echo "::error::Curriculum UI HTTP $STATIC_CODE"; exit 33; }
+          grep -q 'Ders' /tmp/curriculum.html
+          grep -q 'Ünite' /tmp/curriculum.html
+          grep -q 'Alt Başlık' /tmp/curriculum.html
+
+      - name: Verify container rollout and logs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container-info.json
+          test "$(jq -r '.health.instances.failed // 0' /tmp/container-info.json)" -eq 0
+          test "$(jq -r '.health.errors | length' /tmp/container-info.json)" -eq 0
+          test "$(jq -r '.observability.logs.enabled // false' /tmp/container-info.json)" = "true"
+          echo "GENESIS production smoke OK"
