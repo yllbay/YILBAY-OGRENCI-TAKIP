@@ -1,2 +1,2 @@
-triggered_at=2026-09-22T17:32:45Z
-purpose=read-only-production-inventory
+triggered_at=2026-09-22T18:10:40Z
+purpose=post-deploy-production-verification
