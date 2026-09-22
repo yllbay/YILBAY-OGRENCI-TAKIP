@@ -1,3 +1,3 @@
-release=genesis-step1-curriculum
-bundle_sha256=4640d3f917b99d845145a1038d63263ec5ace5342a606dcf9fe8d512944130a7
-triggered_at=2026-09-22T20:15:00Z
+release=genesis-step1-curriculum-v2
+bundle_sha256=ac67f39ca73c200456667f1beb735d9293aad23772db07ad608cc814506b0137
+triggered_at=2026-09-22T20:24:00Z
