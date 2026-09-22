@@ -25,7 +25,7 @@ function createCurriculumStore(runtimeDir){
         }
       }
       const ids=[];for(const c of x.courses){ids.push(c.id);for(const u of c.units){ids.push(u.id);for(const t of u.topics)ids.push(t.id)}}
-      x.nextId=Math.max(x.nextId,...ids.map(n=>Number(n)||0),0)+1;
+      x.nextId=Math.max(Number(x.nextId)||1,Math.max(...ids.map(n=>Number(n)||0),0)+1);
       return x;
     }catch{return blank()}
   }
