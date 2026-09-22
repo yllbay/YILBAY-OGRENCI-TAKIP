@@ -41,6 +41,15 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN secret eksik"; exit 10; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID secret eksik"; exit 11; }
 
+      - name: Expand one release bundle
+        run: |
+          set -euo pipefail
+          test -s cloudflare/package-bundle.b64 || { echo "::error::Release bundle eksik"; exit 18; }
+          rm -rf cloudflare/package-runtime
+          mkdir -p cloudflare/package-runtime
+          base64 -d cloudflare/package-bundle.b64 | tar -xz -C cloudflare/package-runtime
+          test -f cloudflare/package-runtime/wrangler.jsonc
+
       - name: Hydrate exact live Worker and base image
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -64,7 +73,7 @@ jobs:
           js=body[:end]
           if b'GenesisContainer' not in js or b'GENESIS_CONTAINER' not in js:
               raise SystemExit('Beklenen GENESIS Worker wrapper bulunamadı')
-          Path('cloudflare/package/index.js').write_bytes(js)
+          Path('cloudflare/package-runtime/index.js').write_bytes(js)
           PY
           npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-live/container-info.json
           CURRENT_IMAGE="$(jq -r '.configuration.image // empty' /tmp/genesis-live/container-info.json)"
@@ -73,13 +82,13 @@ jobs:
           from pathlib import Path
           import sys
           image=sys.argv[1]
-          src=Path('cloudflare/package/Dockerfile.template').read_text()
+          src=Path('cloudflare/package-runtime/Dockerfile.template').read_text()
           if '__CURRENT_IMAGE__' not in src: raise SystemExit('Dockerfile template placeholder eksik')
-          Path('cloudflare/package/Dockerfile').write_text(src.replace('__CURRENT_IMAGE__',image,1))
+          Path('cloudflare/package-runtime/Dockerfile').write_text(src.replace('__CURRENT_IMAGE__',image,1))
           PY
 
       - name: Validate deployment package
-        working-directory: cloudflare/package
+        working-directory: cloudflare/package-runtime
         run: |
           set -euo pipefail
           test -f wrangler.jsonc
@@ -117,7 +126,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: cloudflare/package
+          workingDirectory: cloudflare/package-runtime
           command: deploy --keep-vars --containers-rollout=immediate
 
       - name: Wait for container rollout
