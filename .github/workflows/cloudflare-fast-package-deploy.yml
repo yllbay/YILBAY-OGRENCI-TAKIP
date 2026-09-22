@@ -44,10 +44,11 @@ jobs:
       - name: Expand one release bundle
         run: |
           set -euo pipefail
-          test -s cloudflare/package-bundle.b64 || { echo "::error::Release bundle eksik"; exit 18; }
+          test -s cloudflare/package-bundle.part1.b64 || { echo "::error::Release bundle part1 eksik"; exit 18; }
+          test -s cloudflare/package-bundle.part2.b64 || { echo "::error::Release bundle part2 eksik"; exit 18; }
           rm -rf cloudflare/package-runtime
           mkdir -p cloudflare/package-runtime
-          base64 -d cloudflare/package-bundle.b64 | tar -xz -C cloudflare/package-runtime
+          cat cloudflare/package-bundle.part1.b64 cloudflare/package-bundle.part2.b64 | base64 -d | tar -xJ -C cloudflare/package-runtime
           test -f cloudflare/package-runtime/wrangler.jsonc
 
       - name: Hydrate exact live Worker and base image
