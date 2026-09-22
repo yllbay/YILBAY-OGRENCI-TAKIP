@@ -41,18 +41,56 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN secret eksik"; exit 10; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID secret eksik"; exit 11; }
 
+      - name: Hydrate exact live Worker and base image
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          mkdir -p /tmp/genesis-live
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/genesis-web-0152/content/v2" -H "$AUTH" -o /tmp/genesis-live/worker-content.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/genesis-live/worker-content.bin').read_bytes()
+          boundary=raw.splitlines()[0]
+          sep=b'\r\n\r\n' if b'\r\n\r\n' in raw else b'\n\n'
+          start=raw.find(sep)
+          if start < 0: raise SystemExit('Worker multipart body bulunamadı')
+          body=raw[start+len(sep):]
+          end=body.rfind((b'\r\n' if sep==b'\r\n\r\n' else b'\n')+boundary)
+          if end < 0: raise SystemExit('Worker multipart sınırı bulunamadı')
+          js=body[:end]
+          if b'GenesisContainer' not in js or b'GENESIS_CONTAINER' not in js:
+              raise SystemExit('Beklenen GENESIS Worker wrapper bulunamadı')
+          Path('cloudflare/package/index.js').write_bytes(js)
+          PY
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-live/container-info.json
+          CURRENT_IMAGE="$(jq -r '.configuration.image // empty' /tmp/genesis-live/container-info.json)"
+          test -n "$CURRENT_IMAGE" || { echo "::error::Canlı container image bulunamadı"; exit 19; }
+          python3 - "$CURRENT_IMAGE" <<'PY'
+          from pathlib import Path
+          import sys
+          image=sys.argv[1]
+          src=Path('cloudflare/package/Dockerfile.template').read_text()
+          if '__CURRENT_IMAGE__' not in src: raise SystemExit('Dockerfile template placeholder eksik')
+          Path('cloudflare/package/Dockerfile').write_text(src.replace('__CURRENT_IMAGE__',image,1))
+          PY
+
       - name: Validate deployment package
         working-directory: cloudflare/package
         run: |
           set -euo pipefail
           test -f wrangler.jsonc
+          test -f Dockerfile.template
           test -f Dockerfile
           test -f index.js
           test -f curriculum_step1.py
           test -f patch_app.py
           python -m py_compile curriculum_step1.py patch_app.py
           node --check coaching-curriculum.js
-          grep -q 'class GenesisContainer extends Container' index.js
+          grep -q 'GenesisContainer = class extends Container' index.js
           grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' patch_app.py
           npx --yes wrangler@4 deploy --dry-run --outdir /tmp/genesis-wrangler-dry --containers-rollout=none --keep-vars
 
