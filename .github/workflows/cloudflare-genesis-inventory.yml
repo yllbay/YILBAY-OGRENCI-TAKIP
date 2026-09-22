@@ -90,6 +90,186 @@ jobs:
           npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/cf-inventory/container-info.txt
           npx --yes wrangler@4 containers images list --json > /tmp/cf-inventory/container-images.json
 
+      - name: Inspect current image safely
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          IMAGE="$(jq -r '.configuration.image' /tmp/cf-inventory/container-info.txt)"
+
+          curl -fsS -X POST             "$CF_API_BASE/accounts/$ACCOUNT_ID/containers/registries/registry.cloudflare.com/credentials"             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             -H "Content-Type: application/json"             --data '{"expiration_minutes":5,"permissions":["pull"]}'             -o /tmp/cf-inventory/registry-creds.json
+
+          REG_USER="$(jq -r '.result.username // empty' /tmp/cf-inventory/registry-creds.json)"
+          REG_PASS="$(jq -r '.result.password // empty' /tmp/cf-inventory/registry-creds.json)"
+          test -n "$REG_USER" && test -n "$REG_PASS" || { echo "::error::Registry pull credentials alınamadı"; exit 40; }
+
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null 2>&1
+          docker pull "$IMAGE" >/dev/null
+
+          docker image inspect "$IMAGE" | jq '.[0] | {
+            architecture: .Architecture,
+            os: .Os,
+            config: {
+              working_dir: .Config.WorkingDir,
+              entrypoint: .Config.Entrypoint,
+              cmd: .Config.Cmd,
+              exposed_ports: (.Config.ExposedPorts // {} | keys)
+            }
+          }' > /tmp/cf-inventory/image-inspect.safe.json
+
+          CID="$(docker create "$IMAGE")"
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true; docker logout registry.cloudflare.com >/dev/null 2>&1 || true' EXIT
+          docker export "$CID" -o /tmp/cf-inventory/imagefs.tar
+          tar -tf /tmp/cf-inventory/imagefs.tar | grep -E '(^|/)(server\.js|app\.js|index\.html|styles\.css|package\.json|package-lock\.json|entrypoint[^/]*|start[^/]*|rclone[^/]*|.*fuse[^/]*)
+        run: |
+          set -euo pipefail
+          jq --arg name "$CF_SCRIPT_NAME" '{
+            success,
+            worker: ([.result[]? | select(.id == $name) | {
+              id,
+              created_on,
+              modified_on,
+              compatibility_date,
+              compatibility_flags,
+              usage_model,
+              placement,
+              last_deployed_from
+            }] | first)
+          }' /tmp/cf-inventory/scripts.json > /tmp/cf-inventory/worker.safe.json
+
+          jq '{
+            success,
+            result: {
+              compatibility_date,
+              compatibility_flags,
+              main_module,
+              usage_model,
+              placement,
+              limits,
+              observability,
+              migrations,
+              bindings: [.bindings[]? | {
+                name,
+                type,
+                class_name,
+                service,
+                environment,
+                bucket_name,
+                database_name,
+                namespace_id
+              }]
+            }
+          }' /tmp/cf-inventory/settings.json > /tmp/cf-inventory/settings.safe.json
+
+          jq '{
+            success,
+            result: {
+              logpush,
+              observability,
+              tags,
+              tail_consumers
+            }
+          }' /tmp/cf-inventory/script-settings.json > /tmp/cf-inventory/script-settings.safe.json
+
+          jq '{
+            success,
+            deployments: [.result.deployments[]? | {
+              id,
+              created_on,
+              source,
+              strategy,
+              versions
+            }]
+          }' /tmp/cf-inventory/deployments.json > /tmp/cf-inventory/deployments.safe.json
+
+          jq '{
+            success,
+            result: {
+              id: .result.id,
+              number: .result.number,
+              created_on: .result.created_on,
+              compatibility_date: .result.compatibility_date,
+              compatibility_flags: .result.compatibility_flags,
+              main_module: .result.main_module,
+              migration_tag: .result.migration_tag,
+              migrations: .result.migrations,
+              containers: .result.containers,
+              exports: .result.exports,
+              bindings: [.result.bindings[]? | {
+                name,
+                type,
+                class_name,
+                script_name,
+                service,
+                environment,
+                bucket_name,
+                database_name,
+                namespace_id
+              }],
+              modules: [.result.modules[]? | {
+                name,
+                content_type
+              }],
+              package_dependencies: .result.package_dependencies,
+              placement: .result.placement
+            }
+          }' /tmp/cf-inventory/version.json > /tmp/cf-inventory/version.safe.json
+
+          echo "### Cloudflare GENESIS inventory" >> "$GITHUB_STEP_SUMMARY"
+          echo "Token: active" >> "$GITHUB_STEP_SUMMARY"
+          echo "Account ID: valid format; Worker API erişimi doğrulandı" >> "$GITHUB_STEP_SUMMARY"
+          echo "Worker: $CF_SCRIPT_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "Worker content SHA256: $(cat /tmp/cf-inventory/worker-content.sha256)" >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/cf-inventory/settings.safe.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-production-inventory
+          path: |
+            /tmp/cf-inventory/worker.safe.json
+            /tmp/cf-inventory/settings.safe.json
+            /tmp/cf-inventory/script-settings.safe.json
+            /tmp/cf-inventory/deployments.safe.json
+            /tmp/cf-inventory/version.safe.json
+            /tmp/cf-inventory/containers-list.txt
+            /tmp/cf-inventory/container-info.txt
+            /tmp/cf-inventory/container-images.json
+            /tmp/cf-inventory/image-inspect.safe.json
+            /tmp/cf-inventory/image-paths.safe.txt
+            /tmp/cf-inventory/live-file-hashes.safe.txt
+            /tmp/cf-inventory/wrapper-analysis.safe.json
+            /tmp/cf-inventory/worker-content.sha256
+          if-no-files-found: error
+          retention-days: 7
+             | head -200 > /tmp/cf-inventory/image-paths.safe.txt || true
+
+          : > /tmp/cf-inventory/live-file-hashes.safe.txt
+          for target in server.js app.js index.html styles.css; do
+            P="$(tar -tf /tmp/cf-inventory/imagefs.tar | grep -E "(^|/)$target$" | head -1 || true)"
+            if [ -n "$P" ]; then
+              tar -xOf /tmp/cf-inventory/imagefs.tar "$P" | sha256sum | awk -v p="$P" '{print p" "$1}' >> /tmp/cf-inventory/live-file-hashes.safe.txt
+            fi
+          done
+
+      - name: Analyze Worker wrapper without exposing source
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          raw=Path('/tmp/cf-inventory/worker-content.bin').read_bytes()
+          txt=raw.decode('utf-8','ignore')
+          terms=['role','admin','coach','student','teacher','login','session','cookie','authorization','x-genesis','jwt']
+          flags={t: bool(re.search(re.escape(t),txt,re.I)) for t in terms}
+          headers=sorted(set(re.findall(r'headers?\.(?:get|set|append)\(\s*["\']([^"\']+)["\']',txt,re.I)))
+          paths=sorted(set(re.findall(r'["\'](/(?:api|coaching|login|logout)[A-Za-z0-9_./:-]*)["\']',txt)))[:100]
+          out={'keyword_presence':flags,'header_names':headers[:100],'route_literals':paths,'source_sha256_file':'worker-content.sha256'}
+          Path('/tmp/cf-inventory/wrapper-analysis.safe.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+
       - name: Produce sanitized inventory
         run: |
           set -euo pipefail
