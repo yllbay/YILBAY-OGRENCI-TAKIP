@@ -77,7 +77,9 @@ jobs:
           PY
           npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-live/container-info.json
           CURRENT_IMAGE="$(jq -r '.configuration.image // empty' /tmp/genesis-live/container-info.json)"
+          CURRENT_VERSION="$(jq -r '.version // 0' /tmp/genesis-live/container-info.json)"
           test -n "$CURRENT_IMAGE" || { echo "::error::Canlı container image bulunamadı"; exit 19; }
+          echo "PREVIOUS_CONTAINER_VERSION=$CURRENT_VERSION" >> "$GITHUB_ENV"
           python3 - "$CURRENT_IMAGE" <<'PY'
           from pathlib import Path
           import sys
@@ -151,19 +153,21 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          for i in $(seq 1 18); do
+          READY=0
+          for i in $(seq 1 24); do
             npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container-info.json
-            STATE="$(jq -r '.state // empty' /tmp/container-info.json)"
-            ACTIVE="$(jq -r '.health.instances.active // 0' /tmp/container-info.json)"
+            VERSION="$(jq -r '.version // 0' /tmp/container-info.json)"
             FAILED="$(jq -r '.health.instances.failed // 0' /tmp/container-info.json)"
-            if [ "$ACTIVE" -ge 1 ] && [ "$FAILED" -eq 0 ]; then
-              echo "Container active"
+            ERRORS="$(jq -r '.health.errors | length' /tmp/container-info.json)"
+            if [ "$VERSION" -gt "$PREVIOUS_CONTAINER_VERSION" ] && [ "$FAILED" -eq 0 ] && [ "$ERRORS" -eq 0 ]; then
+              READY=1
+              echo "Container rollout accepted: version $VERSION (active instances may be 0 until request)"
               break
             fi
             sleep 5
           done
-          test "$(jq -r '.health.instances.active // 0' /tmp/container-info.json)" -ge 1
-          test "$(jq -r '.health.instances.failed // 0' /tmp/container-info.json)" -eq 0
+          test "$READY" = "1" || { echo "::error::Container rollout version did not advance cleanly"; cat /tmp/container-info.json; exit 29; }
+          test "$(jq -r '.observability.logs.enabled // false' /tmp/container-info.json)" = "true" || { echo "::error::Container observability logs disabled"; exit 30; }
 
       - name: Smoke test production and auth guard
         run: |
