@@ -87,6 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           npx --yes wrangler@4 containers list > /tmp/cf-inventory/containers-list.txt
+          npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/cf-inventory/container-info.txt
           npx --yes wrangler@4 containers images list --json > /tmp/cf-inventory/container-images.json
 
       - name: Produce sanitized inventory
@@ -202,6 +203,7 @@ jobs:
             /tmp/cf-inventory/deployments.safe.json
             /tmp/cf-inventory/version.safe.json
             /tmp/cf-inventory/containers-list.txt
+            /tmp/cf-inventory/container-info.txt
             /tmp/cf-inventory/container-images.json
             /tmp/cf-inventory/worker-content.sha256
           if-no-files-found: error
