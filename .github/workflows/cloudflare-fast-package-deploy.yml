@@ -194,8 +194,8 @@ jobs:
           test "$OK" = "1" || { echo "::error::Production root smoke test başarısız"; exit 30; }
 
           API_CODE=$(curl -sS -o /tmp/curriculum.json -w '%{http_code}' "$URL/api/coaching/curriculum/tree" || true)
-          test "$API_CODE" = "401" || { echo "::error::Curriculum auth guard beklenen 401 yerine HTTP $API_CODE"; cat /tmp/curriculum.json; exit 31; }
-          grep -q 'AUTH_REQUIRED' /tmp/curriculum.json || { echo "::error::Curriculum auth guard kodu bulunamadı"; exit 32; }
+          test "$API_CODE" = "403" || { echo "::error::Curriculum auth guard beklenen 403 yerine HTTP $API_CODE"; cat /tmp/curriculum.json; exit 31; }
+          grep -q 'Koçluk alanı için GENESIS oturumu gerekli' /tmp/curriculum.json || { echo "::error::Curriculum auth guard mesajı bulunamadı"; exit 32; }
 
           STATIC_CODE=$(curl -sS -o /tmp/curriculum.html -w '%{http_code}' "$URL/static/coaching-curriculum.html" || true)
           test "$STATIC_CODE" = "200" || { echo "::error::Curriculum UI HTTP $STATIC_CODE"; exit 33; }
