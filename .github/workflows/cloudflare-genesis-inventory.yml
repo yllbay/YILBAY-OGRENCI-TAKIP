@@ -116,7 +116,7 @@ jobs:
                   if not f:
                       continue
                   src=f.read().decode('utf-8','ignore')
-                  row={'file':m.name,'imports':[],'functions':[],'classes':[],'routes':[]}
+                  row={'file':m.name,'imports':[],'functions':[],'function_details':[],'classes':[],'routes':[]}
                   try:
                       tree=ast.parse(src)
                   except Exception:
@@ -129,6 +129,22 @@ jobs:
                               row['imports'].append(n.module)
                       elif isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)):
                           row['functions'].append(n.name)
+                          args=[a.arg for a in (list(n.args.posonlyargs)+list(n.args.args)+list(n.args.kwonlyargs))]
+                          calls=[]
+                          for q in ast.walk(n):
+                              if isinstance(q,ast.Call):
+                                  fn=q.func
+                                  if isinstance(fn,ast.Name):
+                                      calls.append(fn.id)
+                                  elif isinstance(fn,ast.Attribute):
+                                      parts=[]
+                                      cur=fn
+                                      while isinstance(cur,ast.Attribute):
+                                          parts.append(cur.attr); cur=cur.value
+                                      if isinstance(cur,ast.Name):
+                                          parts.append(cur.id)
+                                      calls.append('.'.join(reversed(parts)))
+                          row['function_details'].append({'name':n.name,'args':args,'calls':sorted(set(calls))[:120]})
                           for d in n.decorator_list:
                               if isinstance(d,ast.Call) and isinstance(d.func,ast.Attribute) and d.args:
                                   method=d.func.attr.lower()
@@ -138,6 +154,7 @@ jobs:
                           row['classes'].append(n.name)
                   row['imports']=sorted(set(row['imports']))[:100]
                   row['functions']=sorted(set(row['functions']))[:200]
+                  row['function_details']=sorted(row['function_details'],key=lambda x:x['name'])[:250]
                   row['classes']=sorted(set(row['classes']))[:100]
                   out.append(row)
           Path('/tmp/cf-inventory/backend-ast.safe.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
