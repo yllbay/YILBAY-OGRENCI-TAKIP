@@ -121,6 +121,22 @@ jobs:
           test -n "$REG_USER" && test -n "$REG_PASS"
           printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
 
+      - name: Prebuild patched container safely
+        run: |
+          set -euo pipefail
+          docker build -t genesis-step1-preflight -f cloudflare/package-runtime/Dockerfile cloudflare/package-runtime
+          CID="$(docker create genesis-step1-preflight)"
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+          docker cp "$CID:/app/APP/backend/app.py" /tmp/patched-app.py
+          docker cp "$CID:/app/APP/backend/curriculum_step1.py" /tmp/patched-curriculum.py
+          docker cp "$CID:/app/APP/frontend/dist/coaching-curriculum.html" /tmp/patched-curriculum.html
+          grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' /tmp/patched-app.py
+          grep -q '/api/coaching/curriculum/tree' /tmp/patched-curriculum.py
+          grep -q 'Ders.*Ünite.*Alt Başlık' /tmp/patched-curriculum.html
+          python -m py_compile /tmp/patched-app.py /tmp/patched-curriculum.py
+          docker rm -f "$CID" >/dev/null
+          trap - EXIT
+
       - name: Deploy one tested package
         uses: cloudflare/wrangler-action@v4
         with:
