@@ -100,6 +100,49 @@ jobs:
             fi
           done
 
+      - name: Summarize live application structure safely
+        run: |
+          set -euo pipefail
+          tar -tf /tmp/cf-inventory/imagefs.tar | grep '^app/APP/' | head -1500 > /tmp/cf-inventory/app-tree.safe.txt || true
+          python3 - <<'PY'
+          import ast, io, json, re, tarfile
+          from pathlib import Path
+          out=[]
+          with tarfile.open('/tmp/cf-inventory/imagefs.tar','r:') as tf:
+              for m in tf.getmembers():
+                  if not (m.isfile() and m.name.startswith('app/APP/') and m.name.endswith('.py')):
+                      continue
+                  f=tf.extractfile(m)
+                  if not f:
+                      continue
+                  src=f.read().decode('utf-8','ignore')
+                  row={'file':m.name,'imports':[],'functions':[],'classes':[],'routes':[]}
+                  try:
+                      tree=ast.parse(src)
+                  except Exception:
+                      out.append(row); continue
+                  for n in ast.walk(tree):
+                      if isinstance(n,(ast.Import,ast.ImportFrom)):
+                          if isinstance(n,ast.Import):
+                              row['imports'] += [a.name for a in n.names]
+                          elif n.module:
+                              row['imports'].append(n.module)
+                      elif isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                          row['functions'].append(n.name)
+                          for d in n.decorator_list:
+                              if isinstance(d,ast.Call) and isinstance(d.func,ast.Attribute) and d.args:
+                                  method=d.func.attr.lower()
+                                  if method in {'get','post','put','patch','delete','api_route'} and isinstance(d.args[0],ast.Constant) and isinstance(d.args[0].value,str):
+                                      row['routes'].append({'method':method.upper(),'path':d.args[0].value,'function':n.name})
+                      elif isinstance(n,ast.ClassDef):
+                          row['classes'].append(n.name)
+                  row['imports']=sorted(set(row['imports']))[:100]
+                  row['functions']=sorted(set(row['functions']))[:200]
+                  row['classes']=sorted(set(row['classes']))[:100]
+                  out.append(row)
+          Path('/tmp/cf-inventory/backend-ast.safe.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+
       - name: Analyze Worker wrapper safely
         run: |
           set -euo pipefail
@@ -141,6 +184,8 @@ jobs:
             /tmp/cf-inventory/image-inspect.safe.json
             /tmp/cf-inventory/image-paths.safe.txt
             /tmp/cf-inventory/live-file-hashes.safe.txt
+            /tmp/cf-inventory/app-tree.safe.txt
+            /tmp/cf-inventory/backend-ast.safe.json
             /tmp/cf-inventory/wrapper-analysis.safe.json
             /tmp/cf-inventory/worker-content.sha256
           if-no-files-found: error
