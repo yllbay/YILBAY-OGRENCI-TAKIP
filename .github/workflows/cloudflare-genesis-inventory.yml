@@ -144,7 +144,20 @@ jobs:
                                       if isinstance(cur,ast.Name):
                                           parts.append(cur.id)
                                       calls.append('.'.join(reversed(parts)))
-                          row['function_details'].append({'name':n.name,'args':args,'calls':sorted(set(calls))[:120]})
+                          defaults=[]
+                          pos_args=list(n.args.posonlyargs)+list(n.args.args)
+                          pad=[None]*(len(pos_args)-len(n.args.defaults))+list(n.args.defaults)
+                          for a,d in zip(pos_args,pad):
+                              if d is None:
+                                  defaults.append({'arg':a.arg,'default':None})
+                              elif isinstance(d,ast.Call) and isinstance(d.func,ast.Name):
+                                  defaults.append({'arg':a.arg,'default_call':d.func.id})
+                              elif isinstance(d,ast.Call) and isinstance(d.func,ast.Attribute):
+                                  defaults.append({'arg':a.arg,'default_call':d.func.attr})
+                              elif isinstance(d,ast.Constant):
+                                  defaults.append({'arg':a.arg,'default':d.value})
+                          constants=sorted(set(x.value for x in ast.walk(n) if isinstance(x,ast.Constant) and isinstance(x.value,str) and len(x.value)<=200))
+                          row['function_details'].append({'name':n.name,'args':args,'defaults':defaults,'calls':sorted(set(calls))[:120],'string_constants':constants[:120]})
                           for d in n.decorator_list:
                               if isinstance(d,ast.Call) and isinstance(d.func,ast.Attribute) and d.args:
                                   method=d.func.attr.lower()
