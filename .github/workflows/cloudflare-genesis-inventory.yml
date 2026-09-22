@@ -173,6 +173,26 @@ jobs:
           Path('/tmp/cf-inventory/backend-ast.safe.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
           PY
 
+      - name: Extract selected production source files
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cf-inventory/current-source/backend /tmp/cf-inventory/current-source/frontend
+          for p in \
+            app/APP/backend/app.py \
+            app/APP/backend/auth.py \
+            app/APP/backend/coaching_module.py \
+            app/APP/frontend/dist/coaching-desk.html \
+            app/APP/frontend/dist/coaching-desk.js \
+            app/APP/frontend/dist/index.html
+          do
+            test -n "$(tar -tf /tmp/cf-inventory/imagefs.tar | grep -Fx "$p")" || { echo "::error::Eksik production dosyası: $p"; exit 41; }
+            case "$p" in
+              app/APP/backend/*) out="/tmp/cf-inventory/current-source/backend/$(basename "$p")" ;;
+              *) out="/tmp/cf-inventory/current-source/frontend/$(basename "$p")" ;;
+            esac
+            tar -xOf /tmp/cf-inventory/imagefs.tar "$p" > "$out"
+          done
+
       - name: Analyze Worker wrapper safely
         run: |
           set -euo pipefail
@@ -217,6 +237,7 @@ jobs:
             /tmp/cf-inventory/app-tree.safe.txt
             /tmp/cf-inventory/backend-ast.safe.json
             /tmp/cf-inventory/wrapper-analysis.safe.json
+            /tmp/cf-inventory/current-source/
             /tmp/cf-inventory/worker-content.bin
             /tmp/cf-inventory/worker-content.sha256
           if-no-files-found: error
