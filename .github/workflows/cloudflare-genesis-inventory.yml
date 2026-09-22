@@ -76,6 +76,19 @@ jobs:
           curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/cf-inventory/worker-content.bin
           sha256sum /tmp/cf-inventory/worker-content.bin | awk '{print $1}' > /tmp/cf-inventory/worker-content.sha256
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Read container registry inventory
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 containers list > /tmp/cf-inventory/containers-list.txt
+          npx --yes wrangler@4 containers images list --json > /tmp/cf-inventory/container-images.json
+
       - name: Produce sanitized inventory
         run: |
           set -euo pipefail
@@ -188,6 +201,8 @@ jobs:
             /tmp/cf-inventory/script-settings.safe.json
             /tmp/cf-inventory/deployments.safe.json
             /tmp/cf-inventory/version.safe.json
+            /tmp/cf-inventory/containers-list.txt
+            /tmp/cf-inventory/container-images.json
             /tmp/cf-inventory/worker-content.sha256
           if-no-files-found: error
           retention-days: 7
