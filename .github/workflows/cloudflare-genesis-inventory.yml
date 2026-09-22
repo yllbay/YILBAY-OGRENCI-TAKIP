@@ -217,6 +217,7 @@ jobs:
             /tmp/cf-inventory/app-tree.safe.txt
             /tmp/cf-inventory/backend-ast.safe.json
             /tmp/cf-inventory/wrapper-analysis.safe.json
+            /tmp/cf-inventory/worker-content.bin
             /tmp/cf-inventory/worker-content.sha256
           if-no-files-found: error
           retention-days: 1
