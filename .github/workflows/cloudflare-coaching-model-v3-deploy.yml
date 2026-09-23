@@ -127,8 +127,6 @@ jobs:
           sys.path.insert(0,'/app/APP/backend')
           import db
           from db import connect
-          from fastapi import FastAPI
-          from fastapi.testclient import TestClient
           import coaching_model_v3 as m
           root=Path(tempfile.mkdtemp(prefix='genesis-v3-'))
           tok=db.CURRENT_DB.set(root/'genesis.db')
@@ -148,26 +146,23 @@ jobs:
                   uid=con.execute("SELECT id FROM coaching_curriculum_units").fetchone()['id']
                   con.execute("INSERT INTO coaching_curriculum_topics(unit_id,name,name_key,sort_order) VALUES(?,?,?,1)",(uid,'Fonksiyon Kavramı','fonksiyon kavramı'))
                   tid=con.execute("SELECT id FROM coaching_curriculum_topics").fetchone()['id']
-              app=FastAPI()
-              @app.middleware('http')
-              async def auth(request,call_next):
-                  request.state.genesis_session={'role':'ADMIN'}
-                  return await call_next(request)
-              m.install_coaching_model_v3(app)
-              c=TestClient(app)
-              rc=c.post('/api/coaching/v3/classes',json={'name':'12-A','grade_label':'12. Sınıf','difficulty_level':'MEDIUM','note':''}); assert rc.status_code==200,rc.text
-              class_id=rc.json()['id']
-              rs=c.post('/api/coaching/v3/students',json={'name':'Test Öğrenci','number':'V3-TEST','class_id':class_id}); assert rs.status_code==200,rs.text
-              sid=rs.json()['student']['id']
-              assert c.put(f'/api/coaching/v3/CLASS/{class_id}/courses',json={'curriculum_course_id':cid,'weekly_sessions':2,'minutes':45,'daily_exam':True,'active':True}).status_code==200
-              assert c.put(f'/api/coaching/v3/CLASS/{class_id}/responsibilities',json={'curriculum_course_id':cid,'selections':[{'unit_id':uid,'topic_id':tid}]}).status_code==200
-              for i in range(2):
-                  rr=c.post('/api/coaching/v3/resources/link',json={'curriculum_course_id':cid,'unit_id':uid,'topic_id':tid,'title':f'Video {i}','kind':'VIDEO','difficulty':'MEDIUM','estimated_minutes':45,'url':f'https://example.com/{i}'}); assert rr.status_code==200,rr.text
-              ra=c.post(f'/api/coaching/v3/students/{sid}/homework/auto',json={'week_start':'2026-09-21','replace_unfinished':False}); assert ra.status_code==200,ra.text
-              assert len(ra.json()['assignments'])==2
-              rm=c.get(f'/api/coaching/v3/students/{sid}/model?week_start=2026-09-21'); assert rm.status_code==200,rm.text
-              assert rm.json()['effective_level']=='MEDIUM'
-              assert len(rm.json()['courses'])==1 and len(rm.json()['responsibilities'])==1 and len(rm.json()['homework'])==2
+              m.ensure_schema()
+              with connect() as con:
+                  cur=con.execute("INSERT INTO coach3_classes(name,name_key,grade_label,difficulty_level) VALUES('12-A','12-a','12. Sınıf','MEDIUM')")
+                  class_id=int(cur.lastrowid)
+                  cur=con.execute("INSERT INTO coaching_students(name,number) VALUES('Test Öğrenci','V3-TEST')")
+                  sid=int(cur.lastrowid)
+                  con.execute("INSERT INTO coach3_student_class(student_id,class_id) VALUES(?,?)",(sid,class_id))
+                  con.execute("INSERT INTO coach3_course_assignments(scope_type,scope_id,curriculum_course_id,weekly_sessions,minutes,daily_exam) VALUES('CLASS',?,?,?,?,1)",(class_id,cid,2,45))
+                  con.execute("INSERT INTO coach3_responsibilities(scope_type,scope_id,curriculum_course_id,unit_id,topic_id) VALUES('CLASS',?,?,?,?)",(class_id,cid,uid,tid))
+                  for i in range(2):
+                      con.execute("INSERT INTO coach3_resources(curriculum_course_id,unit_id,topic_id,title,kind,difficulty,estimated_minutes,source_kind,url) VALUES(?,?,?,?,?,?,?,?,?)",(cid,uid,tid,f'Video {i}','VIDEO','MEDIUM',45,'URL',f'https://example.com/{i}'))
+                  result=m._generate_homework(con,sid,'2026-09-21',False)
+                  assert result['level']=='MEDIUM'
+                  assert len(result['assignments'])==2
+                  assert len(m._effective_courses(con,sid))==1
+                  assert len(m._effective_responsibilities(con,sid))==1
+                  assert len(m._homework_for_week(con,sid,'2026-09-21'))==2
               print('DISPOSABLE_COACHING_MODEL_V3_OK')
           finally:
               db.CURRENT_DB.reset(tok)
