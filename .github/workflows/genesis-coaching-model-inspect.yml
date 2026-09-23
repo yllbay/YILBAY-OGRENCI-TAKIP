@@ -1,0 +1,51 @@
+name: GENESIS Coaching Model Inspect
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/coaching-model-inspect-trigger.txt"
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Inspect live container coaching model
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          curl -fsS -X POST "$CF_API_BASE/accounts/$ACCOUNT_ID/containers/registries/registry.cloudflare.com/credentials"             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             -H "Content-Type: application/json"             --data '{"expiration_minutes":5,"permissions":["pull"]}'             -o /tmp/creds.json
+          REG_USER="$(jq -r '.result.username // empty' /tmp/creds.json)"
+          REG_PASS="$(jq -r '.result.password // empty' /tmp/creds.json)"
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container.json
+          IMAGE="$(jq -r '.configuration.image' /tmp/container.json)"
+          docker pull "$IMAGE" >/dev/null
+          CID="$(docker create "$IMAGE")"
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true; docker logout registry.cloudflare.com >/dev/null 2>&1 || true' EXIT
+          mkdir -p /tmp/src
+          docker cp "$CID:/app/APP/backend/coaching_v2.py" /tmp/src/coaching_v2.py
+          docker cp "$CID:/app/APP/backend/app.py" /tmp/src/app.py
+          docker cp "$CID:/app/APP/backend/curriculum_step1.py" /tmp/src/curriculum_step1.py
+          echo "===== coaching_v2.py tables/routes ====="
+          grep -nE 'CREATE TABLE|ALTER TABLE|@router\.|@app\.|class |def |INSERT INTO|UPDATE |SELECT |DELETE FROM|coaching_' /tmp/src/coaching_v2.py | head -500 || true
+          echo "===== coaching_v2.py full key range ====="
+          sed -n '1,900p' /tmp/src/coaching_v2.py
+          echo "===== curriculum schema/routes ====="
+          grep -nE 'CREATE TABLE|ALTER TABLE|def |@router\.|INSERT INTO|SELECT |UPDATE ' /tmp/src/curriculum_step1.py | head -400 || true
+          echo "===== app db/schema setup ====="
+          grep -nE 'schema|CREATE TABLE|migration|coaching_v2|curriculum' /tmp/src/app.py | head -500 || true
