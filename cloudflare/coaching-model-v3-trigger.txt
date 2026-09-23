@@ -1,1 +1,1 @@
-2026-09-23 deploy real coaching model v3 retry-3
+2026-09-23 deploy real coaching model v3 retry-4 curriculum-schema-fix
