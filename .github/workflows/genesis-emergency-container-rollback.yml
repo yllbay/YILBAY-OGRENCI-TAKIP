@@ -1,0 +1,119 @@
+name: Emergency GENESIS Container Rollback
+
+on:
+  push:
+    branches:
+      - cloudflare-release
+    paths:
+      - "cloudflare/rollback-trigger.txt"
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+  KNOWN_GOOD_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:2a4af72ce7b67c646777324bae1126686a59907c97ace04ff6c4bb8a999fd
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Expand release runtime
+        run: |
+          set -euo pipefail
+          rm -rf cloudflare/rollback-runtime
+          mkdir -p cloudflare/rollback-runtime
+          cat cloudflare/package-bundle.part1.b64 cloudflare/package-bundle.part2.b64 | base64 -d | tar -xJ -C cloudflare/rollback-runtime
+          test -f cloudflare/rollback-runtime/wrangler.jsonc
+
+      - name: Hydrate current Worker wrapper
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          for i in $(seq 1 5); do
+            if curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/genesis-web-0152/content/v2" -H "$AUTH" -o /tmp/worker-content.bin; then break; fi
+            sleep 3
+          done
+          test -s /tmp/worker-content.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/worker-content.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          candidates=[]
+          for part in raw.split(boundary)[1:]:
+              part=part.strip(b'\r\n-')
+              if not part:
+                  continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part:
+                  continue
+              _,payload=part.split(sep,1)
+              payload=payload.rstrip(b'\r\n')
+              if b'GenesisContainer' in payload and b'GENESIS_CONTAINER' in payload:
+                  candidates.append(payload)
+          if len(candidates)!=1:
+              raise SystemExit(f'Worker wrapper module count: {len(candidates)}')
+          Path('cloudflare/rollback-runtime/index.js').write_bytes(candidates[0])
+          PY
+
+      - name: Point container config to last known good image
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          p=Path('cloudflare/rollback-runtime/wrangler.jsonc')
+          s=p.read_text(encoding='utf-8')
+          image=os.environ['KNOWN_GOOD_IMAGE']
+          s2,n=re.subn(r'("image"\s*:\s*)"[^"]+"', lambda m:m.group(1)+'"'+image+'"', s, count=1)
+          if n!=1:
+              raise SystemExit(f'container image config replacement failed: {n}')
+          p.write_text(s2,encoding='utf-8')
+          PY
+          grep -q "$KNOWN_GOOD_IMAGE" cloudflare/rollback-runtime/wrangler.jsonc
+
+      - name: Deploy known good container image
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: cloudflare/rollback-runtime
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate --yes
+
+      - name: Wait for healthy production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          READY=0
+          for i in $(seq 1 90); do
+            npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/info.json || true
+            IMAGE="$(jq -r '.configuration.image // empty' /tmp/info.json 2>/dev/null || true)"
+            FAILED="$(jq -r '.health.instances.failed // 0' /tmp/info.json 2>/dev/null || echo 0)"
+            ERRORS="$(jq -r '.health.errors | length' /tmp/info.json 2>/dev/null || echo 0)"
+            CODE="$(curl -sS -L --max-time 8 -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+            if [ "$IMAGE" = "$KNOWN_GOOD_IMAGE" ] && [ "$FAILED" -eq 0 ] && [ "$ERRORS" -eq 0 ] && [ "$CODE" = "200" ] && grep -qi GENESIS /tmp/root.html; then
+              READY=1
+              break
+            fi
+            sleep 5
+          done
+          test "$READY" = "1" || { cat /tmp/info.json || true; exit 50; }
+          echo "GENESIS emergency rollback healthy"
