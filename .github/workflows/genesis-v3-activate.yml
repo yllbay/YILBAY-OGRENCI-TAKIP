@@ -1,0 +1,194 @@
+name: GENESIS V3 Production Activate
+
+on:
+  push:
+    branches:
+      - cloudflare-release
+    paths:
+      - "cloudflare/v3-activate-trigger.txt"
+
+concurrency:
+  group: genesis-web-0152-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+  CF_SCRIPT_NAME: genesis-web-0152
+  V3_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe
+  KNOWN_GOOD_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Expand release runtime and hydrate live Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          rm -rf cloudflare/v3-activate-runtime
+          mkdir -p cloudflare/v3-activate-runtime
+          cat cloudflare/package-bundle.part1.b64 cloudflare/package-bundle.part2.b64 | base64 -d | tar -xJ -C cloudflare/v3-activate-runtime
+          test -f cloudflare/v3-activate-runtime/wrangler.jsonc
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          echo "ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/v3-worker-content.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/v3-worker-content.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          candidates=[]
+          for part in raw.split(boundary)[1:]:
+              part=part.strip(b'\r\n-')
+              if not part: continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part: continue
+              _,payload=part.split(sep,1)
+              payload=payload.rstrip(b'\r\n')
+              if b'GenesisContainer' in payload and b'GENESIS_CONTAINER' in payload and b'container.fetch' in payload:
+                  candidates.append(payload)
+          if len(candidates)!=1:
+              raise SystemExit(f'Worker wrapper module count: {len(candidates)}')
+          Path('cloudflare/v3-activate-runtime/index.js').write_bytes(candidates[0])
+          PY
+          node --check cloudflare/v3-activate-runtime/index.js
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/v3-activate-runtime/index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' cloudflare/v3-activate-runtime/index.js
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/v3-before.json
+          CURRENT_IMAGE="$(jq -r '.configuration.image // empty' /tmp/v3-before.json)"
+          echo "CURRENT_IMAGE=$CURRENT_IMAGE"
+          test "$CURRENT_IMAGE" = "$KNOWN_GOOD_IMAGE"
+
+      - name: Prepare exact V3 production config
+        run: |
+          set -euo pipefail
+          TARGET_IMAGE="$V3_IMAGE" python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          p=Path('cloudflare/v3-activate-runtime/wrangler.jsonc')
+          s=p.read_text(encoding='utf-8')
+          image=os.environ['TARGET_IMAGE']
+          s2,n=re.subn(r'("image"\s*:\s*)"[^"]+"',lambda m:m.group(1)+'"'+image+'"',s,count=1)
+          if n!=1: raise SystemExit(f'image replacement failed: {n}')
+          p.write_text(s2,encoding='utf-8')
+          PY
+          grep -q "$V3_IMAGE" cloudflare/v3-activate-runtime/wrangler.jsonc
+
+      - name: Validate bindings and dry-run
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: cloudflare/v3-activate-runtime
+        run: |
+          set -euo pipefail
+          node --check index.js
+          python3 - <<'PY'
+          import json
+          c=json.load(open('wrangler.jsonc'))
+          assert c['name']=='genesis-web-0152'
+          assert c['containers'][0]['class_name']=='GenesisContainer'
+          assert c['containers'][0]['max_instances']==1
+          assert c['containers'][0]['instance_type']=='standard-1'
+          assert any(b['binding']=='GENESIS_DATA' and b['bucket_name']=='genesis-web-0152-data' for b in c['r2_buckets'])
+          assert any(b['name']=='GENESIS_CONTAINER' and b['class_name']=='GenesisContainer' for b in c['durable_objects']['bindings'])
+          PY
+          npx --yes wrangler@4 deploy --dry-run --keep-vars --containers-rollout=none
+
+      - name: Activate V3 with automatic rollback guard
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -u
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          RUNTIME="cloudflare/v3-activate-runtime"
+
+          set_image() {
+            TARGET_IMAGE="$1" python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          p=Path('cloudflare/v3-activate-runtime/wrangler.jsonc')
+          s=p.read_text(encoding='utf-8')
+          image=os.environ['TARGET_IMAGE']
+          s2,n=re.subn(r'("image"\s*:\s*)"[^"]+"',lambda m:m.group(1)+'"'+image+'"',s,count=1)
+          if n!=1: raise SystemExit(f'image replacement failed: {n}')
+          p.write_text(s2,encoding='utf-8')
+          PY
+          }
+
+          rollback() {
+            echo "V3 activation failed; restoring verified image."
+            set_image "$KNOWN_GOOD_IMAGE" || return 1
+            (cd "$RUNTIME" && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate) || return 1
+            for i in $(seq 1 35); do
+              npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/v3-rollback-info.json 2>/dev/null || true
+              IMG="$(jq -r '.configuration.image // empty' /tmp/v3-rollback-info.json 2>/dev/null || true)"
+              FAILED="$(jq -r '.health.instances.failed // 0' /tmp/v3-rollback-info.json 2>/dev/null || echo 0)"
+              ERRORS="$(jq -r '.health.errors | length' /tmp/v3-rollback-info.json 2>/dev/null || echo 0)"
+              CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/v3-root.html -w '%{http_code}' "$URL/" || true)"
+              echo "ROLLBACK_CHECK=$i HTTP=$CODE FAILED=$FAILED ERRORS=$ERRORS IMAGE=$IMG"
+              if [ "$IMG" = "$KNOWN_GOOD_IMAGE" ] && [ "$FAILED" -eq 0 ] && [ "$ERRORS" -eq 0 ] && [ "$CODE" = "200" ]; then
+                echo "ROLLBACK_HEALTHY"
+                return 0
+              fi
+              sleep 5
+            done
+            return 1
+          }
+
+          if ! (cd "$RUNTIME" && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate); then
+            rollback
+            exit 41
+          fi
+
+          READY=0
+          for i in $(seq 1 40); do
+            npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/v3-info.json 2>/dev/null || true
+            IMG="$(jq -r '.configuration.image // empty' /tmp/v3-info.json 2>/dev/null || true)"
+            FAILED="$(jq -r '.health.instances.failed // 0' /tmp/v3-info.json 2>/dev/null || echo 0)"
+            ERRORS="$(jq -r '.health.errors | length' /tmp/v3-info.json 2>/dev/null || echo 0)"
+            ROOT_CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/v3-root.html -w '%{http_code}' "$URL/" || true)"
+            echo "V3_CHECK=$i HTTP=$ROOT_CODE FAILED=$FAILED ERRORS=$ERRORS IMAGE=$IMG"
+            if [ "$IMG" = "$V3_IMAGE" ] && [ "$FAILED" -eq 0 ] && [ "$ERRORS" -eq 0 ] && [ "$ROOT_CODE" = "200" ]; then
+              AUTH_CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/auth.json -w '%{http_code}' "$URL/api/auth/me" || true)"
+              CLASS_CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/classes.json -w '%{http_code}' "$URL/api/coaching/v3/classes" || true)"
+              CURR_CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/curr.json -w '%{http_code}' "$URL/api/coaching/v3/curriculum" || true)"
+              V2_CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/v2students.json -w '%{http_code}' "$URL/api/coaching/v2/students" || true)"
+              echo "API auth=$AUTH_CODE v3_classes=$CLASS_CODE v3_curriculum=$CURR_CODE v2_students=$V2_CODE"
+              if [ "$AUTH_CODE" = "200" ] && [ "$CLASS_CODE" = "200" ] && [ "$CURR_CODE" = "200" ] && [ "$V2_CODE" = "200" ] && jq -e '.authenticated==true and .role=="ADMIN"' /tmp/auth.json >/dev/null 2>&1; then
+                READY=1
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          if [ "$READY" != "1" ]; then
+            rollback
+            exit 42
+          fi
+
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/v3-root.html
+          COACH_CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching")"
+          test "$COACH_CODE" = "200"
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' /tmp/coaching.html
+          INVALID_CODE="$(curl -sS --connect-timeout 10 --max-time 20 -o /tmp/invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token")"
+          test "$INVALID_CODE" = "404"
+          CACHE="$(curl -sSI "$URL/static/coaching-v2.js?v=0.15.2-coaching-2" | tr -d '\r' | awk 'BEGIN{IGNORECASE=1}/^cache-control:/{print;exit}')"
+          echo "$CACHE" | grep -qi 'no-store'
+          jq '{version,image:.configuration.image,health,observability}' /tmp/v3-info.json
+          echo "GENESIS_V3_PRODUCTION_ACTIVE"
