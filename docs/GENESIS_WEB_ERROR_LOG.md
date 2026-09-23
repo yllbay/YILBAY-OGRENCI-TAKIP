@@ -324,5 +324,53 @@ Doğrulama:
 Production etkisi:
 Önceki hızlı "Ders Ekle → courseForm()" davranışı kullanıcı talebi doğrultusunda kaldırıldı ve bağımsız kopya mimarisiyle değiştirildi. Backend, schema, storage, single-ADMIN auth, curriculum ve public invalid-token davranışlarında değişiklik yapılmadı.
 
+## 20. Koçluk Stüdyosu değişikliğinin tarayıcıda görünmemesi — immutable cache
+Tarih: 2026-09-23
+
+Hata:
+Koçluk Stüdyosu sidebar ve bağımsız Ders Ekle alanı production container image'ında mevcut ve deploy/inventory kontrolleri başarılı olmasına rağmen kullanıcı tarayıcıda hiçbir değişiklik görmedi.
+
+Kök neden:
+`coaching-v2.html`, `coaching-v2.js` ve `coaching-v2.css` çağrılarında eski `?v=0.15.1` query değeri korunmuştu.
+Backend cache middleware'i query parametresi bulunan `/static/*` varlıklarını:
+`Cache-Control: public, max-age=31536000, immutable`
+olarak işaretliyordu.
+Bu nedenle tarayıcı daha önce indirdiği eski Koçluk JS/CSS dosyalarını yeniden istemeden kullanabiliyordu.
+
+Neden önceki doğrulama kaçırdı:
+- production container kaynakları doğruydu
+- static assetler HTTP 200 dönüyordu
+- JS syntax testleri geçiyordu
+- fakat smoke test response cache header'ını ve asset version invalidation'ını kontrol etmiyordu
+
+Çözüm:
+- `cloudflare/coaching_cache_policy.py` eklendi.
+- `coaching-v2.js/css` query sürümü `0.15.2-coaching-2` olarak değiştirildi.
+- `/static/coaching-v2.js` ve `/static/coaching-v2.css` için query parametresinden bağımsız `no-store, no-cache, must-revalidate` cache policy uygulandı.
+- Release smoke testine canlı response header doğrulaması eklendi.
+- Koçluk JS/CSS response'larında `Cache-Control: no-store` bulunmadığında deploy artık başarısız sayılacaktır.
+
+Production:
+- Fast Cloudflare Package Deploy run: 35861430658
+- sonuç: SUCCESS
+- Worker version ID: 38d23959-2051-4fab-91df-ab7edc14eb61
+- Worker version number: 59
+- Container version: 46
+- Container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:3512f2bc64094a76ac08c01ecf3209750ad7ee7cc54f511ed1062ab3c5b97a0b
+
+Bağımsız doğrulama:
+- Cloudflare GENESIS Inventory run: 35861901562
+- sonuç: SUCCESS
+- canlı app.py içinde `GENESIS_COACHING_HOT_ASSET_CACHE_V1` mevcut
+- canlı coaching-v2.html yeni JS/CSS query sürümlerini içeriyor
+- 23 kritik statik asset HTTP 200
+- 14 JavaScript syntax kontrolü başarılı
+- container failed=0
+- health.errors=[]
+- observability logs enabled
+
+Production etkisi:
+Koçluk Stüdyosu değişikliklerinin tarayıcıda eski immutable assetler nedeniyle gizlenmesi engellendi. Diğer versioned statik assetlerin mevcut cache politikası değiştirilmedi.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
