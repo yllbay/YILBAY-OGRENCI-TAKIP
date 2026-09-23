@@ -1,0 +1,52 @@
+name: GENESIS Worker Package Contract Inspect
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/worker-contract-trigger.txt"
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_SCRIPT_NAME: genesis-web-0152
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect live Worker multipart and settings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          mkdir -p /tmp/w
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/w/content.bin
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/settings" -H "$AUTH" -o /tmp/w/settings.json
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/script-settings" -H "$AUTH" -o /tmp/w/script-settings.json
+          echo "===== SETTINGS ====="; jq . /tmp/w/settings.json
+          echo "===== SCRIPT SETTINGS ====="; jq . /tmp/w/script-settings.json
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/w/content.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          print("BOUNDARY",boundary.decode(errors='replace'))
+          for i,part in enumerate(raw.split(boundary)[1:]):
+              part=part.strip(b'\r\n-')
+              if not part: continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part: continue
+              h,p=part.split(sep,1)
+              print("===== PART",i,"HEADERS =====")
+              print(h.decode(errors='replace'))
+              print("PAYLOAD_BYTES",len(p))
+              if b'GenesisContainer' in p:
+                  print("===== WORKER HEAD =====")
+                  print(p[:7000].decode(errors='replace'))
+          PY
