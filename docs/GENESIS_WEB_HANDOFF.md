@@ -207,6 +207,44 @@ Son audit sırasında /api/auth/setup-status:
 {"admin_configured":false}
 Bu, mevcut kodda first-login setup akışının desteklediği bir durumdur; tek başına hata sayılmaz. Kullanıcı tarafından gerçek production yönetici kimlik bilgisi verilmediği için production üzerinde yapay admin hesabı oluşturulmadı. Authenticated browser davranışları disposable production-source entegrasyon testleriyle doğrulandı.
 
+
+## 11. 2026-09-23 tek ADMIN / şifresiz doğrudan giriş modu
+
+Kullanıcının açık talimatı:
+- GENESIS açılışında kullanıcı adı/şifre sorulmayacak.
+- Uygulama doğrudan ADMIN yetkisiyle açılacak.
+- Diğer kurum/kullanıcı hesapları kaldırılacak.
+- Yeni kurum kullanıcısı oluşturma ve kurum kullanıcı yönetimi kapatılacak.
+
+Uygulanan production davranışı:
+- Auth middleware oturum yoksa otomatik ADMIN session üretir.
+- /api/auth/me ilk istekte authenticated=true, role=ADMIN, institution_id=null, must_change_password=false döndürür.
+- Kurum kullanıcı hesapları institutions tablosundan temizlenir.
+- INSTITUTION rolündeki auth_sessions kayıtları temizlenir.
+- Kurumlara ait veri klasörleri silinmez; yalnız hesap/oturum katmanı kaldırılır.
+- /api/auth/register-institution kapalıdır.
+- /api/admin/institutions GET dışındaki kurum yönetim işlemleri kapalıdır.
+- Ana uygulamadaki "Yeni Kurum Oluştur", "Kurumları Yönet", "Yönetici Şifresini Değiştir" vb. kullanıcı yönetimi UI öğeleri kaldırılmıştır.
+- Public öğrenci/online token yolları mevcut public davranışını korur; otomatik ADMIN session bu public token yollarına zorla uygulanmaz.
+
+Release:
+- cloudflare-release release trigger: single-admin-auto-session-v2
+- Fast Cloudflare Package Deploy run: 35852251918
+- sonuç: SUCCESS
+- Container rollout: version 43
+- production smoke: SUCCESS
+
+Smoke doğrulamaları:
+- root HTTP 200
+- /api/auth/me: ADMIN otomatik oturum doğrulandı
+- /api/coaching/curriculum/tree: HTTP 200, ADMIN erişimi doğrulandı
+- /api/admin/institutions: HTTP 200 ve []
+- yeni kurum kullanıcısı oluşturma denemesi: HTTP 410
+- curriculum UI HTTP 200
+- invalid online token davranışı 404 olarak korunuyor
+
+Bu mod artık GENESIS WEB production için kanonik auth davranışıdır.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -223,9 +261,9 @@ Adım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
 Güncel Worker: c37ee267-f427-4b8d-b00f-6aabd4062d4d.
-Güncel container version: 40.
+Güncel container version: 43.
 Kullanıcı bir sonraki fonksiyonel geliştirme adımını henüz tarif etmedi.
-Production üzerinde yapay admin hesabı oluşturulmayacak; gerçek kimlik bilgisi olmadan authenticated production verisine müdahale edilmeyecek.
+Production auth modu: kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumu. Kurum kullanıcı hesapları kaldırılmıştır; kurum veri klasörleri korunmuştur.
 TinyFish kullanılmayacak.
 Ayrıca GENESIS web geliştirme sohbetlerinin otomatik devir sistemi için Chrome uzantısı geliştiriliyor.
 
