@@ -32,10 +32,10 @@
 - Deploy aracı: Wrangler
 - Container observability logs: enabled
 - Kalıcılık: mevcut GENESIS DATA/SQLite yapısı korunur.
-- Son doğrulanmış Worker version ID: 26942052-2d03-4e6c-a531-cd94892d8c4b
-- Son doğrulanmış Worker version number: 60
-- Son doğrulanmış container version: 47
-- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:2a4af72ce7b67c646777324bae1126686a59907c97ace04ff6c4bb4bb8a999fd
+- Son doğrulanmış Worker version ID: 2a2a844c-bf51-407b-a4ce-a71a99dc20f4
+- Son doğrulanmış Worker version number: 73
+- Son doğrulanmış container version: 55
+- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e
 
 ## GitHub dalları
 - main: production envanter/smoke altyapısı ve kaynak
@@ -564,6 +564,84 @@ Bağımsız canlı HTTP doğrulama:
 Not:
 `Kurum Açma` düğmesi mevcut kurum formunu açar. Single-ADMIN güvenlik modunda kurum oluşturma backend işleminin HTTP 410 ile kapalı olması değiştirilmemiştir; kullanıcı yalnız ilgili ekranın açılmasını istemiştir.
 
+## 17. 2026-09-23 Koçluk Stüdyosu sade dashboard yeniden tasarımı
+
+Kullanıcının açık talebi:
+- Önceki PNG konseptleri yalnız tasarım referansı olarak kullanılacak; yeni PNG üretilmeyecek.
+- Koçluk Stüdyosu gerçek web dashboard'u sade, kullanımı kolay ve gereksiz düğmelerden arındırılmış biçimde yeniden düzenlenecek.
+- Kullanıcının uzun vadeli hedefleri dashboard mimarisine yansıtılacak:
+  - sınıf ve öğrenci yönetimi
+  - ders / ünite / alt başlık sorumlulukları
+  - PDF / test içerikleri ve Kolay-Orta-Zor düzeyi
+  - otomatik haftalık ödev planı
+  - bugün / hafta / geçmiş ödev görünümü
+  - online sınav ve karne / analiz akışları
+
+Production öncesi doğrulama:
+- Canlı `coaching-v2.html` ve `coaching-v2.js` GitHub Actions üzerinden tekrar incelendi.
+- Mevcut gerçek API ve fonksiyonlar doğrulandı:
+  - `GET /api/coaching/v2/students`
+  - `GET /api/coaching/v2/students/{id}/dashboard?week_start=...`
+  - öğrenci ekleme
+  - öğrenci ders / konu atama
+  - haftalık plan
+  - günlük sınav
+  - performans analizi
+- Önceki tarayıcı günlüğündeki `/api/coaching/v2/students/1/dashboard?week_start=2026-09-21` HTTP 500 kaydı ayrıca yeniden test edildi.
+- GENESIS Coaching Dashboard API Smoke run: `35904129171`
+- sonuç: SUCCESS; mevcut ilk öğrenci için aynı hafta dashboard endpointi HTTP 200 verdi.
+
+Uygulanan dashboard:
+- Worker-edge patch: `cloudflare/coaching_dashboard_edge.py`
+- marker: `GENESIS_COACHING_DASHBOARD_EDGE_V1`
+- container kaynaklarına, backend'e, schema'ya veya persistent storage'a dokunulmadı.
+- Dashboard üç ana alandan oluşur:
+  1. **Sınıflar ve Öğrenciler**
+     - gerçek öğrenci listesi `/api/coaching/v2/students` üzerinden gelir
+     - öğrenci arama
+     - Öğrenci Ekle
+     - seçili öğrenci
+     - Ders Ata / Detay
+     - Sınıf düğmesi gelecekteki sınıf veri modeline ayrılmıştır; sahte sınıf verisi üretilmez
+  2. **Haftalık Çalışma Programı**
+     - Bugün / Hafta / Geçmiş Ödevler
+     - gerçek haftalık görevler ve online sınav atamaları dashboard API'sinden gösterilir
+     - önceki / sonraki hafta ve Bu Hafta navigasyonu
+  3. **Akademik Yapı ve Atamalar**
+     - Dersler
+     - Üniteler ve Alt Başlıklar
+     - Sorumluluk Seçimi
+     - İçerik Yüklemeleri
+     - Otomatik Ödev Ayarı
+     - Sınav ve Karne
+- Mevcut ayrıntılı koçluk ekranı silinmedi.
+- Ders / sorumluluk / sınav / analiz işlemlerinde mevcut `coaching-v2` çalışma alanı açılır ve `← Dashboard` ile yeni sade dashboard'a dönülür.
+- Merkezi müfredat için mevcut `/static/coaching-curriculum.html` kullanılır.
+- Henüz backend'i bulunmayan sınıf modeli ve Kolay-Orta-Zor otomatik ödev eşleştirmesi sahte veriyle taklit edilmedi; dashboard bu alanları gelecekteki fonksiyonel geliştirmeye hazır şekilde gösterir.
+
+Teknik neden:
+- Mevcut production container OCI layer zinciri yeni layer eklenmesinde daha önce `max depth exceeded` sınırına ulaşmıştır.
+- Bu UI geliştirmesi bu nedenle container rollout yapılmadan Worker HTML response overlay olarak uygulanmıştır.
+- Mevcut container image ve data katmanı korunmuştur.
+
+Release:
+- coaching dashboard edge patch commit: `d06765ab838c2fffa5e2ef737e30775c9c4ea069`
+- Worker overlay workflow update: `df965ff369cac10d68908fc71832105fab874fa8`
+- deploy trigger commit: `42f9f115da72b1e7190dec2a18de22bd0aeda699`
+- GENESIS Worker Dashboard Overlay run: `35904421924`
+- sonuç: SUCCESS
+- Worker version ID: `2a2a844c-bf51-407b-a4ce-a71a99dc20f4`
+- Worker version number: `73`
+- Container version: `55`
+- Container image: `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e`
+- container failed instance: 0
+- health errors: []
+- observability logs: enabled
+- Worker deploy `--containers-rollout=none`; container image/version deploy öncesi ve sonrası aynı doğrulandı.
+- Production smoke içinde root dashboard, `/coaching`, yeni coaching marker, öğrenci API'si ve dashboard API'si doğrulandı.
+
+Bu değişiklik mevcut koçluk dashboard'unun görsel/gezinti katmanıdır. Kullanıcının tarif ettiği sınıf veri modeli, içerik zorluk seviyesi, otomatik ödev motoru, PDF üzerinde kalemle sınav, optik ve öğrenci karne arşivi gibi yeni backend fonksiyonları ayrıca kullanıcı adımlarıyla geliştirilecektir.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -579,10 +657,10 @@ Adım 1 sonucunda:
 Adım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
-Güncel Worker: e5c0fde8-10bb-4a13-8ec9-0bd48d593d75.
+Güncel Worker: 2a2a844c-bf51-407b-a4ce-a71a99dc20f4 (version number 73).
 Güncel container version: 55.
 GENESIS WEB kök açılış sayfası koyu lacivert/mor görsel dilde üç panelli Yönetim Panelidir. İlk panelde alt alta Soru Stüdyosu, Koçluk Stüdyosu ve Kurum Açma düğmeleri bulunur. Soru Stüdyosu `/?workspace=1`, Koçluk Stüdyosu `/coaching` hedefini açar; Kurum Açma mevcut kurum açma diyaloğunu çağırır. Önceki Konular / Konu Soruları / Testler çalışma alanı silinmemiştir.
-Koçluk Stüdyosu yan paneli arama → Öğrenci Ekle → Ders Ekle → öğrenci listesi sırasındadır. Ders Ekle, ana GENESIS konu/soru/test menülerinin Koçluk Stüdyosu içinde bağımsız state ve bağımsız DOM/CSS ile çalışan salt-okunur kopyasını açar; ana sayfanın state veya işlevlerini kullanmaz. Koçluk Stüdyosu JS/CSS assetleri için uzun süreli immutable browser cache kapatılmış ve asset URL sürümleri cache-bust edilmiştir.
+Koçluk Stüdyosu artık sade üç alanlı yönetim dashboard'u ile açılır: Sınıflar ve Öğrenciler / Haftalık Çalışma Programı / Akademik Yapı ve Atamalar. Gerçek öğrenci listesi ve haftalık görev/sınav verileri mevcut coaching-v2 API'lerinden alınır. Ayrıntılı eski çalışma alanı silinmemiştir; ders, sorumluluk, sınav ve analiz işlemleri gerektiğinde aynı sayfa içinde açılır ve Dashboard'a geri dönülebilir. Henüz backend'i olmayan sınıf ve zorluk-düzeyi otomasyonları sahte veri üretmeden gelecekteki adımlar için ayrılmıştır. Koçluk Stüdyosu JS/CSS assetleri için uzun süreli immutable browser cache kapalıdır.
 Bu UI geliştirmeleri Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.
 Production auth modu: kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumu. Kurum kullanıcı hesapları kaldırılmıştır; kurum veri klasörleri korunmuştur.
 TinyFish kullanılmayacak.
