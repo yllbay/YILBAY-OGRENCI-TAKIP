@@ -1,0 +1,137 @@
+name: GENESIS Worker Dashboard Overlay
+
+on:
+  push:
+    branches:
+      - cloudflare-release
+    paths:
+      - "cloudflare/worker-ui-trigger.txt"
+
+concurrency:
+  group: genesis-web-0152-worker-ui
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
+jobs:
+  deploy-worker-overlay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Expand release package and hydrate live Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          rm -rf cloudflare/package-runtime
+          mkdir -p cloudflare/package-runtime /tmp/genesis-worker-overlay
+          cat cloudflare/package-bundle.part1.b64 cloudflare/package-bundle.part2.b64 | base64 -d | tar -xJ -C cloudflare/package-runtime
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/genesis-web-0152/content/v2" -H "$AUTH" -o /tmp/genesis-worker-overlay/worker-content.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/genesis-worker-overlay/worker-content.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          candidates=[]
+          for part in raw.split(boundary)[1:]:
+              part=part.strip(b'\r\n-')
+              if not part:
+                  continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part:
+                  continue
+              _,payload=part.split(sep,1)
+              payload=payload.rstrip(b'\r\n')
+              if b'GenesisContainer' in payload and b'GENESIS_CONTAINER' in payload and b'container.fetch' in payload:
+                  candidates.append(payload)
+          if len(candidates)!=1:
+              raise SystemExit(f'Expected one Worker module, found {len(candidates)}')
+          Path('cloudflare/package-runtime/index.js').write_bytes(candidates[0])
+          PY
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-worker-overlay/container-before.json
+          IMAGE="$(jq -r '.configuration.image // empty' /tmp/genesis-worker-overlay/container-before.json)"
+          VERSION="$(jq -r '.version // 0' /tmp/genesis-worker-overlay/container-before.json)"
+          test -n "$IMAGE"
+          echo "CONTAINER_IMAGE_BEFORE=$IMAGE" >> "$GITHUB_ENV"
+          echo "CONTAINER_VERSION_BEFORE=$VERSION" >> "$GITHUB_ENV"
+          printf 'FROM %s\n' "$IMAGE" > cloudflare/package-runtime/Dockerfile
+
+      - name: Patch only Worker response
+        run: |
+          set -euo pipefail
+          python cloudflare/home_dashboard_edge.py
+          node --check cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
+          grep -q 'Soru Stüdyosu' cloudflare/package-runtime/index.js
+          grep -q 'Koçluk Stüdyosu' cloudflare/package-runtime/index.js
+          grep -q 'Kurum Açma' cloudflare/package-runtime/index.js
+
+      - name: Deploy Worker without container rollout
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare/package-runtime
+          command: deploy --keep-vars --containers-rollout=none
+
+      - name: Verify container unchanged
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-worker-overlay/container-after.json
+          IMAGE="$(jq -r '.configuration.image // empty' /tmp/genesis-worker-overlay/container-after.json)"
+          VERSION="$(jq -r '.version // 0' /tmp/genesis-worker-overlay/container-after.json)"
+          test "$IMAGE" = "$CONTAINER_IMAGE_BEFORE" || { echo "::error::Container image changed"; exit 31; }
+          test "$VERSION" = "$CONTAINER_VERSION_BEFORE" || { echo "::error::Container version changed"; exit 32; }
+
+      - name: Smoke test live overlay and destinations
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          OK=0
+          for i in $(seq 1 18); do
+            CODE="$(curl -sS -L -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+            if [ "$CODE" = "200" ] && grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/root.html; then
+              OK=1
+              break
+            fi
+            sleep 3
+          done
+          test "$OK" = "1" || { echo "::error::Dashboard edge overlay not live"; exit 40; }
+          grep -q 'Soru Stüdyosu' /tmp/root.html
+          grep -q 'Koçluk Stüdyosu' /tmp/root.html
+          grep -q 'Kurum Açma' /tmp/root.html
+          grep -q 'location.assign("/?workspace=1")' /tmp/root.html
+          grep -q 'location.assign("/coaching")' /tmp/root.html
+          grep -q 'window.genesisCreateInstitution' /tmp/root.html
+          test "$(curl -sS -L -o /tmp/workspace.html -w '%{http_code}' "$URL/?workspace=1")" = "200"
+          test "$(curl -sS -L -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching")" = "200"
+          curl -fsS "$URL/static/genesis-auth-gate.js" -o /tmp/auth.js
+          grep -q 'window.genesisCreateInstitution' /tmp/auth.js
+          echo "GENESIS worker dashboard overlay smoke OK"
