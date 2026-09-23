@@ -1,2 +1,2 @@
-release=step1-curriculum
-reason=exact-multipart-wrapper-hydration-observability-fix
+release=public-token-route-hotfix
+reason=restore-student-and-online-token-routes-without-relaxing-admin-guards
