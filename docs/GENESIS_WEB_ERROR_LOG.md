@@ -210,5 +210,37 @@ GENESIS WEB çalışmalarında TinyFish hiçbir koşulda kullanılmayacaktır.
 Uygulama:
 Bundan sonraki production envanter, kaynak analizi, deploy ve doğrulamalar GitHub / GitHub Actions / Cloudflare hattıyla yürütülmelidir.
 
+## 17. Tek ADMIN / şifresiz doğrudan giriş modu
+Tarih: 2026-09-23
+
+Kullanıcı talimatı:
+GENESIS yalnız ADMIN olarak çalışacak; kullanıcı adı/şifre sorulmayacak; diğer kullanıcılar kaldırılacak.
+
+Uygulama değişikliği:
+- Oturum yoksa backend otomatik ADMIN session oluşturur.
+- /api/auth/me otomatik ADMIN kimliğini doğrular.
+- institutions kayıtları temizlenir.
+- INSTITUTION auth session kayıtları temizlenir.
+- Kurum veri klasörleri ve içerikleri silinmez.
+- Yeni kurum kaydı ve kurum kullanıcı yönetimi API işlemleri HTTP 410 ile kapatılmıştır.
+- İlgili kurum oluşturma/yönetme ve admin şifre değiştirme UI kontrolleri kaldırılmıştır.
+- Public öğrenci ve online sınav token yolları bu otomatik ADMIN davranışının dışında tutulmuştur.
+
+Production deploy:
+- Fast Cloudflare Package Deploy run: 35852251918
+- sonuç: SUCCESS
+- Container version: 43
+
+Post-deploy smoke:
+- /api/auth/me => authenticated=true, role=ADMIN, institution_id=null, must_change_password=false
+- /api/coaching/curriculum/tree => HTTP 200
+- /api/admin/institutions => []
+- POST /api/admin/institutions => HTTP 410
+- root ve curriculum UI => HTTP 200
+- invalid online token => HTTP 404 davranışı korunuyor
+
+Not:
+Bu bir hata düzeltmesinden çok kullanıcı tarafından talep edilen auth mimarisi değişikliğidir. Güvenlik sonucu olarak production URL'sine erişebilen herkes ADMIN yetkisine sahip olur.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
