@@ -103,20 +103,13 @@ jobs:
           set -euo pipefail
           cat > cloudflare/package-runtime/patch_online_token.py <<'PY'
           from pathlib import Path
-
           path=Path('/app/APP/backend/online_exam_module.py')
           src=path.read_text(encoding='utf-8')
           marker='GENESIS_ONLINE_INVALID_TOKEN_GUARD'
           if marker in src:
               raise SystemExit(0)
-          needle='''        if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}",public_token):
-            raise HTTPException(400,"Sınav bağlantısı geçersiz.")
-'''
-          replacement=needle+'''        # GENESIS_ONLINE_INVALID_TOKEN_GUARD
-        # A well-formed but unknown token must not look like a tunnel that is still starting.
-        if not online_row_by_token(public_token):
-            raise HTTPException(404,"Online sınav bulunamadı.")
-'''
+          needle='        if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}",public_token):\n            raise HTTPException(400,"Sınav bağlantısı geçersiz.")\n'
+          replacement=needle+'        # GENESIS_ONLINE_INVALID_TOKEN_GUARD\n        if not online_row_by_token(public_token):\n            raise HTTPException(404,"Online sınav bulunamadı.")\n'
           if needle not in src:
               raise SystemExit('Online internet-test guard patch point bulunamadı')
           path.write_text(src.replace(needle,replacement,1),encoding='utf-8')
