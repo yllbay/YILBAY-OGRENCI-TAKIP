@@ -1,2 +1,2 @@
-release=online-invalid-token-guard-v2
-reason=retry-after-workflow-yaml-fix
+release=online-invalid-token-guard-v3
+reason=retry-after-yaml-safe-patch
