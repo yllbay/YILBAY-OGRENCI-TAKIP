@@ -216,6 +216,23 @@ jobs:
           python3 -m compileall -q /tmp/cf-inventory/audit-source/backend
           for f in /tmp/cf-inventory/audit-source/frontend/*.js; do node --check "$f" >/dev/null; done
 
+      - name: Verify GENESIS opening dashboard source
+        run: |
+          set -euo pipefail
+          HTML=/tmp/cf-inventory/audit-source/frontend/index.html
+          JS=/tmp/cf-inventory/audit-source/frontend/app-0.10.7.js
+          CSS=/tmp/cf-inventory/audit-source/frontend/genesis-home-dashboard-0.15.2.css
+          test -s "$HTML" && test -s "$JS" && test -s "$CSS"
+          grep -q 'GENESIS_HOME_DASHBOARD_V1' "$HTML"
+          grep -q 'genesis-home-dashboard-0.15.2.css?v=20260923-home-1' "$HTML"
+          grep -q 'app-0.10.7.js?v=20260923-home-1' "$HTML"
+          grep -q 'GENESIS_HOME_DASHBOARD_V1' "$JS"
+          grep -q 'Yönetim Paneli' "$JS"
+          grep -q 'İşlemler' "$JS"
+          grep -q 'Durum' "$JS"
+          grep -q 'GENESIS_HOME_DASHBOARD_V1' "$CSS"
+          node --check "$JS"
+
       - name: Analyze Worker wrapper safely
         run: |
           set -euo pipefail
@@ -281,6 +298,7 @@ jobs:
           critical=[
             "/static/genesis-auth-gate.js",
             "/static/app-0.10.7.js",
+            "/static/genesis-home-dashboard-0.15.2.css",
             "/static/genesis-online-01.js",
             "/static/coaching-v2.html",
             "/static/coaching-v2.js",
