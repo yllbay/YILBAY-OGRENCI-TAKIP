@@ -20,14 +20,16 @@ jobs:
           URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
           check(){
             name="$1"; shift
-            code="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o "/tmp/$name.out" -w '%{http_code}' "$@" || true)"
+            code="$(curl --connect-timeout 10 --max-time 45 -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o "/tmp/$name.out" -w '%{http_code}' "$@" || true)"
             echo "$name HTTP=$code"
-            head -c 1200 "/tmp/$name.out" || true
-            echo
             test "$code" = "200" || return 1
           }
           check root "$URL/" || exit 11
           grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/root.out || { echo "root overlay missing"; exit 12; }
+          check health "$URL/api/health" || exit 23
+          jq -c '{version,schema,storage,persistent_storage,runtime}' /tmp/health.out
+          check auth "$URL/api/auth/me" || exit 24
+          jq -e '.authenticated==true and .role=="ADMIN"' /tmp/auth.out >/dev/null || exit 25
           check coaching "$URL/coaching" || exit 13
           grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' /tmp/coaching.out || { echo "coaching overlay missing"; exit 14; }
           check classes "$URL/api/coaching/v3/classes" || exit 15
@@ -40,7 +42,7 @@ jobs:
             check olddash "$URL/api/coaching/v2/students/$SID/dashboard?week_start=2026-09-21" || exit 20
             check model "$URL/api/coaching/v3/students/$SID/model?week_start=2026-09-21" || exit 21
           fi
-          INVALID="$(curl -sS -o /tmp/invalid.out -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token" || true)"
-          echo "invalid-token HTTP=$INVALID"; cat /tmp/invalid.out || true
+          INVALID="$(curl --connect-timeout 10 --max-time 45 -sS -o /tmp/invalid.out -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token" || true)"
+          echo "invalid-token HTTP=$INVALID"
           test "$INVALID" = "404" || exit 22
           echo "GENESIS_COACHING_V3_PRODUCTION_SMOKE_OK"
