@@ -182,13 +182,19 @@ jobs:
             exit 42
           fi
 
-          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/v3-root.html
-          COACH_CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching")"
-          test "$COACH_CODE" = "200"
-          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' /tmp/coaching.html
-          INVALID_CODE="$(curl -sS --connect-timeout 10 --max-time 20 -o /tmp/invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token")"
-          test "$INVALID_CODE" = "404"
-          CACHE="$(curl -sSI "$URL/static/coaching-v2.js?v=0.15.2-coaching-2" | tr -d '\r' | awk 'BEGIN{IGNORECASE=1}/^cache-control:/{print;exit}')"
-          echo "$CACHE" | grep -qi 'no-store'
+          if ! (
+            set -euo pipefail
+            grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/v3-root.html
+            COACH_CODE="$(curl -sS -L --connect-timeout 10 --max-time 20 -c /tmp/v3.cookies -b /tmp/v3.cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching")"
+            test "$COACH_CODE" = "200"
+            grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' /tmp/coaching.html
+            INVALID_CODE="$(curl -sS --connect-timeout 10 --max-time 20 -o /tmp/invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token")"
+            test "$INVALID_CODE" = "404"
+            CACHE="$(curl -sSI "$URL/static/coaching-v2.js?v=0.15.2-coaching-2" | tr -d '\r' | awk 'BEGIN{IGNORECASE=1}/^cache-control:/{print;exit}')"
+            echo "$CACHE" | grep -qi 'no-store'
+          ); then
+            rollback
+            exit 43
+          fi
           jq '{version,image:.configuration.image,health,observability}' /tmp/v3-info.json
           echo "GENESIS_V3_PRODUCTION_ACTIVE"
