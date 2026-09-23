@@ -22,16 +22,23 @@ CSS_MARK = 'GENESIS_COACHING_COURSE_COPY_V1'
 
 html = html_path.read_text(encoding='utf-8')
 if HTML_MARK not in html:
-    old_sidebar = '<aside class="sidebar"><div class="side-heading"><span>ÖĞRENCİLER</span><button id="addStudent" class="icon-btn" title="Öğrenci ekle">+</button></div><label class="search"><span>⌕</span><input id="studentSearch" placeholder="Öğrenci ara" autocomplete="off"></label><div id="studentList" class="student-list"></div><div class="side-foot">'
-    new_sidebar = '<aside class="sidebar"><!-- '+HTML_MARK+' --><label class="search"><span>⌕</span><input id="studentSearch" placeholder="Öğrenci ara" autocomplete="off"></label><div class="side-actions"><button id="addStudent" class="sidebar-action primary">+ Öğrenci Ekle</button><button id="addCourseWorkspace" class="sidebar-action">+ Ders Ekle</button></div><div id="studentList" class="student-list"></div><div class="side-foot">'
-    if old_sidebar not in html:
-        raise SystemExit('Coaching sidebar patch point not found')
-    html = html.replace(old_sidebar, new_sidebar, 1)
+    # Replace the sidebar prefix structurally. This supports both the original
+    # production sidebar and the previously deployed quick-action variant.
+    aside_start = '<aside class="sidebar">'
+    list_marker = '<div id="studentList" class="student-list"></div>'
+    a = html.find(aside_start)
+    b = html.find(list_marker, a)
+    if a < 0 or b < 0:
+        raise SystemExit('Coaching sidebar structural patch point not found')
+    b += len(list_marker)
+    new_prefix = '<aside class="sidebar"><!-- '+HTML_MARK+' --><label class="search"><span>⌕</span><input id="studentSearch" placeholder="Öğrenci ara" autocomplete="off"></label><div class="side-actions"><button id="addStudent" class="sidebar-action primary">+ Öğrenci Ekle</button><button id="addCourseWorkspace" class="sidebar-action">+ Ders Ekle</button></div>'+list_marker
+    html = html[:a] + new_prefix + html[b:]
     old_main = '<main class="main"><div id="empty" class="empty">'
-    new_main = '<main class="main"><section id="courseWorkspace" class="course-copy-shell" hidden></section><div id="empty" class="empty">'
-    if old_main not in html:
-        raise SystemExit('Coaching main patch point not found')
-    html = html.replace(old_main, new_main, 1)
+    if 'id="courseWorkspace"' not in html:
+        new_main = '<main class="main"><section id="courseWorkspace" class="course-copy-shell" hidden></section><div id="empty" class="empty">'
+        if old_main not in html:
+            raise SystemExit('Coaching main patch point not found')
+        html = html.replace(old_main, new_main, 1)
     html_path.write_text(html, encoding='utf-8')
 
 js = js_path.read_text(encoding='utf-8')
@@ -68,11 +75,15 @@ function toggleCourseCopyTest(id){courseCopy.expandedTests.has(Number(id))?cours
         raise SystemExit('Coaching delegated click patch point not found')
     js = js.replace(old_click, new_click, 1)
 
-    old_handlers = "const handlers={addStudent:()=>studentForm(),emptyAdd:()=>studentForm(),homeBtn:()=>location.assign('/'),"
+    original_handlers = "const handlers={addStudent:()=>studentForm(),emptyAdd:()=>studentForm(),homeBtn:()=>location.assign('/'),"
+    quick_handlers = "const handlers={addStudent:()=>studentForm(),sideAddCourse:()=>{if(!state.selected||!state.dashboard){toast('Ders eklemek için önce bir öğrenci seçin.',true);return}/* GENESIS_COACHING_SIDEBAR_ACTIONS */setTab('courses');courseForm()},emptyAdd:()=>studentForm(),homeBtn:()=>location.assign('/'),"
     new_handlers = "const handlers={addStudent:()=>studentForm(),addCourseWorkspace:()=>action(openCourseCopy),emptyAdd:()=>studentForm(),homeBtn:()=>location.assign('/'),"
-    if old_handlers not in js:
+    if original_handlers in js:
+        js = js.replace(original_handlers, new_handlers, 1)
+    elif quick_handlers in js:
+        js = js.replace(quick_handlers, new_handlers, 1)
+    else:
         raise SystemExit('Coaching handler patch point not found')
-    js = js.replace(old_handlers, new_handlers, 1)
     js_path.write_text(js, encoding='utf-8')
 
 css = css_path.read_text(encoding='utf-8')
