@@ -1,2 +1,2 @@
-release=online-invalid-token-guard-v3
-reason=retry-after-yaml-safe-patch
+release=curriculum-desk-link-fix
+reason=repair-broken-tracking-desk-navigation
