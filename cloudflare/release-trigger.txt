@@ -1,2 +1,2 @@
-release=single-admin-auto-session
-reason=remove-login-prompt-and-multi-user-access
+release=single-admin-auto-session-v2
+reason=tracked-passwordless-admin-release
