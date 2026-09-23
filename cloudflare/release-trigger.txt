@@ -1,2 +1,2 @@
-release=curriculum-desk-link-fix
-reason=repair-broken-tracking-desk-navigation
+release=single-admin-auto-session
+reason=remove-login-prompt-and-multi-user-access
