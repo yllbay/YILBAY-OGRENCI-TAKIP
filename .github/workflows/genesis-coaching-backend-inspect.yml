@@ -1,0 +1,52 @@
+name: GENESIS Coaching Backend Inspect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/coaching-backend-inspect-trigger.txt"
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Pull current production image and inspect coaching backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container.json
+          IMAGE="$(jq -r '.configuration.image' /tmp/container.json)"
+          curl -fsS -X POST "$CF_API_BASE/accounts/$ACCOUNT_ID/containers/registries/registry.cloudflare.com/credentials"             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             -H "Content-Type: application/json"             --data '{"expiration_minutes":5,"permissions":["pull"]}'             -o /tmp/registry-creds.json
+          REG_USER="$(jq -r '.result.username // empty' /tmp/registry-creds.json)"
+          REG_PASS="$(jq -r '.result.password // empty' /tmp/registry-creds.json)"
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
+          docker pull "$IMAGE" >/dev/null
+          CID="$(docker create "$IMAGE")"
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true; docker logout registry.cloudflare.com >/dev/null 2>&1 || true' EXIT
+          docker cp "$CID:/app/APP/backend/coaching_v2.py" /tmp/coaching_v2.py
+          docker cp "$CID:/app/APP/backend/app.py" /tmp/app.py
+          echo "===== coaching_v2.py tables / migrations ====="
+          grep -nE 'CREATE TABLE|ALTER TABLE|CREATE INDEX|schema|migrat|def ensure|def init|sqlite|connect\(' /tmp/coaching_v2.py | head -260 || true
+          echo "===== coaching_v2.py routes ====="
+          grep -nE '@router\.(get|post|put|patch|delete)' /tmp/coaching_v2.py | head -320 || true
+          echo "===== coaching_v2.py first 360 lines ====="
+          sed -n '1,360p' /tmp/coaching_v2.py
+          echo "===== coaching_v2.py 360-760 ====="
+          sed -n '360,760p' /tmp/coaching_v2.py
+          echo "===== app.py coaching integration ====="
+          grep -nE 'coaching_v2|include_router|schema_version|SCHEMA|init_db|CREATE TABLE' /tmp/app.py | head -260 || true
