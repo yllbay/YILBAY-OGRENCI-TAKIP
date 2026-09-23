@@ -93,7 +93,7 @@ jobs:
         working-directory: cloudflare/rollback-runtime
         run: |
           set -euo pipefail
-          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate --yes
+          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
 
       - name: Wait for healthy production
         env:
