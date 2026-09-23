@@ -43,7 +43,7 @@ jobs:
           REG_USER="$(jq -r '.result.username' /tmp/registry.json)"
           REG_PASS="$(jq -r '.result.password' /tmp/registry.json)"
           skopeo copy --src-creds "$REG_USER:$REG_PASS" "docker://$IMAGE" oci:/tmp/genesis-oci:live
-          sudo umoci unpack --image /tmp/genesis-oci:live /tmp/genesis-bundle
+          umoci unpack --rootless --image /tmp/genesis-oci:live /tmp/genesis-bundle
           test -f /tmp/genesis-bundle/rootfs/app/APP/backend/app.py
           test -f /tmp/genesis-bundle/rootfs/app/APP/backend/coaching_v2.py
           test -f /tmp/genesis-bundle/rootfs/app/start-container.sh
