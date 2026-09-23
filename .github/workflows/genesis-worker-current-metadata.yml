@@ -37,6 +37,7 @@ jobs:
           echo "WORKER_VERSION_ID=$VERSION_ID"
           echo "WORKER_VERSION_NUMBER=$(jq -r '.result.number // .result.version_number // "unknown"' /tmp/version.json)"
           npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container.json
+          jq '{version,image:.configuration.image,health,active_rollout_id,instances,max_instances}' /tmp/container.json
           echo "CONTAINER_VERSION=$(jq -r '.version' /tmp/container.json)"
           echo "CONTAINER_IMAGE=$(jq -r '.configuration.image' /tmp/container.json)"
           echo "CONTAINER_FAILED=$(jq -r '.health.instances.failed // 0' /tmp/container.json)"
