@@ -114,28 +114,37 @@ jobs:
               raise SystemExit('Online internet-test guard patch point bulunamadı')
           path.write_text(src.replace(needle,replacement,1),encoding='utf-8')
           PY
-          printf '\nCOPY patch_online_token.py /tmp/patch_online_token.py\nRUN python /tmp/patch_online_token.py && rm -f /tmp/patch_online_token.py\n' >> cloudflare/package-runtime/Dockerfile
       - name: Apply single-admin package patches
         run: |
           set -euo pipefail
           cp cloudflare/single_admin_mode.py cloudflare/package-runtime/single_admin_mode.py
           cp cloudflare/single_admin_ui.py cloudflare/package-runtime/single_admin_ui.py
-          printf '\nCOPY single_admin_mode.py /tmp/single_admin_mode.py\nRUN python /tmp/single_admin_mode.py && rm -f /tmp/single_admin_mode.py\nCOPY single_admin_ui.py /tmp/single_admin_ui.py\nRUN python /tmp/single_admin_ui.py && rm -f /tmp/single_admin_ui.py\n' >> cloudflare/package-runtime/Dockerfile
       - name: Apply coaching sidebar independent course copy
         run: |
           set -euo pipefail
           cp cloudflare/coaching_sidebar_coursecopy.py cloudflare/package-runtime/coaching_sidebar_coursecopy.py
-          printf '\nCOPY coaching_sidebar_coursecopy.py /tmp/coaching_sidebar_coursecopy.py\nRUN python /tmp/coaching_sidebar_coursecopy.py && rm -f /tmp/coaching_sidebar_coursecopy.py\n' >> cloudflare/package-runtime/Dockerfile
       - name: Apply coaching cache invalidation policy
         run: |
           set -euo pipefail
           cp cloudflare/coaching_cache_policy.py cloudflare/package-runtime/coaching_cache_policy.py
-          printf '\nCOPY coaching_cache_policy.py /tmp/coaching_cache_policy.py\nRUN python /tmp/coaching_cache_policy.py && rm -f /tmp/coaching_cache_policy.py\n' >> cloudflare/package-runtime/Dockerfile
       - name: Apply GENESIS opening dashboard
         run: |
           set -euo pipefail
           cp cloudflare/home_dashboard.py cloudflare/package-runtime/home_dashboard.py
-          printf '\nCOPY home_dashboard.py /tmp/home_dashboard.py\nRUN python /tmp/home_dashboard.py && rm -f /tmp/home_dashboard.py\n' >> cloudflare/package-runtime/Dockerfile
+      - name: Append combined production patches
+        run: |
+          set -euo pipefail
+          cat >> cloudflare/package-runtime/Dockerfile <<'EOF'
+          
+          COPY patch_online_token.py single_admin_mode.py single_admin_ui.py coaching_sidebar_coursecopy.py coaching_cache_policy.py home_dashboard.py /tmp/genesis-patches/
+          RUN python /tmp/genesis-patches/patch_online_token.py && \
+              python /tmp/genesis-patches/single_admin_mode.py && \
+              python /tmp/genesis-patches/single_admin_ui.py && \
+              python /tmp/genesis-patches/coaching_sidebar_coursecopy.py && \
+              python /tmp/genesis-patches/coaching_cache_policy.py && \
+              python /tmp/genesis-patches/home_dashboard.py && \
+              rm -rf /tmp/genesis-patches
+          EOF
       - name: Fix curriculum desk navigation
         run: |
           set -euo pipefail
