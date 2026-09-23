@@ -32,10 +32,10 @@
 - Deploy aracı: Wrangler
 - Container observability logs: enabled
 - Kalıcılık: mevcut GENESIS DATA/SQLite yapısı korunur.
-- Son doğrulanmış Worker version ID: c8d8c872-4570-446e-9506-e9d00bd8c302
-- Son doğrulanmış Worker version number: 58
-- Son doğrulanmış container version: 45
-- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:fbb8d87d7e967414cbb5788152cdfe28b39a83cfb40160a0cdbd2dc3d68fe39a
+- Son doğrulanmış Worker version ID: 38d23959-2051-4fab-91df-ab7edc14eb61
+- Son doğrulanmış Worker version number: 59
+- Son doğrulanmış container version: 46
+- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:3512f2bc64094a76ac08c01ecf3209750ad7ee7cc54f511ed1062ab3c5b97a0b
 
 ## GitHub dalları
 - main: production envanter/smoke altyapısı ve kaynak
@@ -357,6 +357,63 @@ Bağımsız post-deploy inventory:
 
 Bu geliştirme de Adım 2 olarak sınıflandırılmamıştır; kullanıcı tarafından açıkça istenen Koçluk Stüdyosu UI/mimari düzenlemesidir.
 
+## 14. 2026-09-23 Koçluk Stüdyosu görünmüyor — browser cache invalidation düzeltmesi
+
+Kullanıcı bildirimi:
+- Bağımsız Ders Ekle çalışma alanı production deploy ve inventory kontrollerinden geçmesine rağmen kullanıcı Koçluk Stüdyosu ekranında hiçbir değişiklik görmedi.
+
+Canlı teşhis:
+- Production container source snapshot'ında `/coaching` route'unun gerçekten `coaching-v2.html` döndürdüğü doğrulandı.
+- Canlı `coaching-v2.html` yeni sidebar yapısını içeriyordu.
+- Kök neden yanlış route değildi.
+- `coaching-v2.html`, CSS ve JS'i hâlâ `?v=0.15.1` query değeriyle çağırıyordu.
+- Backend cache middleware'i query parametresi olan tüm `/static/*` dosyalarını `public, max-age=31536000, immutable` olarak işaretliyordu.
+- Böylece kullanıcı tarayıcısı eski `coaching-v2.js/css` dosyalarını bir yıl geçerli immutable cache'ten kullanabiliyordu.
+- Önceki smoke test yalnız asset HTTP 200 ve içerik marker'larını kontrol ettiği için gerçek browser cache invalidation sorunu yakalanmamıştı.
+
+Çözüm:
+- Yeni production patch: `cloudflare/coaching_cache_policy.py`.
+- `coaching-v2.css` asset URL'si `?v=0.15.2-coaching-2` olarak değiştirildi.
+- `coaching-v2.js` asset URL'si `?v=0.15.2-coaching-2` olarak değiştirildi.
+- Backend cache middleware'ine `GENESIS_COACHING_HOT_ASSET_CACHE_V1` kuralı eklendi.
+- Aktif geliştirilen `/static/coaching-v2.js` ve `/static/coaching-v2.css` artık query parametresi olsa bile:
+  - `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
+  - `Pragma: no-cache`
+  - `Expires: 0`
+  döndürür.
+- Böylece sonraki Koçluk Stüdyosu değişikliklerinin aynı sabit immutable cache sorunu nedeniyle görünmemesi engellendi.
+
+Release:
+- cache patch commit: 4155d17ddaa97a385fb83f9f00300cfadb2d75ca
+- workflow doğrulama commit: f41b7fdba9b79fb11bad97d8c53d34417166427b
+- deploy trigger commit: d197f05f0a594f387a1aada268cf35f1b20f74c6
+- Fast Cloudflare Package Deploy run: 35861430658
+- sonuç: SUCCESS
+- Worker version ID: 38d23959-2051-4fab-91df-ab7edc14eb61
+- Worker version number: 59
+- Container version: 46
+- Container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:3512f2bc64094a76ac08c01ecf3209750ad7ee7cc54f511ed1062ab3c5b97a0b
+
+Deploy smoke'a eklenen yeni zorunlu kontroller:
+- canlı `coaching-v2.html` yeni JS/CSS query sürümünü içermeli
+- canlı `coaching-v2.js?v=0.15.2-coaching-2` response header'ında `Cache-Control: no-store` bulunmalı
+- canlı `coaching-v2.css?v=0.15.2-coaching-2` response header'ında `Cache-Control: no-store` bulunmalı
+- bu kontroller geçmeden release SUCCESS sayılmaz
+
+Bağımsız post-deploy inventory:
+- main trigger commit: c0506b66c150a76c2b9942315f3da3d9f1bb652a
+- Cloudflare GENESIS Inventory run: 35861901562
+- sonuç: SUCCESS
+- canlı source'ta `GENESIS_COACHING_HOT_ASSET_CACHE_V1` doğrulandı
+- canlı HTML'de yeni JS/CSS asset sürümleri doğrulandı
+- 23 kritik statik asset: HTTP 200
+- 14 JavaScript syntax kontrolü: başarılı
+- container failed instance: 0
+- health errors: []
+- observability logs: enabled
+
+Bu olay production kodunun deploy edilmemesi değil, tarayıcı tarafında eski immutable assetlerin görünmeye devam etmesi problemiydi. Cache policy kalıcı olarak düzeltilmiştir.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -372,9 +429,9 @@ Adım 1 sonucunda:
 Adım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
-Güncel Worker: c8d8c872-4570-446e-9506-e9d00bd8c302 (version number 58).
-Güncel container version: 45.
-Koçluk Stüdyosu yan paneli artık arama → Öğrenci Ekle → Ders Ekle → öğrenci listesi sırasındadır. Ders Ekle, ana GENESIS konu/soru/test menülerinin Koçluk Stüdyosu içinde bağımsız state ve bağımsız DOM/CSS ile çalışan salt-okunur kopyasını açar; ana sayfanın state veya işlevlerini kullanmaz.
+Güncel Worker: 38d23959-2051-4fab-91df-ab7edc14eb61 (version number 59).
+Güncel container version: 46.
+Koçluk Stüdyosu yan paneli artık arama → Öğrenci Ekle → Ders Ekle → öğrenci listesi sırasındadır. Ders Ekle, ana GENESIS konu/soru/test menülerinin Koçluk Stüdyosu içinde bağımsız state ve bağımsız DOM/CSS ile çalışan salt-okunur kopyasını açar; ana sayfanın state veya işlevlerini kullanmaz. Koçluk Stüdyosu JS/CSS assetleri için uzun süreli immutable browser cache kapatılmış ve asset URL sürümleri cache-bust edilmiştir.
 Bu UI geliştirmesi Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.
 Production auth modu: kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumu. Kurum kullanıcı hesapları kaldırılmıştır; kurum veri klasörleri korunmuştur.
 TinyFish kullanılmayacak.
