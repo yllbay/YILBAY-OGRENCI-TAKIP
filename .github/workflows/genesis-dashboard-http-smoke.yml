@@ -20,17 +20,19 @@ jobs:
           set -euo pipefail
           URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
           curl -fsS -L "$URL/" -o /tmp/root.html
-          grep -q 'app-0.10.7.js?v=20260923-home-2' /tmp/root.html
-          grep -q 'genesis-home-dashboard-0.15.2.css?v=20260923-home-2' /tmp/root.html
+          echo "ROOT_ASSETS:"
+          grep -oE '/static/(app-0\.10\.7\.js|genesis-home-dashboard-0\.15\.2\.css)\?v=[^"[:space:]]+' /tmp/root.html || true
+          grep -q 'app-0.10.7.js?v=20260923-home-2' /tmp/root.html || { echo "::error::root app asset is not home-2"; exit 11; }
+          grep -q 'genesis-home-dashboard-0.15.2.css?v=20260923-home-2' /tmp/root.html || { echo "::error::root dashboard css asset is not home-2"; exit 12; }
 
           curl -fsS "$URL/static/app-0.10.7.js?v=20260923-home-2" -o /tmp/home.js
           curl -fsS "$URL/static/genesis-home-dashboard-0.15.2.css?v=20260923-home-2" -o /tmp/home.css
           curl -fsS "$URL/static/genesis-auth-gate.js" -o /tmp/auth.js
 
-          grep -q 'GENESIS_HOME_DASHBOARD_V2' /tmp/home.js
-          grep -q 'Soru Stüdyosu' /tmp/home.js
-          grep -q 'Koçluk Stüdyosu' /tmp/home.js
-          grep -q 'Kurum Açma' /tmp/home.js
+          grep -q 'GENESIS_HOME_DASHBOARD_V2' /tmp/home.js || { echo "::error::V2 marker missing"; exit 21; }
+          grep -q 'Soru Stüdyosu' /tmp/home.js || { echo "::error::Soru Stüdyosu missing"; exit 22; }
+          grep -q 'Koçluk Stüdyosu' /tmp/home.js || { echo "::error::Koçluk Stüdyosu missing"; exit 23; }
+          grep -q 'Kurum Açma' /tmp/home.js || { echo "::error::Kurum Açma missing"; exit 24; }
           grep -q 'location.assign("/?workspace=1")' /tmp/home.js
           grep -q 'location.assign("/coaching")' /tmp/home.js
           grep -q 'window.genesisCreateInstitution()' /tmp/home.js
