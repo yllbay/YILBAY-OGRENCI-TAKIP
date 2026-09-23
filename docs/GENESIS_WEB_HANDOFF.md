@@ -32,10 +32,10 @@
 - Deploy aracı: Wrangler
 - Container observability logs: enabled
 - Kalıcılık: mevcut GENESIS DATA/SQLite yapısı korunur.
-- Son doğrulanmış Worker version ID: 333099cd-a686-4d97-8e31-df00ea4f0ebb
-- Son doğrulanmış Worker version number: 81
-- Son doğrulanmış container version: 61
-- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e
+- Son doğrulanmış Worker version ID: 502f8866-bacb-4715-ab08-8e1611c3f5fd
+- Son doğrulanmış Worker version number: 82
+- Son doğrulanmış container version: 62
+- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe
 
 ## GitHub dalları
 - main: production envanter/smoke altyapısı ve kaynak
@@ -682,6 +682,89 @@ Kullanıcı talebi: “V3 recovery deploy’a devam et siteyi ayağa kaldır.”
 
 Bu noktadan sonra kullanıcı yeni geliştirme istemeden yeniden V3 rollout yapılmayacak. Öncelik çalışan production'ın korunmasıdır.
 
+## 19. 2026-09-23 22:55 UTC — V3 doğrulama ve production aktivasyonu
+
+Kullanıcı talebi: “V3 özelliklerini aktif et.”
+
+### Canary engeli ve düzeltme
+- Son V3 Candidate Build and Canary run `35929301652` içinde yeni 11-layer imaj başarıyla oluşturuldu, registry'ye push edildi ve izole Cloudflare canary container uygulaması başarıyla oluşturuldu.
+- Canary API testi container'a ulaşmadan HTTP 403 / Cloudflare error code 1010 ile durdu. Bu hata istemcinin browser signature/fingerprint'i nedeniyle Cloudflare edge tarafından engellenmesiydi; image-unpack hatası değildi.
+- `cloudflare/v3_canary_test.py` browser-compatible User-Agent/Accept başlıklarıyla düzeltildi.
+- Canary cleanup adımındaki ayrı Wrangler/KV permission hatasının gerçek canary sonucunu maskelemesi engellendi.
+- Düzeltme commitleri:
+  - `67c102e184f408d1a7450a5635bf6ea282a86fdc`
+  - `30ef3596530e32a7321f3a2a47454c5b4ed054eb`
+- Retry trigger: `6169458f5b013a3f34bee6a7551a2f410c01f2aa`
+- GENESIS V3 Candidate Build and Canary run `35930310197`: SUCCESS.
+- Aynı aday için disposable V3 model testi: SUCCESS.
+- İzole Cloudflare canary deploy: SUCCESS.
+- Gerçek canary API testi: `GENESIS_V3_CANARY_API_OK checks=23`.
+- Production canary testi boyunca HTTP 200 olarak kaldı.
+- Doğrulanmış aday imaj:
+  `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe`.
+
+### Guarded production aktivasyonu
+- Yeni workflow: `.github/workflows/genesis-v3-activate.yml`.
+- Workflow commitleri:
+  - `2f209a0f9f5c5ef509e4fa7d572bf500b44cf42e`
+  - post-smoke rollback guard: `297838b526db709bf29d8331e062546b4dee6ba1`
+- Activation trigger: `df4cd24901362c81f8a4da51bf0fdb8aab94dd19`.
+- GENESIS V3 Production Activate run `35930678309`: SUCCESS.
+- Aktivasyon hattı canlı Worker wrapper'ını hydrate ederek root ve coaching dashboard edge overlay'lerini korudu.
+- `GENESIS_DATA`, `GENESIS_CONTAINER`, R2 bucket `genesis-web-0152-data`, instance type `standard-1` ve max_instances=1 doğrulandı.
+- Rollout başarısızlığı veya post-activation smoke hatasında son doğrulanmış `0e607006...` imajına otomatik geri dönüş koruması eklendi; bu run'da rollback tetiklenmedi.
+- Yeni Worker version ID: `502f8866-bacb-4715-ab08-8e1611c3f5fd`.
+- Worker version number: 82.
+- Container rollout version: 62.
+- V3 image digest: `sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe`.
+- Container failed instance: 0.
+- Container health errors: [].
+- Observability logs: enabled.
+
+### Production doğrulamaları
+Aktivasyon workflow içinde:
+- root HTTP 200
+- `/api/auth/me`: HTTP 200 / ADMIN
+- `/api/coaching/v3/classes`: HTTP 200
+- `/api/coaching/v3/curriculum`: HTTP 200
+- `/api/coaching/v2/students`: HTTP 200
+- `/coaching`: HTTP 200 ve dashboard overlay marker mevcut
+- invalid online internet-test token: HTTP 404
+- coaching-v2 JS cache policy: `no-store`
+- root dashboard overlay marker korunuyor
+
+Bağımsız post-deploy smoke:
+- main trigger commit: `76eee95ecfd9c377529792330ab18898e143bf06`
+- GENESIS Coaching V3 Production Smoke run: `35930849681`
+- sonuç: SUCCESS
+- health: 0.15.2 / schema 14 / storage ok / r2-fuse / runtime container
+- classes/curriculum/students endpointleri HTTP 200
+- invalid online token HTTP 404
+- `GENESIS_COACHING_V3_PRODUCTION_SMOKE_OK`
+
+Bağımsız metadata:
+- main trigger commit: `9d9f4c2909d8068aa6a2bb191fdb897fee3851ad`
+- GENESIS Current Worker Metadata run: `35930936915`
+- sonuç: SUCCESS
+- Worker v82 / `502f8866-bacb-4715-ab08-8e1611c3f5fd`
+- Container v62 / V3 digest `494f438d...`
+- failed=0 / errors=[] / logs=true
+
+### Aktif V3 backend kapsamı
+Production'da artık aşağıdaki V3 backend yetenekleri aktiftir ve canary/production smoke ile doğrulanmıştır:
+- sınıf modeli ve sınıf zorluk seviyesi
+- V3 öğrenci oluşturma/profil ve sınıf ilişkisi
+- sınıf/öğrenci kapsamlı ders atamaları
+- ünite/alt başlık sorumlulukları
+- PDF / TEST / VIDEO kaynak modeli ve zorluk seviyesi
+- öğrenci efektif zorluk düzeyi
+- otomatik haftalık ödev üretimi
+- ödev durum güncelleme
+- V3 öğrenci model görünümü
+- mevcut coaching-v2 dashboard uyumluluğu
+
+Bu aktivasyon backend V3 özelliklerini production'da kullanılabilir hâle getirmiştir. Mevcut sade Koçluk dashboard edge katmanı korunmuştur; V3 için ayrıca yeni bir görsel frontend tasarımı bu aktivasyonun parçası değildir.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -694,8 +777,7 @@ Adım 1 sonucunda:
 - gerçek müfredat veri listesi henüz kullanıcı tarafından verilmediği için veri uydurulmadı
 
 ## Şu anki geliştirme noktası
-2026-09-23 22:22 UTC VOLUME 1 recovery tamamlandı: site HTTP 200 ile erişilebilir. V3 import rollout başarısızdır; son sağlam 0.15.2 container imajı yeni rollout v61 ile geri getirildi. V3 API'leri 404; V3 tamamlanmış sayılmaz. Güncel öğrenci ve müfredat listeleri boş döndü; kesinti öncesi veriyle karşılaştırma yapılmadı. Ayrıntı ve sınırlar bölüm 18'dedir.
-Adım 1 tamamlanmış durumda.
+2026-09-23 22:55 UTC itibarıyla V3 backend production aktivasyonu başarıyla tamamlandı. Doğrulanmış V3 image digest `sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe`, Worker v82 ve Container v62 aktiftir. `/api/coaching/v3/classes` ve `/api/coaching/v3/curriculum` HTTP 200 vermektedir; bağımsız V3 production smoke başarıyla geçmiştir. Eski 0.15.2 sağlık/kalıcılık ve coaching-v2 uyumluluğu korunmuştur. Ayrıntı bölüm 19'dadır.\nAdım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
 Güncel Worker: 333099cd-a686-4d97-8e31-df00ea4f0ebb (version number 81).
