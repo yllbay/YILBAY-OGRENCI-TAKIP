@@ -98,6 +98,34 @@ jobs:
           Path('cloudflare/package-runtime/Dockerfile').write_text(src.replace('__CURRENT_IMAGE__',image,1))
           PY
 
+      - name: Add online invalid-token guard hotfix
+        run: |
+          set -euo pipefail
+          cat > cloudflare/package-runtime/patch_online_token.py <<'PY'
+          from pathlib import Path
+
+          path=Path('/app/APP/backend/online_exam_module.py')
+          src=path.read_text(encoding='utf-8')
+          marker='GENESIS_ONLINE_INVALID_TOKEN_GUARD'
+          if marker in src:
+              raise SystemExit(0)
+          needle='''        if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}",public_token):
+            raise HTTPException(400,"Sınav bağlantısı geçersiz.")
+'''
+          replacement=needle+'''        # GENESIS_ONLINE_INVALID_TOKEN_GUARD
+        # A well-formed but unknown token must not look like a tunnel that is still starting.
+        if not online_row_by_token(public_token):
+            raise HTTPException(404,"Online sınav bulunamadı.")
+'''
+          if needle not in src:
+              raise SystemExit('Online internet-test guard patch point bulunamadı')
+          path.write_text(src.replace(needle,replacement,1),encoding='utf-8')
+          PY
+          cat >> cloudflare/package-runtime/Dockerfile <<'EOF'
+
+COPY patch_online_token.py /tmp/patch_online_token.py
+RUN python /tmp/patch_online_token.py && rm -f /tmp/patch_online_token.py
+EOF
       - name: Validate deployment package
         working-directory: cloudflare/package-runtime
         run: |
@@ -108,7 +136,8 @@ jobs:
           test -f index.js
           test -f curriculum_step1.py
           test -f patch_app.py
-          python -m py_compile curriculum_step1.py patch_app.py
+          test -f patch_online_token.py
+          python -m py_compile curriculum_step1.py patch_app.py patch_online_token.py
           node --check coaching-curriculum.js
           grep -q 'GenesisContainer = class extends Container' index.js
           grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' patch_app.py
@@ -141,10 +170,12 @@ jobs:
           docker cp "$CID:/app/APP/backend/app.py" /tmp/patched-app.py
           docker cp "$CID:/app/APP/backend/curriculum_step1.py" /tmp/patched-curriculum.py
           docker cp "$CID:/app/APP/frontend/dist/coaching-curriculum.html" /tmp/patched-curriculum.html
+          docker cp "$CID:/app/APP/backend/online_exam_module.py" /tmp/patched-online-exam.py
           grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' /tmp/patched-app.py
           grep -q '/api/coaching/curriculum/tree' /tmp/patched-curriculum.py
           grep -q 'Ders.*Ünite.*Alt Başlık' /tmp/patched-curriculum.html
-          python -m py_compile /tmp/patched-app.py /tmp/patched-curriculum.py
+          grep -q 'GENESIS_ONLINE_INVALID_TOKEN_GUARD' /tmp/patched-online-exam.py
+          python -m py_compile /tmp/patched-app.py /tmp/patched-curriculum.py /tmp/patched-online-exam.py
           docker rm -f "$CID" >/dev/null
           trap - EXIT
 
@@ -201,4 +232,8 @@ jobs:
           test "$STATIC_CODE" = "200" || { echo "::error::Curriculum UI HTTP $STATIC_CODE"; exit 33; }
           grep -q 'Ders.*Ünite.*Alt Başlık' /tmp/curriculum.html || { echo "::error::Curriculum UI doğrulanamadı"; exit 34; }
 
-          echo "GENESIS Step 1 smoke tests OK"
+          ONLINE_CODE=$(curl -sS -o /tmp/online-invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token" || true)
+          test "$ONLINE_CODE" = "404" || { echo "::error::Invalid online token beklenen 404 yerine HTTP $ONLINE_CODE"; cat /tmp/online-invalid.json; exit 35; }
+          grep -q 'Online sınav bulunamadı' /tmp/online-invalid.json || { echo "::error::Invalid online token mesajı doğrulanamadı"; exit 36; }
+
+          echo "GENESIS release smoke tests OK"
