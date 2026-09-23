@@ -32,10 +32,10 @@
 - Deploy aracı: Wrangler
 - Container observability logs: enabled
 - Kalıcılık: mevcut GENESIS DATA/SQLite yapısı korunur.
-- Son doğrulanmış Worker version ID: 38d23959-2051-4fab-91df-ab7edc14eb61
-- Son doğrulanmış Worker version number: 59
-- Son doğrulanmış container version: 46
-- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:3512f2bc64094a76ac08c01ecf3209750ad7ee7cc54f511ed1062ab3c5b97a0b
+- Son doğrulanmış Worker version ID: 26942052-2d03-4e6c-a531-cd94892d8c4b
+- Son doğrulanmış Worker version number: 60
+- Son doğrulanmış container version: 47
+- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:2a4af72ce7b67c646777324bae1126686a59907c97ace04ff6c4bb4bb8a999fd
 
 ## GitHub dalları
 - main: production envanter/smoke altyapısı ve kaynak
@@ -414,6 +414,70 @@ Bağımsız post-deploy inventory:
 
 Bu olay production kodunun deploy edilmemesi değil, tarayıcı tarafında eski immutable assetlerin görünmeye devam etmesi problemiydi. Cache policy kalıcı olarak düzeltilmiştir.
 
+## 15. 2026-09-23 GENESIS açılış Yönetim Paneli
+
+Kullanıcının açık talebi:
+- PNG/mockup üretilmeyecek; tasarım gerçek GENESIS WEB giriş sayfası olarak uygulanacak.
+- Mevcut GENESIS koyu lacivert / mor görsel dili korunacak.
+- Gereksiz görsel, yan menü, grafik ve kalabalık dashboard öğeleri olmayacak.
+- Açılış ekranı üç sade panelden oluşacak:
+  1. `Yönetim Paneli / Genel Bakış`
+  2. `İşlemler / Seçim Yap`
+  3. `Durum / Sistem`
+
+Uygulanan mimari:
+- Production patch dosyası: `cloudflare/home_dashboard.py`.
+- Marker: `GENESIS_HOME_DASHBOARD_V1`.
+- Ana `/` route'u mevcut GENESIS titlebar tasarımını koruyarak boş Yönetim Paneli görünümünü render eder.
+- Panel gövdelerinde yalnız nötr boş durum metinleri bulunur: `Henüz veri yok` ve `Seçim yapılmadı`.
+- Ayrı stil katmanı: `/static/genesis-home-dashboard-0.15.2.css?v=20260923-home-1`.
+- Ana uygulama JS URL'si cache invalidation amacıyla `/static/app-0.10.7.js?v=20260923-home-1` olarak sürümlendi.
+- Açılış ekranındaki başlık aksiyonları görsel placeholder olarak bırakıldı ve etkileşim dışı tutuldu.
+- Önceki Konular / Konu Soruları / Testler çalışma alanı silinmedi; geriye dönük güvenlik için `/?workspace=1` üzerinden korunmaktadır.
+- Backend, schema, R2/SQLite storage, auth veya coaching veri modeli değiştirilmedi.
+
+İlk release denemesi:
+- patch commit: `654cf71f859ed55c9f62a3b8722ddde275bc005e`
+- workflow dashboard doğrulama commit: `05e91f94802b754e5ea5ed1985db585b5c558078`
+- ilk trigger: `709a440bb17bec3fd85a5d1b4447afbadfe53491`
+- Fast Cloudflare Package Deploy run: `35871205798`
+- sonuç: FAILURE
+- hata: Docker BuildKit `max depth exceeded`
+- deploy adımı çalışmadığı için production etkilenmedi.
+
+Kök neden ve release hattı düzeltmesi:
+- Canlı base image zaten çok katmanlıydı; her production patch'i ayrı `COPY + RUN` Docker katmanı ekliyordu.
+- Patch katmanları tek bir toplu `COPY` + tek bir toplu `RUN` altında birleştirildi.
+- layer fix commit: `4414e0f62cba5f43e40e092489c8aefc3b63dc76`
+- başarılı release trigger: `741f7554de9943745511166740c59917aee40028`
+
+Başarılı production release:
+- Fast Cloudflare Package Deploy run: `35871495303`
+- sonuç: SUCCESS
+- Worker version ID: `26942052-2d03-4e6c-a531-cd94892d8c4b`
+- Worker version number: `60`
+- Container version: `47`
+- Container image: `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:2a4af72ce7b67c646777324bae1126686a59907c97ace04ff6c4bb4bb8a999fd`
+- release smoke: SUCCESS
+- single ADMIN auth, curriculum, Koçluk Stüdyosu, cache policy ve invalid-online-token kontrolleri korunarak geçti.
+
+Bağımsız post-deploy inventory:
+- inventory workflow doğrulama commit: `475a8efdb8216e3a6654a54407b22abf2a77690c`
+- Cloudflare GENESIS Inventory run: `35872114484`
+- sonuç: SUCCESS
+- canlı source içinde dashboard HTML/JS/CSS marker'ları doğrulandı.
+- root HTTP 200.
+- health: 0.15.2 / schema 14 / storage ok / r2-fuse.
+- `/api/auth/me`: authenticated ADMIN.
+- invalid online token: HTTP 404.
+- kritik statik assetler: 24/24 HTTP 200.
+- kritik JavaScript syntax kontrolleri: 14/14 başarılı.
+- container failed instance: 0.
+- health errors: [].
+- observability logs: enabled.
+
+Bu geliştirme yeni fonksiyonel Adım 2 değildir; kullanıcı tarafından açıkça istenen GENESIS WEB açılış ekranı düzenlemesidir.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -429,10 +493,11 @@ Adım 1 sonucunda:
 Adım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
-Güncel Worker: 38d23959-2051-4fab-91df-ab7edc14eb61 (version number 59).
-Güncel container version: 46.
-Koçluk Stüdyosu yan paneli artık arama → Öğrenci Ekle → Ders Ekle → öğrenci listesi sırasındadır. Ders Ekle, ana GENESIS konu/soru/test menülerinin Koçluk Stüdyosu içinde bağımsız state ve bağımsız DOM/CSS ile çalışan salt-okunur kopyasını açar; ana sayfanın state veya işlevlerini kullanmaz. Koçluk Stüdyosu JS/CSS assetleri için uzun süreli immutable browser cache kapatılmış ve asset URL sürümleri cache-bust edilmiştir.
-Bu UI geliştirmesi Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.
+Güncel Worker: 26942052-2d03-4e6c-a531-cd94892d8c4b (version number 60).
+Güncel container version: 47.
+GENESIS WEB kök açılış sayfası artık koyu lacivert/mor görsel dilde üç panelli boş Yönetim Panelidir: Yönetim Paneli / İşlemler / Durum. Önceki Konular / Konu Soruları / Testler çalışma alanı silinmemiş, `/?workspace=1` üzerinden korunmuştur.
+Koçluk Stüdyosu yan paneli arama → Öğrenci Ekle → Ders Ekle → öğrenci listesi sırasındadır. Ders Ekle, ana GENESIS konu/soru/test menülerinin Koçluk Stüdyosu içinde bağımsız state ve bağımsız DOM/CSS ile çalışan salt-okunur kopyasını açar; ana sayfanın state veya işlevlerini kullanmaz. Koçluk Stüdyosu JS/CSS assetleri için uzun süreli immutable browser cache kapatılmış ve asset URL sürümleri cache-bust edilmiştir.
+Bu UI geliştirmeleri Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.
 Production auth modu: kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumu. Kurum kullanıcı hesapları kaldırılmıştır; kurum veri klasörleri korunmuştur.
 TinyFish kullanılmayacak.
 Ayrıca GENESIS web geliştirme sohbetlerinin otomatik devir sistemi için Chrome uzantısı geliştiriliyor.
