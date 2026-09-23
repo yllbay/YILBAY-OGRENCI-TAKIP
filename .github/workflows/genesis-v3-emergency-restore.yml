@@ -1,0 +1,114 @@
+name: GENESIS V3 Emergency Restore
+
+on:
+  push:
+    branches: [cloudflare-release]
+    paths:
+      - "cloudflare/v3-restore-trigger.txt"
+
+concurrency:
+  group: genesis-web-0152-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+  STABLE_V3_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:c4dea10ae2ce1931e242eb0be5282dc021402fa5271c07c65a907ecfb7139785
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Prepare runtime and hydrate current Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          rm -rf cloudflare/v3-restore-runtime
+          mkdir -p cloudflare/v3-restore-runtime
+          cat cloudflare/package-bundle.part1.b64 cloudflare/package-bundle.part2.b64 | base64 -d | tar -xJ -C cloudflare/v3-restore-runtime
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/genesis-web-0152/content/v2" -H "$AUTH" -o /tmp/worker-content.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/worker-content.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          found=[]
+          for part in raw.split(boundary)[1:]:
+              part=part.strip(b'\r\n-')
+              if not part: continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part: continue
+              _,payload=part.split(sep,1)
+              payload=payload.rstrip(b'\r\n')
+              if b'GenesisContainer' in payload and b'GENESIS_CONTAINER' in payload and b'container.fetch' in payload:
+                  found.append(payload)
+          if len(found)!=1:
+              raise SystemExit(f'Worker module count {len(found)}')
+          Path('cloudflare/v3-restore-runtime/index.js').write_bytes(found[0])
+          PY
+          node --check cloudflare/v3-restore-runtime/index.js
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/v3-restore-runtime/index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' cloudflare/v3-restore-runtime/index.js
+
+      - name: Point config to stable V3 image
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('cloudflare/v3-restore-runtime/wrangler.jsonc')
+          cfg=json.loads(p.read_text(encoding='utf-8'))
+          cfg['containers'][0]['image']=os.environ['STABLE_V3_IMAGE']
+          p.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          grep -Fq "$STABLE_V3_IMAGE" cloudflare/v3-restore-runtime/wrangler.jsonc
+
+      - name: Restore stable V3 container
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: cloudflare/v3-restore-runtime
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
+
+      - name: Wait for production recovery
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          READY=0
+          for i in $(seq 1 90); do
+            npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/info.json || true
+            IMAGE="$(jq -r '.configuration.image // empty' /tmp/info.json 2>/dev/null || true)"
+            CODE="$(curl -sS -L --max-time 12 -c /tmp/cookies -b /tmp/cookies -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+            if [ "$IMAGE" = "$STABLE_V3_IMAGE" ] && [ "$CODE" = "200" ] && grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/root.html; then
+              READY=1
+              break
+            fi
+            sleep 5
+          done
+          test "$READY" = "1" || { cat /tmp/info.json || true; exit 50; }
+          COACH="$(curl -sS -L -c /tmp/cookies -b /tmp/cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching" || true)"
+          test "$COACH" = "200"
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' /tmp/coaching.html
+          CLASSES="$(curl -sS -c /tmp/cookies -b /tmp/cookies -o /tmp/classes.json -w '%{http_code}' "$URL/api/coaching/v3/classes" || true)"
+          test "$CLASSES" = "200"
+          jq -e '.classes|type=="array"' /tmp/classes.json >/dev/null
+          echo "GENESIS_STABLE_V3_RESTORED"
