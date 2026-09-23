@@ -238,13 +238,22 @@ jobs:
           grep -q 'coaching-v2.js?v=0.15.2-coaching-2' /tmp/patched-coaching-v2.html
           grep -q 'GENESIS_COACHING_HOT_ASSET_CACHE_V1' /tmp/patched-app.py
           grep -q 'GENESIS_HOME_DASHBOARD_V1' /tmp/patched-index.html
-          grep -q 'genesis-home-dashboard-0.15.2.css?v=20260923-home-1' /tmp/patched-index.html
-          grep -q 'app-0.10.7.js?v=20260923-home-1' /tmp/patched-index.html
+          grep -q 'genesis-home-dashboard-0.15.2.css?v=20260923-home-2' /tmp/patched-index.html
+          grep -q 'app-0.10.7.js?v=20260923-home-2' /tmp/patched-index.html
           grep -q 'GENESIS_HOME_DASHBOARD_V1' /tmp/patched-app-0.10.7.js
+          grep -q 'GENESIS_HOME_DASHBOARD_V2' /tmp/patched-app-0.10.7.js
           grep -q 'Yönetim Paneli' /tmp/patched-app-0.10.7.js
           grep -q 'İşlemler' /tmp/patched-app-0.10.7.js
           grep -q 'Durum' /tmp/patched-app-0.10.7.js
+          grep -q 'Soru Stüdyosu' /tmp/patched-app-0.10.7.js
+          grep -q 'Koçluk Stüdyosu' /tmp/patched-app-0.10.7.js
+          grep -q 'Kurum Açma' /tmp/patched-app-0.10.7.js
+          grep -q 'location.assign("/?workspace=1")' /tmp/patched-app-0.10.7.js
+          grep -q 'location.assign("/coaching")' /tmp/patched-app-0.10.7.js
+          grep -q 'window.genesisCreateInstitution()' /tmp/patched-app-0.10.7.js
           grep -q 'GENESIS_HOME_DASHBOARD_V1' /tmp/patched-home-dashboard.css
+          grep -q 'GENESIS_HOME_DASHBOARD_V2' /tmp/patched-home-dashboard.css
+          grep -q 'home-menu-button' /tmp/patched-home-dashboard.css
           node --check /tmp/patched-coaching-v2.js
           python -m py_compile /tmp/patched-app.py /tmp/patched-curriculum.py /tmp/patched-online-exam.py /tmp/patched-coaching-v2.py
           node --check /tmp/patched-app-0.10.7.js
@@ -299,16 +308,25 @@ jobs:
           test "$OK" = "1" || { echo "::error::Production root smoke test başarısız"; exit 30; }
 
           grep -q 'GENESIS_HOME_DASHBOARD_V1' /tmp/genesis.html || { echo "::error::Opening dashboard HTML marker yok"; exit 60; }
-          grep -q 'genesis-home-dashboard-0.15.2.css?v=20260923-home-1' /tmp/genesis.html || { echo "::error::Opening dashboard CSS bağlantısı yok"; exit 61; }
-          grep -q 'app-0.10.7.js?v=20260923-home-1' /tmp/genesis.html || { echo "::error::Opening dashboard app cache-bust yok"; exit 62; }
-          HOME_JS_CODE=$(curl -sS -o /tmp/home-app.js -w '%{http_code}' "$URL/static/app-0.10.7.js?v=20260923-home-1" || true)
-          HOME_CSS_CODE=$(curl -sS -o /tmp/home-dashboard.css -w '%{http_code}' "$URL/static/genesis-home-dashboard-0.15.2.css?v=20260923-home-1" || true)
+          grep -q 'genesis-home-dashboard-0.15.2.css?v=20260923-home-2' /tmp/genesis.html || { echo "::error::Opening dashboard CSS bağlantısı yok"; exit 61; }
+          grep -q 'app-0.10.7.js?v=20260923-home-2' /tmp/genesis.html || { echo "::error::Opening dashboard app cache-bust yok"; exit 62; }
+          HOME_JS_CODE=$(curl -sS -o /tmp/home-app.js -w '%{http_code}' "$URL/static/app-0.10.7.js?v=20260923-home-2" || true)
+          HOME_CSS_CODE=$(curl -sS -o /tmp/home-dashboard.css -w '%{http_code}' "$URL/static/genesis-home-dashboard-0.15.2.css?v=20260923-home-2" || true)
           test "$HOME_JS_CODE" = "200" && test "$HOME_CSS_CODE" = "200" || { echo "::error::Opening dashboard assets erişilemedi"; exit 63; }
           grep -q 'GENESIS_HOME_DASHBOARD_V1' /tmp/home-app.js || { echo "::error::Opening dashboard JS marker yok"; exit 64; }
+          grep -q 'GENESIS_HOME_DASHBOARD_V2' /tmp/home-app.js || { echo "::error::Opening dashboard V2 JS marker yok"; exit 69; }
           grep -q 'Yönetim Paneli' /tmp/home-app.js || { echo "::error::Opening dashboard Yönetim Paneli yok"; exit 65; }
           grep -q 'İşlemler' /tmp/home-app.js || { echo "::error::Opening dashboard İşlemler yok"; exit 66; }
           grep -q 'Durum' /tmp/home-app.js || { echo "::error::Opening dashboard Durum yok"; exit 67; }
+          grep -q 'Soru Stüdyosu' /tmp/home-app.js || { echo "::error::Soru Stüdyosu düğmesi yok"; exit 70; }
+          grep -q 'Koçluk Stüdyosu' /tmp/home-app.js || { echo "::error::Koçluk Stüdyosu düğmesi yok"; exit 71; }
+          grep -q 'Kurum Açma' /tmp/home-app.js || { echo "::error::Kurum Açma düğmesi yok"; exit 72; }
+          grep -q 'location.assign("/?workspace=1")' /tmp/home-app.js || { echo "::error::Soru Stüdyosu yönlendirmesi yok"; exit 73; }
+          grep -q 'location.assign("/coaching")' /tmp/home-app.js || { echo "::error::Koçluk Stüdyosu yönlendirmesi yok"; exit 74; }
+          grep -q 'window.genesisCreateInstitution()' /tmp/home-app.js || { echo "::error::Kurum Açma aksiyonu yok"; exit 75; }
           grep -q 'GENESIS_HOME_DASHBOARD_V1' /tmp/home-dashboard.css || { echo "::error::Opening dashboard CSS marker yok"; exit 68; }
+          grep -q 'GENESIS_HOME_DASHBOARD_V2' /tmp/home-dashboard.css || { echo "::error::Opening dashboard V2 CSS marker yok"; exit 76; }
+          grep -q 'home-menu-button' /tmp/home-dashboard.css || { echo "::error::Dashboard menü buton stili yok"; exit 77; }
           node --check /tmp/home-app.js
 
           ME_CODE=$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/auth-me.json -w '%{http_code}' "$URL/api/auth/me" || true)
