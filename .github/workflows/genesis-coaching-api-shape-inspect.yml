@@ -1,0 +1,41 @@
+name: GENESIS Coaching API Shape Inspect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/coaching-api-shape-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect production API shapes only
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          curl -fsS -L -c /tmp/c -b /tmp/c "$URL/" -o /tmp/root.html
+          curl -fsS -c /tmp/c -b /tmp/c "$URL/api/coaching/v2/students" -o /tmp/students.json
+          curl -fsS -c /tmp/c -b /tmp/c "$URL/api/coaching/curriculum/tree" -o /tmp/curriculum.json
+          echo "STUDENTS_ROOT_TYPE=$(jq -r 'type' /tmp/students.json)"
+          echo "STUDENTS_ROOT_KEYS=$(jq -c 'keys' /tmp/students.json)"
+          echo "STUDENT_KEYS=$(jq -c '.students[0] // {} | keys' /tmp/students.json)"
+          echo "CURRICULUM_TYPE=$(jq -r 'type' /tmp/curriculum.json)"
+          echo "CURRICULUM_ROOT_KEYS=$(jq -c 'if type=="object" then keys else [] end' /tmp/curriculum.json)"
+          echo "CURRICULUM_SAMPLE_STRUCTURE="
+          jq -c '
+            if type=="array" then
+              .[0] // {}
+            elif has("courses") then
+              {course_count:(.courses|length),course_keys:(.courses[0]//{}|keys),unit_keys:(.courses[0].units[0]//{}|keys),subtopic_keys:(.courses[0].units[0].subtopics[0]//{}|keys)}
+            elif has("tree") then
+              {tree_type:(.tree|type),sample:(.tree[0]//{})}
+            else .
+            end
+          ' /tmp/curriculum.json | head -c 5000
+          echo
