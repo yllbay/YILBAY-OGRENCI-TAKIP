@@ -1,0 +1,1 @@
+Activate verified V3 canary digest sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe with automatic rollback guard.
