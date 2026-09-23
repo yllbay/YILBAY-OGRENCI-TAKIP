@@ -32,9 +32,9 @@
 - Deploy aracı: Wrangler
 - Container observability logs: enabled
 - Kalıcılık: mevcut GENESIS DATA/SQLite yapısı korunur.
-- Son doğrulanmış Worker version ID: 2a2a844c-bf51-407b-a4ce-a71a99dc20f4
-- Son doğrulanmış Worker version number: 73
-- Son doğrulanmış container version: 55
+- Son doğrulanmış Worker version ID: 333099cd-a686-4d97-8e31-df00ea4f0ebb
+- Son doğrulanmış Worker version number: 81
+- Son doğrulanmış container version: 61
 - Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e
 
 ## GitHub dalları
@@ -642,6 +642,46 @@ Release:
 
 Bu değişiklik mevcut koçluk dashboard'unun görsel/gezinti katmanıdır. Kullanıcının tarif ettiği sınıf veri modeli, içerik zorluk seviyesi, otomatik ödev motoru, PDF üzerinde kalemle sınav, optik ve öğrenci karne arşivi gibi yeni backend fonksiyonları ayrıca kullanıcı adımlarıyla geliştirilecektir.
 
+## 18. 2026-09-23 22:22 UTC — VOLUME 1 production recovery
+
+Kullanıcı talebi: “V3 recovery deploy’a devam et siteyi ayağa kaldır.”
+
+### Kesinti ve doğrulanmış neden
+- Handoff'ta devam ediyor görünen V3 docker-import run `35925159702` gerçekte FAILURE ile tamamlanmıştı.
+- Tek katmanlı imaj oluşturma ve disposable model testi başarılıydı; Cloudflare runtime `ImagePullError / failed unpacking the image` bildirdi.
+- Unpack hatasının daha alt düzey nedeni bu çalışmada belirlenmedi; yalnız layer sayısının bire indirilmesi sorunu çözmemiştir.
+- Otomatik rollback, önceki `c4dea10a...` imajı için “no changes” döndürmüş; HTTP recovery doğrulaması yapmamıştı.
+- Taze metadata run `35927570572`: Worker v80 `c058f345-5834-4438-b69c-5d1a527d65f8`, container v57. failed=0/errors=[] olmasına rağmen bağımsız smoke `35927669666` root HTTP 503 verdi. Hata sayılarının sıfır olması tek başına erişilebilirlik kanıtı değildir.
+
+### Uygulanan kurtarma
+- Yeni V3 imajı üretmek yerine son çalıştığı bağımsız smoke ile doğrulanmış v55 imaj digestine dönüldü:
+  `sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e`.
+- Aktif Worker kaynağı hydrate edilerek korundu; ana sayfa ve Koçluk dashboard overlay marker'ları deploy öncesinde doğrulandı.
+- R2 bucket `genesis-web-0152-data`, `GENESIS_DATA`, `GENESIS_CONTAINER`, instance tipi ve max_instances=1 korundu.
+- Yeni şema geliştirmesi, production veri silme, veri geri yükleme veya yerel GENESIS aktarımı yapılmadı.
+- Emergency workflow'a dry-run, config/binding doğrulamaları, beklenen digest + gerçek HTTP 200 + errors=[] + failed=0 kapısı ve cookie taşıyan API smoke eklendi.
+- Recovery concurrency `cancel-in-progress: false` olarak ayarlandı.
+- Workflow fix commit: `d3fbe34e4a4a2b193b9c818a96c463cf19559155`.
+- Recovery trigger commit: `6ef1127b5184435a933ad51f9ccd7e5d4d72cc1e`.
+- Emergency GENESIS Container Rollback run: `35927809215` — SUCCESS.
+- Worker version: `333099cd-a686-4d97-8e31-df00ea4f0ebb` / number 81.
+- Container rollout version: 61. Bu v55 numarasına dönüş değildir; eski sağlam imaj yeni rollout v61 olarak uygulanmıştır.
+- Container failed=0, health.errors=[], observability.logs.enabled=true.
+
+### Canlı doğrulama ve kapsam
+- Root, `/?workspace=1`, `/coaching`: HTTP 200; iki dashboard overlay marker'ı mevcut.
+- `/api/auth/me`: authenticated ADMIN, institution_id=null, must_change_password=false.
+- `/api/system/health`: ok=true, version=0.15.2, schema=14, storage=ok, persistent_storage=r2-fuse, runtime=container.
+- Curriculum tree ve coaching-v2 students: HTTP 200.
+- Invalid online internet-test token: HTTP 404.
+- Coaching JS/CSS: HTTP 200 ve `no-store, no-cache, must-revalidate, max-age=0`.
+- V3 `/api/coaching/v3/classes` ve `/api/coaching/v3/curriculum`: HTTP 404. V3 model rollout'u başarılı veya tamamlanmış kabul edilmemelidir; site mevcut sağlam 0.15.2 işlevleriyle kurtarıldı.
+- Öğrenci API'si `{"students":[]}`, müfredat API'si boş courses listesi döndürdü. Kesinti öncesi aynı andaki veri sayıları bilinmediği için veri kaybı veya tüm eski kayıtların korunduğu yönünde sonuç çıkarılamaz. Bu kurtarmada veri silme işlemi yapılmadı. Öğrenci olmadığı için öğrenci dashboard'u yeniden test edilmedi.
+- Eski başarılı testlerin öğrenci bulunduğu varsayımı yeni duruma taşınmamalıdır.
+- HTTP smoke'a süre sınırları eklendi ve öğrenci yanıt gövdelerinin Actions loglarına yazılması kaldırıldı.
+
+Bu noktadan sonra kullanıcı yeni geliştirme istemeden yeniden V3 rollout yapılmayacak. Öncelik çalışan production'ın korunmasıdır.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -654,11 +694,12 @@ Adım 1 sonucunda:
 - gerçek müfredat veri listesi henüz kullanıcı tarafından verilmediği için veri uydurulmadı
 
 ## Şu anki geliştirme noktası
+2026-09-23 22:22 UTC VOLUME 1 recovery tamamlandı: site HTTP 200 ile erişilebilir. V3 import rollout başarısızdır; son sağlam 0.15.2 container imajı yeni rollout v61 ile geri getirildi. V3 API'leri 404; V3 tamamlanmış sayılmaz. Güncel öğrenci ve müfredat listeleri boş döndü; kesinti öncesi veriyle karşılaştırma yapılmadı. Ayrıntı ve sınırlar bölüm 18'dedir.
 Adım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
-Güncel Worker: 2a2a844c-bf51-407b-a4ce-a71a99dc20f4 (version number 73).
-Güncel container version: 55.
+Güncel Worker: 333099cd-a686-4d97-8e31-df00ea4f0ebb (version number 81).
+Güncel container version: 61.
 GENESIS WEB kök açılış sayfası koyu lacivert/mor görsel dilde üç panelli Yönetim Panelidir. İlk panelde alt alta Soru Stüdyosu, Koçluk Stüdyosu ve Kurum Açma düğmeleri bulunur. Soru Stüdyosu `/?workspace=1`, Koçluk Stüdyosu `/coaching` hedefini açar; Kurum Açma mevcut kurum açma diyaloğunu çağırır. Önceki Konular / Konu Soruları / Testler çalışma alanı silinmemiştir.
 Koçluk Stüdyosu artık sade üç alanlı yönetim dashboard'u ile açılır: Sınıflar ve Öğrenciler / Haftalık Çalışma Programı / Akademik Yapı ve Atamalar. Gerçek öğrenci listesi ve haftalık görev/sınav verileri mevcut coaching-v2 API'lerinden alınır. Ayrıntılı eski çalışma alanı silinmemiştir; ders, sorumluluk, sınav ve analiz işlemleri gerektiğinde aynı sayfa içinde açılır ve Dashboard'a geri dönülebilir. Henüz backend'i olmayan sınıf ve zorluk-düzeyi otomasyonları sahte veri üretmeden gelecekteki adımlar için ayrılmıştır. Koçluk Stüdyosu JS/CSS assetleri için uzun süreli immutable browser cache kapalıdır.
 Bu UI geliştirmeleri Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.

@@ -498,5 +498,43 @@ Production:
 - root dashboard ve coaching dashboard marker'ları smoke testte doğrulandı
 - öğrenci listesi ve dashboard API smoke kontrolleri geçti
 
+## 25. V3 docker-import recovery başarısızlığı ve doğrulanmış imajla production kurtarma
+Tarih: 2026-09-23, 22:22 UTC (Türkiye: 2026-09-24 01:22)
+
+Adım: GENESIS WEB VOLUME 1 — mevcut HTTP 503 kesintisini giderme.
+
+Hata:
+- V3 recovery run `35925159702`: FAILURE.
+- Cloudflare: `ImagePullError: the runtime failed unpacking the image`.
+- Hatalı aday: `genesis-web-0152-genesiscontainer:coach3-v3-import-e7cd2c0330e9`.
+- Site HTTP 503: `There is no Container instance available at this time.`
+
+Kök neden ve sınırı:
+- V3 paket ve disposable testleri geçtiği hâlde imaj Cloudflare runtime'da açılamadı. Unpack hatasının daha alt düzey nedeni belirlenmedi.
+- Geri dönüş kodu önceki konfigürasyonu sağlıklı kabul etti. Wrangler “no changes” çıktısı kurtarma başarısı sayıldı; gerçek HTTP recovery kontrolü yoktu.
+- failed=0/errors=[] sonucu container starting durumundayken de görüldü; tek başına başarı ölçütü değildir.
+- Taze metadata `35927570572` sonrasında smoke `35927669666` hâlâ HTTP 503 döndürdü.
+
+Çözüm:
+- Sağlamlığı daha önce doğrulanmış `0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e` digestine kontrollü rollback.
+- Aktif Worker, dashboard overlay'leri ve R2/DO binding'leri korundu.
+- Veri silme/geri yükleme, bucket değişikliği veya yerel GENESIS aktarımı yapılmadı.
+- Emergency workflow dry-run, kesin imaj digest kontrolü, HTTP 200, auth/API/cache doğrulamasıyla güçlendirildi.
+- Workflow commit: `d3fbe34e4a4a2b193b9c818a96c463cf19559155`.
+- Trigger: `6ef1127b5184435a933ad51f9ccd7e5d4d72cc1e`.
+- Recovery run `35927809215`: SUCCESS.
+- Worker `333099cd-a686-4d97-8e31-df00ea4f0ebb` / v81.
+- Container rollout v61; eski sağlam imaj kullanıldı.
+- failed=0, errors=[], logs.enabled=true.
+- Root / workspace / coaching / auth / curriculum / students HTTP 200.
+- Invalid online token HTTP 404.
+- Health: 0.15.2, schema 14, storage ok, r2-fuse.
+- Coaching hot assets no-store politikası korundu.
+
+Kalan kapsam ve veri doğrulama sınırı:
+- V3 classes/curriculum API'leri HTTP 404: V3 işlevleri bu kurtarmayla yayına alınmadı.
+- Öğrenci ve müfredat listeleri boş döndü. Kesinti öncesi güncel veri sayısı bilinmediğinden bu sonuç veri kaybı olarak sınıflandırılmadı; tüm eski kayıtların bulunduğu da iddia edilmedi. Öğrenci dashboard testi atlandı.
+- Yeni V3 rollout için Cloudflare üzerinde başarılı imaj açılışı ve gerçek HTTP/API smoke zorunludur; yalnız lokal Docker testi veya deploy exit code yeterli değildir.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
