@@ -398,8 +398,17 @@ def _generate_homework(con, sid, week, replace_unfinished=False):
     cfg = _row(con, "SELECT day_minutes_json,max_sessions FROM coach2_settings WHERE student_id=?", (sid,))
     budgets = json.loads(cfg["day_minutes_json"]) if cfg and cfg.get("day_minutes_json") else [120,120,120,120,120,180,120]
     max_sessions = int(cfg["max_sessions"]) if cfg else 4
+    if not isinstance(budgets, list) or len(budgets) != 7:
+        raise HTTPException(409, "Haftalık çalışma süreleri yedi gün için tanımlanmalıdır.")
+    budgets = [max(0, int(x)) for x in budgets]
     loads = [0] * 7
     counts = [0] * 7
+    for assignment in existing:
+        day = (dt.date.fromisoformat(assignment["plan_date"]) - dt.date.fromisoformat(week)).days
+        if 0 <= day < 7:
+            loads[day] += int(assignment["minutes"])
+            counts[day] += 1
+    assigned_resources = {x["resource_id"] for x in existing}
     created = 0
     warnings = []
     recent = {r["resource_id"] for r in _rows(con, "SELECT DISTINCT resource_id FROM coach3_homework_assignments WHERE student_id=? AND week_start<?", (sid, week))}
@@ -416,12 +425,12 @@ def _generate_homework(con, sid, week, replace_unfinished=False):
         resources = _rows(con, """SELECT * FROM coach3_resources
             WHERE curriculum_course_id=? AND difficulty=? AND active=1
             ORDER BY id""", (cid, level))
-        resources = [r for r in resources if any(_resource_matches(resp, r) for resp in rset)]
+        resources = [r for r in resources if r["id"] not in assigned_resources and any(_resource_matches(resp, r) for resp in rset)]
         if not resources:
             warnings.append(course["curriculum_course_name"] + f": {level} düzeyinde uygun içerik yok.")
             continue
         resources.sort(key=lambda r: (r["id"] in recent, r["id"]))
-        wanted = int(course["weekly_sessions"])
+        wanted = max(0, int(course["weekly_sessions"]) - sum(x["curriculum_course_id"] == cid for x in existing))
         for i in range(wanted):
             if i >= len(resources):
                 warnings.append(course["curriculum_course_name"] + ": içerik sayısı oturum sayısından az; aynı kaynak tekrar edilmedi.")
@@ -627,7 +636,7 @@ def install_coaching_model_v3(app):
         original = Path(file.filename or "document.pdf").name
         if not original.lower().endswith(".pdf"):
             raise HTTPException(400, "Yalnız PDF dosyası yüklenebilir.")
-        data = await file.read()
+        data = await file.read(50 * 1024 * 1024 + 1)
         if not data or len(data) > 50 * 1024 * 1024:
             raise HTTPException(400, "PDF boş veya 50 MB sınırını aşıyor.")
         if not data.startswith(b"%PDF"):

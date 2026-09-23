@@ -1,0 +1,244 @@
+name: GENESIS V3 Candidate Build and Canary
+
+on:
+  push:
+    branches: [cloudflare-release]
+    paths:
+      - "cloudflare/v3-candidate-trigger.txt"
+
+concurrency:
+  group: genesis-v3-candidate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+  CF_SCRIPT_NAME: genesis-web-0152
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Install OCI tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo umoci
+
+      - name: Hydrate exact live Worker and current container
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          rm -rf cloudflare/package-runtime /tmp/genesis-v3
+          mkdir -p cloudflare/package-runtime /tmp/genesis-v3
+          cat cloudflare/package-bundle.part1.b64 cloudflare/package-bundle.part2.b64 | base64 -d | tar -xJ -C cloudflare/package-runtime
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/genesis-v3/worker-content.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/genesis-v3/worker-content.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          candidates=[]
+          for part in raw.split(boundary)[1:]:
+              part=part.strip(b'\r\n-')
+              if not part: continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part: continue
+              _,payload=part.split(sep,1)
+              payload=payload.rstrip(b'\r\n')
+              if b'GenesisContainer' in payload and b'GENESIS_CONTAINER' in payload and b'container.fetch' in payload:
+                  candidates.append(payload)
+          if len(candidates)!=1:
+              raise SystemExit(f'Expected one Worker module, found {len(candidates)}')
+          Path('cloudflare/package-runtime/index.js').write_bytes(candidates[0])
+          PY
+          node --check cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-v3/container-before.json
+          PREVIOUS_IMAGE="$(jq -r '.configuration.image // empty' /tmp/genesis-v3/container-before.json)"
+          PREVIOUS_VERSION="$(jq -r '.version // 0' /tmp/genesis-v3/container-before.json)"
+          test -n "$PREVIOUS_IMAGE"
+          echo "ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+          echo "PREVIOUS_IMAGE=$PREVIOUS_IMAGE" >> "$GITHUB_ENV"
+          echo "PREVIOUS_VERSION=$PREVIOUS_VERSION" >> "$GITHUB_ENV"
+
+      - name: Pull current image through OCI API
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS -X POST "$CF_API_BASE/accounts/$ACCOUNT_ID/containers/registries/registry.cloudflare.com/credentials" \
+            -H "$AUTH" -H "Content-Type: application/json" \
+            --data '{"expiration_minutes":20,"permissions":["pull","push"]}' -o /tmp/genesis-v3/registry.json
+          REG_USER="$(jq -r '.result.username // empty' /tmp/genesis-v3/registry.json)"
+          REG_PASS="$(jq -r '.result.password // empty' /tmp/genesis-v3/registry.json)"
+          test -n "$REG_USER" && test -n "$REG_PASS"
+          echo "::add-mask::$REG_USER"; echo "::add-mask::$REG_PASS"
+          echo "REG_USER=$REG_USER" >> "$GITHUB_ENV"
+          echo "REG_PASS=$REG_PASS" >> "$GITHUB_ENV"
+          skopeo inspect --config --creds "$REG_USER:$REG_PASS" "docker://$PREVIOUS_IMAGE" > /tmp/genesis-v3/source-config.json
+          skopeo copy --src-creds "$REG_USER:$REG_PASS" "docker://$PREVIOUS_IMAGE" oci:/tmp/genesis-v3/current-oci:live
+          umoci unpack --rootless --image /tmp/genesis-v3/current-oci:live /tmp/genesis-v3/bundle
+          ROOT=/tmp/genesis-v3/bundle/rootfs
+          test -f "$ROOT/app/APP/backend/app.py"
+          test -f "$ROOT/app/APP/backend/coaching_v2.py"
+          test -f "$ROOT/app/APP/backend/curriculum_step1.py"
+          test -f "$ROOT/app/start-container.sh"
+
+      - name: Patch and compile canonical V3 model
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/genesis-v3/bundle/rootfs/app/APP
+          cp cloudflare/coaching_model_v3.py "$ROOT/backend/coaching_model_v3.py"
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/coaching_model_v3_install.py
+          python3 -m py_compile "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
+          grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' "$ROOT/backend/app.py"
+          grep -q 'install_coaching_model_v3(app)' "$ROOT/backend/app.py"
+          grep -q '/api/coaching/v3/students/{sid}/homework/auto' "$ROOT/backend/coaching_model_v3.py"
+          grep -q 'coach3_homework_assignments' "$ROOT/backend/coaching_model_v3.py"
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          p=Path('/tmp/genesis-v3/bundle/rootfs/app/start-container.sh')
+          s=p.read_text()
+          branch='\nif [ "${GENESIS_V3_CANARY:-0}" = "1" ]; then\n  mkdir -p /app/DATA\n  cd /app/APP/backend\n  exec uvicorn app:app --host 0.0.0.0 --port 8000\nfi\n'
+          assert 'GENESIS_V3_CANARY' not in s
+          p.write_text(s.replace('set -eu','set -eu'+branch,1))
+          PYCODE
+
+
+      - name: Build eleven-layer candidate using verified runtime layers
+        run: |
+          set -euo pipefail
+          NEW_IMAGE="registry.cloudflare.com/$ACCOUNT_ID/genesis-web-0152-genesiscontainer:coach3-clean-${GITHUB_SHA::12}"
+          export NEW_IMAGE
+          python3 cloudflare/rebuild_v3_image.py
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
+          docker push "$NEW_IMAGE"
+          echo "NEW_IMAGE=$NEW_IMAGE" >> "$GITHUB_ENV"
+
+      - name: Disposable V3 data-model integration test
+        run: |
+          set -euo pipefail
+          cat > /tmp/genesis-v3/model_test.py <<'PY'
+          import sys,tempfile
+          from pathlib import Path
+          sys.path.insert(0,'/app/APP/backend')
+          import db
+          from db import connect
+          import coaching_model_v3 as m
+          root=Path(tempfile.mkdtemp(prefix='genesis-v3-'))
+          tok=db.CURRENT_DB.set(root/'genesis.db')
+          try:
+              with connect() as con:
+                  con.executescript("""
+                  CREATE TABLE coaching_students(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,number TEXT NOT NULL DEFAULT '',note TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                  CREATE TABLE coaching_curriculum_courses(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,name_key TEXT NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0,is_active INTEGER NOT NULL DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                  CREATE TABLE coaching_curriculum_units(id INTEGER PRIMARY KEY AUTOINCREMENT,course_id INTEGER NOT NULL,name TEXT NOT NULL,name_key TEXT NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0,is_active INTEGER NOT NULL DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                  CREATE TABLE coaching_curriculum_topics(id INTEGER PRIMARY KEY AUTOINCREMENT,unit_id INTEGER NOT NULL,name TEXT NOT NULL,name_key TEXT NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0,is_active INTEGER NOT NULL DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                  CREATE TABLE exams(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL);
+                  CREATE TABLE coach2_settings(student_id INTEGER PRIMARY KEY,day_minutes_json TEXT NOT NULL,max_sessions INTEGER NOT NULL);
+                  """)
+                  con.execute("INSERT INTO coaching_curriculum_courses(name,name_key,sort_order) VALUES('Matematik','matematik',1)")
+                  cid=con.execute("SELECT id FROM coaching_curriculum_courses").fetchone()['id']
+                  con.execute("INSERT INTO coaching_curriculum_units(course_id,name,name_key,sort_order) VALUES(?,?,?,1)",(cid,'Fonksiyonlar','fonksiyonlar'))
+                  uid=con.execute("SELECT id FROM coaching_curriculum_units").fetchone()['id']
+                  con.execute("INSERT INTO coaching_curriculum_topics(unit_id,name,name_key,sort_order) VALUES(?,?,?,1)",(uid,'Fonksiyon Kavramı','fonksiyon kavramı'))
+                  tid=con.execute("SELECT id FROM coaching_curriculum_topics").fetchone()['id']
+              m.ensure_schema()
+              with connect() as con:
+                  class_id=int(con.execute("INSERT INTO coach3_classes(name,name_key,grade_label,difficulty_level) VALUES('12-A','12-a','12. Sınıf','MEDIUM')").lastrowid)
+                  sid=int(con.execute("INSERT INTO coaching_students(name,number) VALUES('Test Öğrenci','V3-TEST')").lastrowid)
+                  con.execute("INSERT INTO coach3_student_class(student_id,class_id) VALUES(?,?)",(sid,class_id))
+                  con.execute("INSERT INTO coach3_course_assignments(scope_type,scope_id,curriculum_course_id,weekly_sessions,minutes,daily_exam) VALUES('CLASS',?,?,?,?,1)",(class_id,cid,2,45))
+                  con.execute("INSERT INTO coach3_responsibilities(scope_type,scope_id,curriculum_course_id,unit_id,topic_id) VALUES('CLASS',?,?,?,?)",(class_id,cid,uid,tid))
+                  for i in range(2):
+                      con.execute("INSERT INTO coach3_resources(curriculum_course_id,unit_id,topic_id,title,kind,difficulty,estimated_minutes,source_kind,url) VALUES(?,?,?,?,?,?,?,?,?)",(cid,uid,tid,f'Video {i}','VIDEO','MEDIUM',45,'URL',f'https://example.com/{i}'))
+                  result=m._generate_homework(con,sid,'2026-09-21',False)
+                  assert result['level']=='MEDIUM'
+                  assert len(result['assignments'])==2
+                  assert len(m._effective_courses(con,sid))==1
+                  assert len(m._effective_responsibilities(con,sid))==1
+                  assert len(m._homework_for_week(con,sid,'2026-09-21'))==2
+              print('DISPOSABLE_COACHING_MODEL_V3_OK')
+          finally:
+              db.CURRENT_DB.reset(tok)
+          PY
+          docker run --rm --entrypoint python -v /tmp/genesis-v3/model_test.py:/tmp/model_test.py:ro "$NEW_IMAGE" /tmp/model_test.py
+
+      - name: Deploy isolated Cloudflare canary using exact candidate image
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/genesis-v3/canary
+          export CANARY_NAME="genesis-v3-check-$GITHUB_RUN_ID"
+          export CANARY_TOKEN="$(openssl rand -hex 24)"
+          echo "::add-mask::$CANARY_TOKEN"
+          echo "CANARY_NAME=$CANARY_NAME" >> "$GITHUB_ENV"
+          echo "CANARY_TOKEN=$CANARY_TOKEN" >> "$GITHUB_ENV"
+          echo "CANARY_URL=https://$CANARY_NAME.yilbayonurcelik.workers.dev" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('/tmp/genesis-v3/canary')
+          c={'name':os.environ['CANARY_NAME'],'main':'index.js','compatibility_date':'2026-09-10','workers_dev':True,'containers':[{'class_name':'GenesisV3Canary','image':os.environ['NEW_IMAGE'],'max_instances':1,'instance_type':'standard-1'}],'durable_objects':{'bindings':[{'name':'CANARY','class_name':'GenesisV3Canary'}]},'migrations':[{'tag':'v1','new_sqlite_classes':['GenesisV3Canary']}],'vars':{'CANARY_TOKEN':os.environ['CANARY_TOKEN']},'observability':{'enabled':True}}
+          (p/'wrangler.json').write_text(json.dumps(c))
+          (p/'index.js').write_text('''import {Container} from '@cloudflare/containers';
+          export class GenesisV3Canary extends Container {
+            defaultPort=8000;
+            sleepAfter='10m';
+            envVars={GENESIS_V3_CANARY:'1'};
+          }
+          export default {async fetch(request,env){
+            if(request.headers.get('X-Genesis-Canary')!==env.CANARY_TOKEN)return new Response('Not found',{status:404});
+            return env.CANARY.getByName('isolated-v3-tests').fetch(request);
+          }};
+          ''')
+          PY
+          (cd /tmp/genesis-v3/canary && npm install --no-audit --no-fund @cloudflare/containers && npx --yes wrangler@4 deploy --containers-rollout=immediate)
+
+      - name: Exercise V3 APIs on isolated canary only
+        run: python3 cloudflare/v3_canary_test.py
+
+      - name: Record candidate and ensure production stays available
+        run: |
+          set -euo pipefail
+          echo "VERIFIED_CANDIDATE=$NEW_IMAGE"
+          echo "PRODUCTION_STATUS=$(curl -sS --max-time 40 -o /tmp/production-root -w '%{http_code}' https://genesis-web-0152.yilbayonurcelik.workers.dev/)"
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/production-root
+
+      - name: Delete isolated canary after tests
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -f /tmp/genesis-v3/canary/wrangler.json ]; then
+            (cd /tmp/genesis-v3/canary && npx --yes wrangler@4 delete --force)
+          fi
