@@ -121,11 +121,7 @@ jobs:
               raise SystemExit('Online internet-test guard patch point bulunamadı')
           path.write_text(src.replace(needle,replacement,1),encoding='utf-8')
           PY
-          cat >> cloudflare/package-runtime/Dockerfile <<'EOF'
-
-COPY patch_online_token.py /tmp/patch_online_token.py
-RUN python /tmp/patch_online_token.py && rm -f /tmp/patch_online_token.py
-EOF
+          printf '\nCOPY patch_online_token.py /tmp/patch_online_token.py\nRUN python /tmp/patch_online_token.py && rm -f /tmp/patch_online_token.py\n' >> cloudflare/package-runtime/Dockerfile
       - name: Validate deployment package
         working-directory: cloudflare/package-runtime
         run: |
