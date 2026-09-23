@@ -11,6 +11,12 @@ if "GENESIS_SINGLE_ADMIN_AUTO_SESSION" not in src:
         # GENESIS_SINGLE_ADMIN_AUTO_SESSION
         auto_admin_token=create_session("ADMIN")
         session=session_from_token(auto_admin_token)
+    if path=="/api/auth/register-institution":
+        return JSONResponse({"detail":"Tek ADMIN modunda kurum kullanıcısı oluşturulamaz."},status_code=410)
+    if path=="/api/admin/institutions" and request.method.upper()!="GET":
+        return JSONResponse({"detail":"Tek ADMIN modunda kurum kullanıcısı oluşturulamaz."},status_code=410)
+    if path.startswith("/api/admin/institutions/"):
+        return JSONResponse({"detail":"Tek ADMIN modunda kurum kullanıcı yönetimi kapalı."},status_code=410)
 '''
     if needle not in src:
         raise SystemExit("auto-session patch point not found")
