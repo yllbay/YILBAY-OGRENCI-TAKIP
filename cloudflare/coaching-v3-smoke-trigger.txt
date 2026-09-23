@@ -1,1 +1,1 @@
-2026-09-24 verify live coaching v3 before dashboard binding
+2026-09-24 reverify live coaching V3 after provisioning settled
