@@ -1,0 +1,233 @@
+name: GENESIS Coaching Data Model Deploy
+
+on:
+  push:
+    branches:
+      - cloudflare-release
+    paths:
+      - "cloudflare/coaching-model-release-trigger.txt"
+
+concurrency:
+  group: genesis-web-0152-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+  CF_SCRIPT_NAME: genesis-web-0152
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Install OCI tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo umoci
+
+      - name: Expand package and hydrate exact live Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          rm -rf cloudflare/package-runtime
+          mkdir -p cloudflare/package-runtime /tmp/genesis-model
+          cat cloudflare/package-bundle.part1.b64 cloudflare/package-bundle.part2.b64 | base64 -d | tar -xJ -C cloudflare/package-runtime
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/genesis-model/worker-content.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/genesis-model/worker-content.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          candidates=[]
+          for part in raw.split(boundary)[1:]:
+              part=part.strip(b'\r\n-')
+              if not part: continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part: continue
+              _,payload=part.split(sep,1)
+              payload=payload.rstrip(b'\r\n')
+              if b'GenesisContainer' in payload and b'GENESIS_CONTAINER' in payload and b'container.fetch' in payload:
+                  candidates.append(payload)
+          if len(candidates)!=1:
+              raise SystemExit(f'Expected one Worker module, found {len(candidates)}')
+          Path('cloudflare/package-runtime/index.js').write_bytes(candidates[0])
+          PY
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-model/container-before.json
+          PREVIOUS_IMAGE="$(jq -r '.configuration.image' /tmp/genesis-model/container-before.json)"
+          PREVIOUS_VERSION="$(jq -r '.version' /tmp/genesis-model/container-before.json)"
+          test -n "$PREVIOUS_IMAGE"
+          echo "PREVIOUS_IMAGE=$PREVIOUS_IMAGE" >> "$GITHUB_ENV"
+          echo "PREVIOUS_VERSION=$PREVIOUS_VERSION" >> "$GITHUB_ENV"
+          echo "ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+
+      - name: Pull current OCI image without Docker overlay depth
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS -X POST "$CF_API_BASE/accounts/$ACCOUNT_ID/containers/registries/registry.cloudflare.com/credentials" \
+            -H "$AUTH" -H "Content-Type: application/json" \
+            --data '{"expiration_minutes":15,"permissions":["pull","push"]}' -o /tmp/genesis-model/registry.json
+          REG_USER="$(jq -r '.result.username // empty' /tmp/genesis-model/registry.json)"
+          REG_PASS="$(jq -r '.result.password // empty' /tmp/genesis-model/registry.json)"
+          test -n "$REG_USER" && test -n "$REG_PASS"
+          echo "::add-mask::$REG_USER"
+          echo "::add-mask::$REG_PASS"
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
+          skopeo copy --src-creds "$REG_USER:$REG_PASS" "docker://$PREVIOUS_IMAGE" oci:/tmp/genesis-model/current-oci:live
+          umoci unpack --rootless --image /tmp/genesis-model/current-oci:live /tmp/genesis-model/bundle
+          test -f /tmp/genesis-model/bundle/rootfs/app/APP/backend/app.py
+          test -f /tmp/genesis-model/bundle/rootfs/app/APP/backend/coaching_v2.py
+          test -f /tmp/genesis-model/bundle/rootfs/app/start-container.sh
+          echo "REG_USER=$REG_USER" >> "$GITHUB_ENV"
+          echo "REG_PASS=$REG_PASS" >> "$GITHUB_ENV"
+
+      - name: Patch persistent coaching model into flat rootfs
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/genesis-model/bundle/rootfs/app/APP
+          cp cloudflare/coaching_data_model_v1.py "$ROOT/backend/coaching_data_model_v1.py"
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/patch_coaching_data_model.py
+          python3 -m py_compile "$ROOT/backend/coaching_data_model_v1.py" "$ROOT/backend/app.py"
+          grep -q 'GENESIS_COACHING_DATA_MODEL_V1_START' "$ROOT/backend/app.py"
+          grep -q 'coach3_classes' "$ROOT/backend/coaching_data_model_v1.py"
+          grep -q '/api/coaching/v3/model' "$ROOT/backend/coaching_data_model_v1.py"
+          grep -q '/api/coaching/v3/resources/pdf' "$ROOT/backend/coaching_data_model_v1.py"
+          grep -q '/api/coaching/v3/homework' "$ROOT/backend/coaching_data_model_v1.py"
+
+      - name: Build one-layer flattened image
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/genesis-model/bundle/rootfs
+          sudo chown -R 0:0 "$ROOT"
+          sudo tar --numeric-owner --xattrs --acls -C "$ROOT" -cf /tmp/genesis-model/rootfs.tar .
+          FLAT_TAG="registry.cloudflare.com/$ACCOUNT_ID/genesis-web-0152-genesiscontainer:coach3-${GITHUB_SHA::12}"
+          docker import --platform=linux/amd64 \
+            --change 'ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
+            --change 'WORKDIR /app/APP/backend' \
+            --change 'EXPOSE 8000/tcp' \
+            --change 'CMD ["/app/start-container.sh"]' \
+            /tmp/genesis-model/rootfs.tar "$FLAT_TAG" >/tmp/genesis-model/import-id.txt
+          docker image inspect "$FLAT_TAG" >/tmp/genesis-model/flat-inspect.json
+          CID="$(docker create "$FLAT_TAG")"
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+          docker cp "$CID:/app/APP/backend/app.py" /tmp/genesis-model/flat-app.py
+          docker cp "$CID:/app/APP/backend/coaching_data_model_v1.py" /tmp/genesis-model/flat-model.py
+          grep -q 'GENESIS_COACHING_DATA_MODEL_V1_START' /tmp/genesis-model/flat-app.py
+          grep -q 'VERSION = "1.0.0"' /tmp/genesis-model/flat-model.py
+          docker rm -f "$CID" >/dev/null
+          trap - EXIT
+          LAYERS="$(docker image inspect "$FLAT_TAG" | jq '.[0].RootFS.Layers|length')"
+          test "$LAYERS" -le 2 || { echo "::error::Flattened image has $LAYERS layers"; exit 21; }
+          docker push "$FLAT_TAG" >/tmp/genesis-model/push.txt
+          echo "NEW_IMAGE=$FLAT_TAG" >> "$GITHUB_ENV"
+
+      - name: Prepare Wrangler package against flat image
+        run: |
+          set -euo pipefail
+          printf 'FROM %s\n' "$NEW_IMAGE" > cloudflare/package-runtime/Dockerfile
+          node --check cloudflare/package-runtime/index.js
+          npx --yes wrangler@4 deploy --dry-run --outdir /tmp/genesis-model/wrangler-dry --containers-rollout=none --keep-vars
+
+      - name: Deploy flat container model
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: cloudflare/package-runtime
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
+          echo "DEPLOY_ATTEMPTED=1" >> "$GITHUB_ENV"
+
+      - name: Wait for clean rollout
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          READY=0
+          for i in $(seq 1 72); do
+            npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-model/container-after.json
+            V="$(jq -r '.version // 0' /tmp/genesis-model/container-after.json)"
+            F="$(jq -r '.health.instances.failed // 0' /tmp/genesis-model/container-after.json)"
+            E="$(jq -r '.health.errors|length' /tmp/genesis-model/container-after.json)"
+            IMG="$(jq -r '.configuration.image // empty' /tmp/genesis-model/container-after.json)"
+            if [ "$V" -gt "$PREVIOUS_VERSION" ] && [ "$F" -eq 0 ] && [ "$E" -eq 0 ]; then
+              echo "$IMG" | grep -q 'coach3-' || { echo "::error::Unexpected rollout image $IMG"; exit 31; }
+              READY=1
+              break
+            fi
+            curl -sS -L --max-time 8 "$URL/" -o /tmp/genesis-model/warm.html || true
+            sleep 5
+          done
+          test "$READY" = "1" || { cat /tmp/genesis-model/container-after.json; exit 32; }
+          test "$(jq -r '.observability.logs.enabled // false' /tmp/genesis-model/container-after.json)" = "true"
+
+      - name: Production smoke for real coaching model
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          OK=0
+          for i in $(seq 1 18); do
+            CODE="$(curl -sS -L -c /tmp/genesis-model/cookies -b /tmp/genesis-model/cookies -o /tmp/genesis-model/root.html -w '%{http_code}' "$URL/" || true)"
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
+            sleep 4
+          done
+          test "$OK" = "1"
+          ME="$(curl -sS -c /tmp/genesis-model/cookies -b /tmp/genesis-model/cookies -o /tmp/genesis-model/me.json -w '%{http_code}' "$URL/api/auth/me" || true)"
+          test "$ME" = "200"
+          jq -e '.authenticated==true and .role=="ADMIN"' /tmp/genesis-model/me.json >/dev/null
+          MODEL="$(curl -sS -c /tmp/genesis-model/cookies -b /tmp/genesis-model/cookies -o /tmp/genesis-model/model.json -w '%{http_code}' "$URL/api/coaching/v3/model" || true)"
+          test "$MODEL" = "200" || { cat /tmp/genesis-model/model.json; exit 41; }
+          jq -e '.ok==true and .version=="1.0.0" and (.classes|type=="array") and (.students|type=="array") and (.curriculum|type=="array")' /tmp/genesis-model/model.json >/dev/null
+          STUDENTS="$(curl -sS -c /tmp/genesis-model/cookies -b /tmp/genesis-model/cookies -o /tmp/genesis-model/students.json -w '%{http_code}' "$URL/api/coaching/v2/students" || true)"
+          test "$STUDENTS" = "200"
+          CURR="$(curl -sS -c /tmp/genesis-model/cookies -b /tmp/genesis-model/cookies -o /tmp/genesis-model/curriculum.json -w '%{http_code}' "$URL/api/coaching/curriculum/tree" || true)"
+          test "$CURR" = "200"
+          INVALID="$(curl -sS -o /tmp/genesis-model/invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token" || true)"
+          test "$INVALID" = "404"
+          echo "GENESIS persistent coaching data model smoke OK"
+
+      - name: Roll back previous image on failure
+        if: failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ "${DEPLOY_ATTEMPTED:-0}" != "1" ]; then
+            echo "Deploy was not completed; rollback not needed."
+            exit 0
+          fi
+          echo "::warning::Rolling back to previous container image."
+          printf 'FROM %s\n' "$PREVIOUS_IMAGE" > cloudflare/package-runtime/Dockerfile
+          (cd cloudflare/package-runtime && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate)
