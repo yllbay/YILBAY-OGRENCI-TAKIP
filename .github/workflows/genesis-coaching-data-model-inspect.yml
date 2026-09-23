@@ -1,0 +1,67 @@
+name: GENESIS Coaching Data Model Inspect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/coaching-model-inspect-trigger.txt"
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_SCRIPT_NAME: genesis-web-0152
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Export live production sources read-only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container.json
+          IMAGE="$(jq -r '.configuration.image' /tmp/container.json)"
+          curl -fsS -X POST "$CF_API_BASE/accounts/$ACCOUNT_ID/containers/registries/registry.cloudflare.com/credentials" \
+            -H "$AUTH" -H "Content-Type: application/json" \
+            --data '{"expiration_minutes":5,"permissions":["pull"]}' -o /tmp/registry.json
+          REG_USER="$(jq -r '.result.username' /tmp/registry.json)"
+          REG_PASS="$(jq -r '.result.password' /tmp/registry.json)"
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
+          docker pull "$IMAGE" >/dev/null
+          CID="$(docker create "$IMAGE")"
+          mkdir -p /tmp/src
+          docker cp "$CID:/app/APP/backend/coaching_v2.py" /tmp/src/coaching_v2.py
+          docker cp "$CID:/app/APP/backend/app.py" /tmp/src/app.py
+          docker cp "$CID:/app/APP/backend/curriculum_step1.py" /tmp/src/curriculum_step1.py
+          docker cp "$CID:/app/APP/frontend/dist/coaching-v2.js" /tmp/src/coaching-v2.js
+          docker rm -f "$CID" >/dev/null
+          docker logout registry.cloudflare.com >/dev/null 2>&1 || true
+
+      - name: Print schema and API contract excerpts
+        run: |
+          set -euo pipefail
+          echo "===== COACHING TABLES / MIGRATIONS ====="
+          grep -nE 'CREATE TABLE|ALTER TABLE|schema|def ensure|def init|coaching_' /tmp/src/coaching_v2.py | head -260 || true
+          echo "===== COACHING ROUTES ====="
+          grep -nE '@router\.|def .*student|def .*course|def .*dashboard|def .*catalog|def .*plan|def .*task|def .*exam' /tmp/src/coaching_v2.py | head -320 || true
+          echo "===== CURRICULUM TABLES / API ====="
+          grep -nE 'CREATE TABLE|ALTER TABLE|@router\.|def .*curriculum|curriculum_' /tmp/src/curriculum_step1.py | head -320 || true
+          echo "===== APP DB / SCHEMA ====="
+          grep -nE 'SCHEMA|schema_version|sqlite|DB_PATH|connect\(|CREATE TABLE|ALTER TABLE' /tmp/src/app.py | head -260 || true
+          echo "===== COACHING SOURCE 1-420 ====="
+          sed -n '1,420p' /tmp/src/coaching_v2.py
+          echo "===== CURRICULUM SOURCE 1-360 ====="
+          sed -n '1,360p' /tmp/src/curriculum_step1.py
