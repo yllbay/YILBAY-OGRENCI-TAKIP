@@ -1,6 +1,8 @@
 from pathlib import Path
+import os
 
-APP=Path("/app/APP/backend/app.py")
+ROOT=Path(os.environ.get("GENESIS_APP_ROOT","/app/APP"))
+APP=ROOT/"backend"/"app.py"
 MARK="GENESIS_COACHING_MODEL_V3_INSTALL"
 src=APP.read_text(encoding="utf-8")
 if MARK in src:
