@@ -1,0 +1,44 @@
+name: GENESIS Dashboard HTTP Smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/dashboard-smoke-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify live dashboard buttons and targets
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          curl -fsS -L "$URL/" -o /tmp/root.html
+          grep -q 'app-0.10.7.js?v=20260923-home-2' /tmp/root.html
+          grep -q 'genesis-home-dashboard-0.15.2.css?v=20260923-home-2' /tmp/root.html
+
+          curl -fsS "$URL/static/app-0.10.7.js?v=20260923-home-2" -o /tmp/home.js
+          curl -fsS "$URL/static/genesis-home-dashboard-0.15.2.css?v=20260923-home-2" -o /tmp/home.css
+          curl -fsS "$URL/static/genesis-auth-gate.js" -o /tmp/auth.js
+
+          grep -q 'GENESIS_HOME_DASHBOARD_V2' /tmp/home.js
+          grep -q 'Soru Stüdyosu' /tmp/home.js
+          grep -q 'Koçluk Stüdyosu' /tmp/home.js
+          grep -q 'Kurum Açma' /tmp/home.js
+          grep -q 'location.assign("/?workspace=1")' /tmp/home.js
+          grep -q 'location.assign("/coaching")' /tmp/home.js
+          grep -q 'window.genesisCreateInstitution()' /tmp/home.js
+          grep -q 'home-menu-button' /tmp/home.css
+          grep -q 'window.genesisCreateInstitution' /tmp/auth.js
+
+          test "$(curl -sS -L -o /tmp/workspace.html -w '%{http_code}' "$URL/?workspace=1")" = "200"
+          test "$(curl -sS -L -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching")" = "200"
+
+          node --check /tmp/home.js
+          echo "GENESIS dashboard HTTP smoke OK"
