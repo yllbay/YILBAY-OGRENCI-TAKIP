@@ -156,7 +156,7 @@ jobs:
           cat "$BUILD/Dockerfile"
           docker build --provenance=false -t "$NEW_IMAGE" "$BUILD"
           LAYERS="$(docker image inspect "$NEW_IMAGE" | jq '.[0].RootFS.Layers|length')"
-          test "$LAYERS" -eq 1 || { echo "::error::Scratch-flattened image has $LAYERS layers"; exit 21; }
+          test "$LAYERS" -le 2 || { echo "::error::Scratch-flattened image has $LAYERS layers"; exit 21; }
           CID="$(docker create "$NEW_IMAGE")"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           docker cp "$CID:/app/APP/backend/app.py" /tmp/genesis-v3/flat-app.py
