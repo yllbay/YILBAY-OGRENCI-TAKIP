@@ -242,5 +242,40 @@ Post-deploy smoke:
 Not:
 Bu bir hata düzeltmesinden çok kullanıcı tarafından talep edilen auth mimarisi değişikliğidir. Güvenlik sonucu olarak production URL'sine erişebilen herkes ADMIN yetkisine sahip olur.
 
+## 18. Koçluk Stüdyosu yan panel hızlı işlemleri
+Tarih: 2026-09-23
+
+Talep:
+Koçluk Stüdyosu yan paneline "Öğrenci Ekle" ve "Ders Ekle" düğmelerinin eklenmesi.
+
+Başlangıç durumu:
+- Yan panelde öğrenci ekleme için yalnız küçük "+" ikon düğmesi vardı.
+- Ders ekleme/atama işlemi yalnız seçili öğrencinin Dersler sekmesindeki mevcut akıştan yapılabiliyordu.
+
+Uygulama:
+- Mevcut `studentForm()` ve `courseForm()` akışları yeniden kullanıldı.
+- Yeni backend endpointi, schema veya storage değişikliği yapılmadı.
+- "Ders Ekle" için seçili öğrenci guard'ı eklendi.
+- Patch `cloudflare/coaching_sidebar_actions.py` ile idempotent olarak uygulanır.
+- HTML / JS / CSS üzerinde `GENESIS_COACHING_SIDEBAR_ACTIONS` marker'ı kullanılır.
+
+Doğrulama:
+- production-source snapshot üzerinde lokal patch testi: SUCCESS
+- patched `coaching-v2.js`: node --check SUCCESS
+- Fast Cloudflare Package Deploy run 35857303418: SUCCESS
+- post-deploy Cloudflare GENESIS Inventory run 35857665059: SUCCESS
+- canlı snapshot'ta "+ Öğrenci Ekle" ve "+ Ders Ekle": doğrulandı
+- 23 kritik statik asset: HTTP 200
+- 14 kritik JavaScript syntax kontrolü: başarılı
+- container failed instance: 0
+- health errors: []
+- observability logs: enabled
+- Worker version ID: 127aa738-4b0b-4db5-bb19-4b5209eeb748
+- Worker version number: 57
+- Container version: 44
+
+Production etkisi:
+İstenen UI geliştirmesi dışında doğrulanmış regresyon veya yeni hata gözlenmedi. Mevcut single-ADMIN auth, curriculum ve invalid-token davranışları korunmuştur.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
