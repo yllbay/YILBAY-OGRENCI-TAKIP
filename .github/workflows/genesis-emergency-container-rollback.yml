@@ -7,13 +7,17 @@ on:
     paths:
       - "cloudflare/rollback-trigger.txt"
 
+concurrency:
+  group: genesis-web-0152-production
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
 env:
   CF_API_BASE: https://api.cloudflare.com/client/v4
   CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
-  KNOWN_GOOD_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer:26942052
+  KNOWN_GOOD_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e
 
 jobs:
   rollback:
@@ -86,6 +90,28 @@ jobs:
           PY
           grep -q "$KNOWN_GOOD_IMAGE" cloudflare/rollback-runtime/wrangler.jsonc
 
+      - name: Validate recovery config and preserve dashboard overlays
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: cloudflare/rollback-runtime
+        run: |
+          set -euo pipefail
+          node --check index.js
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' index.js
+          python3 - <<'PY'
+          import json
+          c=json.load(open('wrangler.jsonc'))
+          assert c['name']=='genesis-web-0152'
+          assert c['containers'][0]['class_name']=='GenesisContainer'
+          assert c['containers'][0]['max_instances']==1
+          assert c['containers'][0]['instance_type']=='standard-1'
+          assert any(b['binding']=='GENESIS_DATA' and b['bucket_name']=='genesis-web-0152-data' for b in c['r2_buckets'])
+          assert any(b['name']=='GENESIS_CONTAINER' and b['class_name']=='GenesisContainer' for b in c['durable_objects']['bindings'])
+          PY
+          npx --yes wrangler@4 deploy --dry-run --keep-vars --containers-rollout=none
+
       - name: Deploy known good container image
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -103,12 +129,13 @@ jobs:
           set -euo pipefail
           URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
           READY=0
-          for i in $(seq 1 90); do
+          for i in $(seq 1 35); do
             npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/info.json || true
             IMAGE="$(jq -r '.configuration.image // empty' /tmp/info.json 2>/dev/null || true)"
             FAILED="$(jq -r '.health.instances.failed // 0' /tmp/info.json 2>/dev/null || echo 0)"
             ERRORS="$(jq -r '.health.errors | length' /tmp/info.json 2>/dev/null || echo 0)"
-            CODE="$(curl -sS -L --max-time 8 -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+            CODE="$(curl -sS -L --connect-timeout 10 --max-time 15 -c /tmp/recovery.cookies -b /tmp/recovery.cookies -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+            echo "RECOVERY_CHECK=$i HTTP=$CODE FAILED=$FAILED ERRORS=$ERRORS IMAGE=$IMAGE"
             if [ "$IMAGE" = "$KNOWN_GOOD_IMAGE" ] && [ "$FAILED" -eq 0 ] && [ "$ERRORS" -eq 0 ] && [ "$CODE" = "200" ] && grep -qi GENESIS /tmp/root.html; then
               READY=1
               break
@@ -116,4 +143,21 @@ jobs:
             sleep 5
           done
           test "$READY" = "1" || { cat /tmp/info.json || true; exit 50; }
+          test "$(jq -r '.observability.logs.enabled' /tmp/info.json)" = "true"
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/root.html
+          for path in '/?workspace=1' '/coaching' '/api/auth/me' '/api/coaching/curriculum/tree' '/api/coaching/v2/students'; do
+            CODE="$(curl -sS --connect-timeout 10 --max-time 30 -L -c /tmp/recovery.cookies -b /tmp/recovery.cookies -o /tmp/check.out -w '%{http_code}' "$URL$path")"
+            echo "SMOKE $path HTTP=$CODE"
+            test "$CODE" = "200"
+            if [ "$path" = '/api/auth/me' ]; then
+              jq -e '.authenticated==true and .role=="ADMIN"' /tmp/check.out >/dev/null
+            fi
+            if [ "$path" = '/coaching' ]; then
+              grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' /tmp/check.out
+            fi
+          done
+          CODE="$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/invalid.out -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token")"
+          test "$CODE" = "404"
+          echo "SMOKE invalid-online-token HTTP=$CODE"
+          jq '{version,image:.configuration.image,health,observability}' /tmp/info.json
           echo "GENESIS emergency rollback healthy"
