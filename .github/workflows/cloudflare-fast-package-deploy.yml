@@ -211,36 +211,54 @@ jobs:
           set -euo pipefail
           SOURCE_IMAGE="$LIVE_CONTAINER_IMAGE"
           if ! docker pull "$SOURCE_IMAGE" >/tmp/live-pull.log 2>&1; then
-            echo "::warning::Live image could not be pulled cleanly; using last pullable production base for one-time flattening."
+            echo "::warning::Live image could not be pulled cleanly; using last pullable production base."
             cat /tmp/live-pull.log || true
             SOURCE_IMAGE="$CF_PULLABLE_FALLBACK_IMAGE"
             docker pull "$SOURCE_IMAGE" >/dev/null
           fi
+
           docker image inspect "$SOURCE_IMAGE" > /tmp/genesis-base-inspect.json
           CID="$(docker create "$SOURCE_IMAGE")"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
-          docker export "$CID" -o /tmp/genesis-base-rootfs.tar
+          docker export "$CID" -o cloudflare/package-runtime/genesis-base-rootfs.tar
           docker rm -f "$CID" >/dev/null
           trap - EXIT
 
-          IMPORT_ARGS=()
-          while IFS= read -r envline; do
-            [ -n "$envline" ] && IMPORT_ARGS+=(--change "ENV $envline")
-          done < <(jq -r '.[0].Config.Env[]?' /tmp/genesis-base-inspect.json)
-          WORKDIR="$(jq -r '.[0].Config.WorkingDir // empty' /tmp/genesis-base-inspect.json)"
-          USERNAME="$(jq -r '.[0].Config.User // empty' /tmp/genesis-base-inspect.json)"
-          CMD_JSON="$(jq -c '.[0].Config.Cmd // empty' /tmp/genesis-base-inspect.json)"
-          ENTRY_JSON="$(jq -c '.[0].Config.Entrypoint // empty' /tmp/genesis-base-inspect.json)"
-          [ -n "$WORKDIR" ] && IMPORT_ARGS+=(--change "WORKDIR $WORKDIR")
-          [ -n "$USERNAME" ] && IMPORT_ARGS+=(--change "USER $USERNAME")
-          [ -n "$CMD_JSON" ] && [ "$CMD_JSON" != "null" ] && IMPORT_ARGS+=(--change "CMD $CMD_JSON")
-          [ -n "$ENTRY_JSON" ] && [ "$ENTRY_JSON" != "null" ] && IMPORT_ARGS+=(--change "ENTRYPOINT $ENTRY_JSON")
-          while IFS= read -r port; do
-            [ -n "$port" ] && IMPORT_ARGS+=(--change "EXPOSE $port")
-          done < <(jq -r '.[0].Config.ExposedPorts // {} | keys[]?' /tmp/genesis-base-inspect.json)
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          info=json.loads(Path('/tmp/genesis-base-inspect.json').read_text())[0]['Config']
+          lines=['FROM scratch','ADD genesis-base-rootfs.tar /']
+          for item in info.get('Env') or []:
+              if '=' not in item:
+                  continue
+              k,v=item.split('=',1)
+              v=v.replace('\\','\\\\').replace('"','\\"').replace('\n','\\n')
+              lines.append(f'ENV {k}="{v}"')
+          workdir=info.get('WorkingDir') or ''
+          if workdir:
+              lines.append(f'WORKDIR {json.dumps(workdir)}')
+          user=info.get('User') or ''
+          if user:
+              lines.append(f'USER {json.dumps(user)}')
+          for port in sorted((info.get('ExposedPorts') or {}).keys()):
+              lines.append(f'EXPOSE {port}')
+          entry=info.get('Entrypoint')
+          cmd=info.get('Cmd')
+          if entry:
+              lines.append('ENTRYPOINT '+json.dumps(entry,separators=(',',':')))
+          if cmd:
+              lines.append('CMD '+json.dumps(cmd,separators=(',',':')))
+          stop=info.get('StopSignal') or ''
+          if stop:
+              lines.append(f'STOPSIGNAL {stop}')
+          Path('cloudflare/package-runtime/Dockerfile.flat').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          PY
 
-          docker import "${IMPORT_ARGS[@]}" /tmp/genesis-base-rootfs.tar genesis-flat-base:current >/tmp/genesis-flat-image-id.txt
+          docker build -t genesis-flat-base:current -f cloudflare/package-runtime/Dockerfile.flat cloudflare/package-runtime
           docker image inspect genesis-flat-base:current >/dev/null
+          rm -f cloudflare/package-runtime/genesis-base-rootfs.tar
+
           python3 - <<'PY'
           from pathlib import Path
           p=Path('cloudflare/package-runtime/Dockerfile')
