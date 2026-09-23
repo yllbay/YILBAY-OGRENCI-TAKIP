@@ -1,0 +1,36 @@
+name: GENESIS Coaching Dashboard API Smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/coaching-api-smoke-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify current coaching dashboard API
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          curl -fsS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies "$URL/" -o /tmp/root.html
+          CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/students.json -w '%{http_code}' "$URL/api/coaching/v2/students" || true)"
+          echo "students HTTP=$CODE"
+          test "$CODE" = "200"
+          jq -e '.students | type=="array"' /tmp/students.json >/dev/null
+          SID="$(jq -r '.students[0].id // empty' /tmp/students.json)"
+          if [ -n "$SID" ]; then
+            WEEK="2026-09-21"
+            CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/dashboard.json -w '%{http_code}' "$URL/api/coaching/v2/students/$SID/dashboard?week_start=$WEEK" || true)"
+            echo "dashboard student=$SID week=$WEEK HTTP=$CODE"
+            cat /tmp/dashboard.json
+            test "$CODE" = "200"
+            jq -e '.student and .summary and (.tasks|type=="array") and (.assignments|type=="array")' /tmp/dashboard.json >/dev/null
+          fi
+          echo "GENESIS coaching dashboard API smoke OK"
