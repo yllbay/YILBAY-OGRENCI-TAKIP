@@ -137,25 +137,18 @@ jobs:
         run: |
           set -euo pipefail
           cp cloudflare/home_dashboard.py cloudflare/package-runtime/home_dashboard.py
-      - name: Prepare one-layer production patch image
+      - name: Prepare minimal dashboard-only patch image
         run: |
           set -euo pipefail
+          # The current live image already contains the verified auth/coaching/curriculum
+          # patches. For this UI-only release, change only the opening dashboard files.
+          # This keeps the new OCI layer very small and avoids Cloudflare unpack failures.
           cat > cloudflare/package-runtime/Dockerfile <<EOF
           # syntax=docker/dockerfile:1
-          FROM $CF_PATCH_BASE_IMAGE
-          RUN --mount=type=bind,source=.,target=/tmp/genesis-release,ro \
-              cp /tmp/genesis-release/curriculum_step1.py /app/APP/backend/curriculum_step1.py && \
-              cp /tmp/genesis-release/coaching-curriculum.html /app/APP/frontend/dist/coaching-curriculum.html && \
-              cp /tmp/genesis-release/coaching-curriculum.js /app/APP/frontend/dist/coaching-curriculum.js && \
-              cp /tmp/genesis-release/coaching-curriculum.css /app/APP/frontend/dist/coaching-curriculum.css && \
-              python /tmp/genesis-release/patch_app.py && \
-              python /tmp/genesis-release/patch_online_token.py && \
-              python /tmp/genesis-release/single_admin_mode.py && \
-              python /tmp/genesis-release/single_admin_ui.py && \
-              python /tmp/genesis-release/coaching_sidebar_coursecopy.py && \
-              python /tmp/genesis-release/coaching_cache_policy.py && \
-              python /tmp/genesis-release/home_dashboard.py && \
-              python -m py_compile /app/APP/backend/app.py /app/APP/backend/curriculum_step1.py /app/APP/backend/online_exam_module.py /app/APP/backend/coaching_v2.py
+          FROM $LIVE_CONTAINER_IMAGE
+          RUN --mount=type=bind,source=home_dashboard.py,target=/tmp/home_dashboard.py,ro \
+              python /tmp/home_dashboard.py && \
+              node --check /app/APP/frontend/dist/app-0.10.7.js
           EOF
 
       - name: Fix curriculum desk navigation
