@@ -1,1 +1,1 @@
-2026-09-24 reverify live coaching V3 after provisioning settled
+Volume 1 recovery: verify production after V3 automatic rollback settled
