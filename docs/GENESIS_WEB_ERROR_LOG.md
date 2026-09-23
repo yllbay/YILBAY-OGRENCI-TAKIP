@@ -415,5 +415,43 @@ Bağımsız doğrulama:
 - health.errors=[]
 - observability logs enabled
 
+## 22. Dashboard düğmeleri release — container layer sınırı ve Worker-edge çözümü
+Tarih: 2026-09-23
+
+Talep:
+Yönetim Paneli içine Soru Stüdyosu, Koçluk Stüdyosu ve Kurum Açma düğmelerinin alt alta eklenmesi.
+
+Container tabanlı release denemelerinde doğrulanan sorunlar:
+- canlı image katman derinliği yeni layer eklenirken `max depth exceeded` hatasına ulaştı
+- flatten edilmiş yeni image denemelerinde Cloudflare runtime `ImagePullError / failed unpacking the image` raporlayıp çalışan eski image'a dönebildi
+- bu nedenle küçük bir UI değişikliği için container rollout zorlamak güvenilir değildi
+
+Çözüm:
+- yeni container layer oluşturulmadı
+- canlı Worker wrapper'ı hydrate edildi
+- `cloudflare/home_dashboard_edge.py` ile yalnız root HTML yanıtına `GENESIS_HOME_DASHBOARD_EDGE_V1` UI overlay'i eklendi
+- deploy `wrangler deploy --keep-vars --containers-rollout=none` ile yapıldı
+- workflow container image ve version'ın deploy öncesi/sonrası aynı kaldığını doğruladı
+- Worker version ID: `cbd44c06-b95f-4851-869b-946066d30cd0`
+- container version: `55`
+- container image: `sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e`
+
+İlk edge smoke:
+- Worker overlay gerçekten canlıya çıktı
+- root marker ve üç düğme doğrulandı
+- `/?workspace=1` HTTP 200
+- `/coaching` ayrı curl isteğinde session cookie taşınmadığı için HTTP 403 verdi
+- bu auth regresyonu değil, smoke testinin tarayıcı oturumunu taklit etmemesiydi
+
+Düzeltme:
+- root isteğinden alınan ADMIN session cookie sonraki route kontrollerinde korundu
+- bağımsız smoke run: `35881051383`
+- sonuç: SUCCESS
+- root HTTP 200
+- Soru Stüdyosu / Koçluk Stüdyosu / Kurum Açma canlı
+- workspace HTTP 200
+- authenticated coaching HTTP 200
+- kurum form hook'u `window.genesisCreateInstitution` mevcut
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
