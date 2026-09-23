@@ -478,6 +478,38 @@ Bağımsız post-deploy inventory:
 
 Bu geliştirme yeni fonksiyonel Adım 2 değildir; kullanıcı tarafından açıkça istenen GENESIS WEB açılış ekranı düzenlemesidir.
 
+## 16. 2026-09-23 Yönetim Paneli stüdyo düğmeleri
+
+Kullanıcının açık talebi:
+- Yönetim Paneli içine alt alta üç düğme eklenecek:
+  1. `Soru Stüdyosu`
+  2. `Koçluk Stüdyosu`
+  3. `Kurum Açma`
+- Düğmeler ilgili mevcut GENESIS ekranlarını açacak.
+
+Uygulanan davranış:
+- `Soru Stüdyosu` → `/?workspace=1`
+- `Koçluk Stüdyosu` → `/coaching`
+- `Kurum Açma` → mevcut `window.genesisCreateInstitution()` kurum açma diyaloğu
+- Düğmeler Yönetim Paneli'nin ilk sütununda dikey sırada yer alır.
+- Dashboard marker: `GENESIS_HOME_DASHBOARD_V2`
+- Asset sürümü: `20260923-home-2`
+
+Release sırasında Cloudflare container image katman derinliği ve rollout tarafında birden fazla geçici hata görüldü. Production önce bilinen sağlam container tag'ına geri getirildi; ardından release hattı tek yeni Docker katmanı üretecek şekilde yeniden düzenlendi.
+
+Başarılı final release:
+- release workflow commit: `9baa7136899073c89ad199be38c74fe9e61598b2`
+- release trigger: `82fa6187a16ae71cd348c920874a3ce0e4f8c9ea`
+- Fast Cloudflare Package Deploy run: `35879661006`
+- sonuç: SUCCESS
+- Worker version ID: `e5c0fde8-10bb-4a13-8ec9-0bd48d593d75`
+- Container rollout version: `55`
+- Container image: `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e`
+- production smoke: SUCCESS
+- `Soru Stüdyosu`, `Koçluk Stüdyosu`, `Kurum Açma` metinleri ve yönlendirme/aksiyonları canlı JS içinde doğrulandı.
+- `/?workspace=1` ve `/coaching` hedefleri release smoke kapsamındadır.
+- single ADMIN, curriculum, Koçluk Stüdyosu cache policy ve invalid-online-token davranışları korunmuştur.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -493,9 +525,9 @@ Adım 1 sonucunda:
 Adım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
-Güncel Worker: 26942052-2d03-4e6c-a531-cd94892d8c4b (version number 60).
-Güncel container version: 47.
-GENESIS WEB kök açılış sayfası artık koyu lacivert/mor görsel dilde üç panelli boş Yönetim Panelidir: Yönetim Paneli / İşlemler / Durum. Önceki Konular / Konu Soruları / Testler çalışma alanı silinmemiş, `/?workspace=1` üzerinden korunmuştur.
+Güncel Worker: e5c0fde8-10bb-4a13-8ec9-0bd48d593d75.
+Güncel container version: 55.
+GENESIS WEB kök açılış sayfası koyu lacivert/mor görsel dilde üç panelli Yönetim Panelidir. İlk panelde alt alta Soru Stüdyosu, Koçluk Stüdyosu ve Kurum Açma düğmeleri bulunur. Soru Stüdyosu `/?workspace=1`, Koçluk Stüdyosu `/coaching` hedefini açar; Kurum Açma mevcut kurum açma diyaloğunu çağırır. Önceki Konular / Konu Soruları / Testler çalışma alanı silinmemiştir.
 Koçluk Stüdyosu yan paneli arama → Öğrenci Ekle → Ders Ekle → öğrenci listesi sırasındadır. Ders Ekle, ana GENESIS konu/soru/test menülerinin Koçluk Stüdyosu içinde bağımsız state ve bağımsız DOM/CSS ile çalışan salt-okunur kopyasını açar; ana sayfanın state veya işlevlerini kullanmaz. Koçluk Stüdyosu JS/CSS assetleri için uzun süreli immutable browser cache kapatılmış ve asset URL sürümleri cache-bust edilmiştir.
 Bu UI geliştirmeleri Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.
 Production auth modu: kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumu. Kurum kullanıcı hesapları kaldırılmıştır; kurum veri klasörleri korunmuştur.
