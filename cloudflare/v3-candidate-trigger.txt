@@ -1,1 +1,1 @@
-Build verified runtime prefix + latest V3 app and validate in isolated Cloudflare canary
+Retry isolated V3 canary after browser-signature fix; production must remain on verified image.
