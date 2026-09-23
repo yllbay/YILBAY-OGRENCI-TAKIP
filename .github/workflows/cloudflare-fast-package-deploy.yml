@@ -17,6 +17,7 @@ permissions:
 env:
   CF_API_BASE: https://api.cloudflare.com/client/v4
   CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+  CF_PULLABLE_FALLBACK_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:2a4af72ce7b67c646777324bae1126686a59907c97ace04ff6c4bb4bb8a999fd
 
 jobs:
   deploy:
@@ -89,6 +90,7 @@ jobs:
           CURRENT_VERSION="$(jq -r '.version // 0' /tmp/genesis-live/container-info.json)"
           test -n "$CURRENT_IMAGE" || { echo "::error::Canlı container image bulunamadı"; exit 19; }
           echo "PREVIOUS_CONTAINER_VERSION=$CURRENT_VERSION" >> "$GITHUB_ENV"
+          echo "LIVE_CONTAINER_IMAGE=$CURRENT_IMAGE" >> "$GITHUB_ENV"
           python3 - "$CURRENT_IMAGE" <<'PY'
           from pathlib import Path
           import sys
@@ -203,6 +205,51 @@ jobs:
           REG_PASS="$(jq -r '.result.password // empty' /tmp/registry-creds.json)"
           test -n "$REG_USER" && test -n "$REG_PASS"
           printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
+
+      - name: Flatten base image for stable container depth
+        run: |
+          set -euo pipefail
+          SOURCE_IMAGE="$LIVE_CONTAINER_IMAGE"
+          if ! docker pull "$SOURCE_IMAGE" >/tmp/live-pull.log 2>&1; then
+            echo "::warning::Live image could not be pulled cleanly; using last pullable production base for one-time flattening."
+            cat /tmp/live-pull.log || true
+            SOURCE_IMAGE="$CF_PULLABLE_FALLBACK_IMAGE"
+            docker pull "$SOURCE_IMAGE" >/dev/null
+          fi
+          docker image inspect "$SOURCE_IMAGE" > /tmp/genesis-base-inspect.json
+          CID="$(docker create "$SOURCE_IMAGE")"
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+          docker export "$CID" -o /tmp/genesis-base-rootfs.tar
+          docker rm -f "$CID" >/dev/null
+          trap - EXIT
+
+          IMPORT_ARGS=()
+          while IFS= read -r envline; do
+            [ -n "$envline" ] && IMPORT_ARGS+=(--change "ENV $envline")
+          done < <(jq -r '.[0].Config.Env[]?' /tmp/genesis-base-inspect.json)
+          WORKDIR="$(jq -r '.[0].Config.WorkingDir // empty' /tmp/genesis-base-inspect.json)"
+          USERNAME="$(jq -r '.[0].Config.User // empty' /tmp/genesis-base-inspect.json)"
+          CMD_JSON="$(jq -c '.[0].Config.Cmd // empty' /tmp/genesis-base-inspect.json)"
+          ENTRY_JSON="$(jq -c '.[0].Config.Entrypoint // empty' /tmp/genesis-base-inspect.json)"
+          [ -n "$WORKDIR" ] && IMPORT_ARGS+=(--change "WORKDIR $WORKDIR")
+          [ -n "$USERNAME" ] && IMPORT_ARGS+=(--change "USER $USERNAME")
+          [ -n "$CMD_JSON" ] && [ "$CMD_JSON" != "null" ] && IMPORT_ARGS+=(--change "CMD $CMD_JSON")
+          [ -n "$ENTRY_JSON" ] && [ "$ENTRY_JSON" != "null" ] && IMPORT_ARGS+=(--change "ENTRYPOINT $ENTRY_JSON")
+          while IFS= read -r port; do
+            [ -n "$port" ] && IMPORT_ARGS+=(--change "EXPOSE $port")
+          done < <(jq -r '.[0].Config.ExposedPorts // {} | keys[]?' /tmp/genesis-base-inspect.json)
+
+          docker import "${IMPORT_ARGS[@]}" /tmp/genesis-base-rootfs.tar genesis-flat-base:current >/tmp/genesis-flat-image-id.txt
+          docker image inspect genesis-flat-base:current >/dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare/package-runtime/Dockerfile')
+          lines=p.read_text(encoding='utf-8').splitlines()
+          if not lines or not lines[0].startswith('FROM '):
+              raise SystemExit('Compact Dockerfile FROM line missing')
+          lines[0]='FROM genesis-flat-base:current'
+          p.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          PY
 
       - name: Prebuild patched container safely
         run: |
@@ -412,4 +459,6 @@ jobs:
           git add cloudflare/last-release-status.json
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "ci(cloudflare): record release status"
-          git push origin HEAD:cloudflare-release
+          if ! git push origin HEAD:cloudflare-release; then
+            echo "::warning::Release status record push skipped because cloudflare-release advanced concurrently."
+          fi
