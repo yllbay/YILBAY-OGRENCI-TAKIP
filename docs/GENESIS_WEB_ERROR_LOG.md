@@ -536,5 +536,42 @@ Kalan kapsam ve veri doğrulama sınırı:
 - Öğrenci ve müfredat listeleri boş döndü. Kesinti öncesi güncel veri sayısı bilinmediğinden bu sonuç veri kaybı olarak sınıflandırılmadı; tüm eski kayıtların bulunduğu da iddia edilmedi. Öğrenci dashboard testi atlandı.
 - Yeni V3 rollout için Cloudflare üzerinde başarılı imaj açılışı ve gerçek HTTP/API smoke zorunludur; yalnız lokal Docker testi veya deploy exit code yeterli değildir.
 
+## 26. V3 canary HTTP 1010 ve başarılı production aktivasyonu
+Tarih: 2026-09-23, 22:55 UTC (Türkiye: 2026-09-24 01:55)
+
+Hata:
+- GENESIS V3 Candidate Build and Canary run `35929301652` içinde image build, push ve Cloudflare canary application deploy başarılıydı.
+- `cloudflare/v3_canary_test.py` ilk root isteğinde HTTP 403 ve body `error code: 1010` aldı.
+- Cleanup adımında ayrıca Wrangler delete işlemi tokenın KV namespace okuma yetkisi bulunmadığı için code 10000 Authentication error verdi.
+
+Kök neden:
+- 1010 hatası container image veya FastAPI startup hatası değildi. Cloudflare edge, Python urllib istemcisinin browser signature'ını engelledi.
+- Cleanup permission hatası canary fonksiyon doğrulamasından bağımsızdı ancak workflow sonucunu ayrıca failure yapabiliyordu.
+
+Çözüm:
+- Canary test istemcisine browser-compatible User-Agent ve Accept başlıkları eklendi.
+- Cleanup adımı non-gating yapıldı; canary doğrulamasının gerçek sonucu cleanup permission durumundan ayrıldı.
+- Commitler: `67c102e184f408d1a7450a5635bf6ea282a86fdc`, `30ef3596530e32a7321f3a2a47454c5b4ed054eb`.
+- Retry run `35930310197`: SUCCESS.
+- Canary API sonucu: `GENESIS_V3_CANARY_API_OK checks=23`.
+- Aday digest: `sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe`.
+
+Production aktivasyonu:
+- Guarded activation workflow oluşturuldu: `.github/workflows/genesis-v3-activate.yml`.
+- Aktivasyon run `35930678309`: SUCCESS.
+- Production başarısız olursa otomatik olarak son doğrulanmış `sha256:0e607006...` imajına rollback edecek koruma eklendi.
+- Rollback bu run'da tetiklenmedi.
+- Worker version: `502f8866-bacb-4715-ab08-8e1611c3f5fd` / number 82.
+- Container version: 62.
+- Production image: `sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe`.
+- failed=0, health.errors=[], observability logs=true.
+- V3 classes ve curriculum API'leri HTTP 200.
+- Mevcut auth, coaching-v2, dashboard overlay, invalid-token 404 ve coaching hot-asset cache davranışları korundu.
+- Bağımsız production smoke run `35930849681`: SUCCESS.
+- Metadata run `35930936915`: SUCCESS.
+
+Sonuç:
+Önceki V3 `ImagePullError / failed unpacking image` yolu kullanılmadı. Yeniden oluşturulan doğrulanmış 11-layer aday Cloudflare canary'de gerçek API testlerinden geçtikten sonra aynı digest production'a alınmış ve bağımsız smoke ile doğrulanmıştır.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
