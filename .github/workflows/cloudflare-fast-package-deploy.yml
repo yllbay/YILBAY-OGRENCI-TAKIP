@@ -126,6 +126,11 @@ jobs:
           set -euo pipefail
           cp cloudflare/coaching_sidebar_coursecopy.py cloudflare/package-runtime/coaching_sidebar_coursecopy.py
           printf '\nCOPY coaching_sidebar_coursecopy.py /tmp/coaching_sidebar_coursecopy.py\nRUN python /tmp/coaching_sidebar_coursecopy.py && rm -f /tmp/coaching_sidebar_coursecopy.py\n' >> cloudflare/package-runtime/Dockerfile
+      - name: Apply coaching cache invalidation policy
+        run: |
+          set -euo pipefail
+          cp cloudflare/coaching_cache_policy.py cloudflare/package-runtime/coaching_cache_policy.py
+          printf '\nCOPY coaching_cache_policy.py /tmp/coaching_cache_policy.py\nRUN python /tmp/coaching_cache_policy.py && rm -f /tmp/coaching_cache_policy.py\n' >> cloudflare/package-runtime/Dockerfile
       - name: Fix curriculum desk navigation
         run: |
           set -euo pipefail
@@ -151,7 +156,8 @@ jobs:
           test -f single_admin_mode.py
           test -f single_admin_ui.py
           test -f coaching_sidebar_coursecopy.py
-          python -m py_compile curriculum_step1.py patch_app.py patch_online_token.py single_admin_mode.py single_admin_ui.py coaching_sidebar_coursecopy.py
+          test -f coaching_cache_policy.py
+          python -m py_compile curriculum_step1.py patch_app.py patch_online_token.py single_admin_mode.py single_admin_ui.py coaching_sidebar_coursecopy.py coaching_cache_policy.py
           node --check coaching-curriculum.js
           grep -q 'GenesisContainer = class extends Container' index.js
           grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' patch_app.py
@@ -211,6 +217,9 @@ jobs:
           grep -q "api('/api/topics')" /tmp/patched-coaching-v2.js
           grep -q "api('/api/test-tree')" /tmp/patched-coaching-v2.js
           grep -q 'GENESIS_COACHING_COURSE_COPY_V1' /tmp/patched-coaching-v2.css
+          grep -q 'coaching-v2.css?v=0.15.2-coaching-2' /tmp/patched-coaching-v2.html
+          grep -q 'coaching-v2.js?v=0.15.2-coaching-2' /tmp/patched-coaching-v2.html
+          grep -q 'GENESIS_COACHING_HOT_ASSET_CACHE_V1' /tmp/patched-app.py
           node --check /tmp/patched-coaching-v2.js
           python -m py_compile /tmp/patched-app.py /tmp/patched-curriculum.py /tmp/patched-online-exam.py /tmp/patched-coaching-v2.py
           node --check /tmp/patched-app-0.10.7.js
@@ -303,6 +312,12 @@ jobs:
           grep -q "api('/api/test-tree')" /tmp/coaching-v2.js || { echo "::error::Bağımsız Testler GET bağlantısı yok"; exit 53; }
           grep -q '/api/questions?topic_id=' /tmp/coaching-v2.js || { echo "::error::Bağımsız soru GET bağlantısı yok"; exit 54; }
           grep -q 'GENESIS_COACHING_COURSE_COPY_V1' /tmp/coaching-v2.css || { echo "::error::Koçluk bağımsız kopya CSS doğrulanamadı"; exit 55; }
+          grep -q 'coaching-v2.css?v=0.15.2-coaching-2' /tmp/coaching-v2.html || { echo "::error::Koçluk CSS cache-bust sürümü doğrulanamadı"; exit 56; }
+          grep -q 'coaching-v2.js?v=0.15.2-coaching-2' /tmp/coaching-v2.html || { echo "::error::Koçluk JS cache-bust sürümü doğrulanamadı"; exit 57; }
+          curl -sSI "$URL/static/coaching-v2.js?v=0.15.2-coaching-2" -o /tmp/coaching-js.headers
+          curl -sSI "$URL/static/coaching-v2.css?v=0.15.2-coaching-2" -o /tmp/coaching-css.headers
+          grep -qi '^cache-control:.*no-store' /tmp/coaching-js.headers || { echo "::error::Koçluk JS no-store cache policy yok"; cat /tmp/coaching-js.headers; exit 58; }
+          grep -qi '^cache-control:.*no-store' /tmp/coaching-css.headers || { echo "::error::Koçluk CSS no-store cache policy yok"; cat /tmp/coaching-css.headers; exit 59; }
           node --check /tmp/coaching-v2.js
 
           ONLINE_CODE=$(curl -sS -o /tmp/online-invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token" || true)
