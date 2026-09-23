@@ -1,1 +1,1 @@
-2026-09-24 inspect stable V3 restore rollout
+2026-09-24 inspect docker-import V3 rollout
