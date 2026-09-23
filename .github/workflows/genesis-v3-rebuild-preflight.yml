@@ -1,0 +1,72 @@
+name: GENESIS V3 Rebuild Preflight
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/genesis-v3-rebuild-preflight.yml"
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install OCI tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo umoci
+      - name: Copy and unpack current image without Docker overlay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container.json
+          IMAGE="$(jq -r '.configuration.image' /tmp/container.json)"
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS -X POST "$CF_API_BASE/accounts/$ACCOUNT_ID/containers/registries/registry.cloudflare.com/credentials" \
+            -H "$AUTH" -H "Content-Type: application/json" \
+            --data '{"expiration_minutes":10,"permissions":["pull"]}' -o /tmp/registry.json
+          REG_USER="$(jq -r '.result.username' /tmp/registry.json)"
+          REG_PASS="$(jq -r '.result.password' /tmp/registry.json)"
+          skopeo inspect --config --creds "$REG_USER:$REG_PASS" "docker://$IMAGE" > /tmp/genesis-config.json
+          echo "===== CURRENT IMAGE CONFIG ====="
+          python3 - <<'PY'
+          import json
+          c=json.load(open('/tmp/genesis-config.json'))
+          print({k:c.get(k) for k in ('architecture','os')})
+          print('RUNTIME', {k:c.get('config',{}).get(k) for k in ('Cmd','Entrypoint','WorkingDir','User')})
+          n=0
+          for h in c.get('history',[]):
+              if not h.get('empty_layer'): n+=1
+              cmd=h.get('created_by','')
+              if n<=24: print('LAYER',n,'EMPTY',h.get('empty_layer',False),'CMD',cmd[:350])
+          PY
+          skopeo copy --src-creds "$REG_USER:$REG_PASS" "docker://$IMAGE" oci:/tmp/genesis-oci:live
+          umoci unpack --rootless --image /tmp/genesis-oci:live /tmp/genesis-bundle
+          test -f /tmp/genesis-bundle/rootfs/app/APP/backend/app.py
+          test -f /tmp/genesis-bundle/rootfs/app/APP/backend/coaching_v2.py
+          test -f /tmp/genesis-bundle/rootfs/app/start-container.sh
+          python3 -m py_compile /tmp/genesis-bundle/rootfs/app/APP/backend/coaching_v2.py
+          echo "ROOTFS_BYTES=$(du -sb /tmp/genesis-bundle/rootfs | awk '{print $1}')"
+          echo "LAYER_COUNT=$(jq -r '.layers|length' /tmp/genesis-oci/blobs/sha256/$(jq -r '.manifests[0].digest' /tmp/genesis-oci/index.json | cut -d: -f2) 2>/dev/null || true)"
+          echo "START_SCRIPT"
+          cat /tmp/genesis-bundle/rootfs/app/start-container.sh
+          echo "OS"
+          cat /tmp/genesis-bundle/rootfs/etc/os-release
+          echo "APP_TOP_LEVEL"
+          find /tmp/genesis-bundle/rootfs/app -maxdepth 2 -type f -printf '%P\n' | head -50
+          echo "GENESIS rebuild preflight OK"
