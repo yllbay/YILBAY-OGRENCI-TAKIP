@@ -8,7 +8,7 @@ checks=0
 def req(path, method='GET', data=None, expected=200, raw=None, ctype='application/json'):
     global checks
     body=json.dumps(data).encode() if data is not None else raw
-    r=urllib.request.Request(base+path,data=body,method=method,headers={'Content-Type':ctype,'X-Genesis-Canary':os.environ['CANARY_TOKEN']})
+    r=urllib.request.Request(base+path,data=body,method=method,headers={'Content-Type':ctype,'X-Genesis-Canary':os.environ['CANARY_TOKEN'],'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36','Accept':'application/json,text/html;q=0.9,*/*;q=0.8'})
     try:
         with op.open(r,timeout=30) as response: code=response.status; out=response.read()
     except urllib.error.HTTPError as e: code=e.code;out=e.read()
