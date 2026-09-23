@@ -32,10 +32,10 @@
 - Deploy aracı: Wrangler
 - Container observability logs: enabled
 - Kalıcılık: mevcut GENESIS DATA/SQLite yapısı korunur.
-- Son doğrulanmış Worker version ID: c37ee267-f427-4b8d-b00f-6aabd4062d4d
-- Son doğrulanmış Worker version number: 53
-- Son doğrulanmış container version: 40
-- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:74b1f284bc7a8a2035a0392291d6c41c60e861cb8ef0c849490579601c9b261a
+- Son doğrulanmış Worker version ID: 127aa738-4b0b-4db5-bb19-4b5209eeb748
+- Son doğrulanmış Worker version number: 57
+- Son doğrulanmış container version: 44
+- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:36c3c6a752049d7672a768c520718defe0ea51b2617dabe5f8bc0967176a9fc6
 
 ## GitHub dalları
 - main: production envanter/smoke altyapısı ve kaynak
@@ -245,6 +245,52 @@ Smoke doğrulamaları:
 
 Bu mod artık GENESIS WEB production için kanonik auth davranışıdır.
 
+## 12. 2026-09-23 Koçluk Stüdyosu yan panel hızlı işlemleri
+
+Kullanıcının açık talebi:
+- Koçluk Stüdyosu yan paneline "Öğrenci Ekle" düğmesi eklenecek.
+- Koçluk Stüdyosu yan paneline "Ders Ekle" düğmesi eklenecek.
+
+Uygulama öncesi canlı production source snapshot incelendi. Mevcut koçluk akışında:
+- öğrenci ekleme için mevcut `studentForm()` akışı,
+- seçili öğrenciye ders atama için mevcut `courseForm()` akışı
+zaten bulunuyordu. Yeni backend, schema veya veri modeli oluşturulmadı.
+
+Uygulanan frontend davranışı:
+- Yan panelde "+ Öğrenci Ekle" düğmesi mevcut öğrenci ekleme formunu açar.
+- Yan panelde "+ Ders Ekle" düğmesi seçili öğrencinin Dersler sekmesine geçer ve mevcut ders ekleme/atama formunu açar.
+- Öğrenci seçilmeden "Ders Ekle" tıklanırsa kullanıcıdan önce öğrenci seçmesi istenir.
+- HTML / JS / CSS patch'i idempotent marker olarak `GENESIS_COACHING_SIDEBAR_ACTIONS` kullanır.
+- Production patch dosyası: `cloudflare/coaching_sidebar_actions.py`.
+
+Release kayıtları:
+- patch dosyası commit: 192f6befa8887984a9f8939283d7322cf415c1e0
+- release workflow commit: ed1b7b598f2d978f20fbe881dc8e2653d92415d7
+- deploy trigger commit: 816e5a34e70674fd769c2e3bd31d1f4c6ed7a814
+- Fast Cloudflare Package Deploy run: 35857303418
+- sonuç: SUCCESS
+- Worker version ID: 127aa738-4b0b-4db5-bb19-4b5209eeb748
+- Worker version number: 57
+- Container version: 44
+- Container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:36c3c6a752049d7672a768c520718defe0ea51b2617dabe5f8bc0967176a9fc6
+
+Bağımsız post-deploy doğrulama:
+- main inventory trigger commit: 9c9c824f4fa9f0ba7a177ca2c7451aa374c75b72
+- Cloudflare GENESIS Inventory run: 35857665059
+- sonuç: SUCCESS
+- canlı `coaching-v2.html` içinde "+ Öğrenci Ekle" ve "+ Ders Ekle" doğrulandı
+- `coaching-v2.js` syntax check başarılı
+- ilgili HTML / JS / CSS statik assetleri HTTP 200
+- toplam kritik statik asset kontrolü: 23/23 HTTP 200
+- kritik JavaScript syntax kontrolü: 14/14 başarılı
+- container failed instance: 0
+- health errors: []
+- observability logs: enabled
+- canlı health: 0.15.2 / schema 14 / storage ok / r2-fuse
+- public invalid-token 404 davranışları korunuyor
+
+Bu değişiklik Adım 2 olarak sınıflandırılmamıştır; Adım 1 sonrası kullanıcı tarafından açıkça istenen sınırlı bir Koçluk Stüdyosu UI geliştirmesidir.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -260,9 +306,10 @@ Adım 1 sonucunda:
 Adım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
-Güncel Worker: c37ee267-f427-4b8d-b00f-6aabd4062d4d.
-Güncel container version: 43.
-Kullanıcı bir sonraki fonksiyonel geliştirme adımını henüz tarif etmedi.
+Güncel Worker: 127aa738-4b0b-4db5-bb19-4b5209eeb748 (version number 57).
+Güncel container version: 44.
+Koçluk Stüdyosu yan panelinde "+ Öğrenci Ekle" ve "+ Ders Ekle" hızlı işlem düğmeleri production'da aktif ve bağımsız inventory ile doğrulanmıştır.
+Bu UI geliştirmesi Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.
 Production auth modu: kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumu. Kurum kullanıcı hesapları kaldırılmıştır; kurum veri klasörleri korunmuştur.
 TinyFish kullanılmayacak.
 Ayrıca GENESIS web geliştirme sohbetlerinin otomatik devir sistemi için Chrome uzantısı geliştiriliyor.
