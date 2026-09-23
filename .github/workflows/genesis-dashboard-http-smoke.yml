@@ -20,7 +20,7 @@ jobs:
           set -euo pipefail
           URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
 
-          ROOT_CODE="$(curl -sS -L --max-time 30 -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+          ROOT_CODE="$(curl -sS -L --max-time 30 -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
           echo "root HTTP=$ROOT_CODE"
           test "$ROOT_CODE" = "200"
 
@@ -32,16 +32,16 @@ jobs:
           grep -q 'location.assign("/coaching")' /tmp/root.html || { echo "::error::Koçluk Stüdyosu route missing"; exit 16; }
           grep -q 'window.genesisCreateInstitution' /tmp/root.html || { echo "::error::Kurum Açma action missing"; exit 17; }
 
-          AUTH_CODE="$(curl -sS -L --max-time 30 -o /tmp/auth.js -w '%{http_code}' "$URL/static/genesis-auth-gate.js" || true)"
+          AUTH_CODE="$(curl -sS -L --max-time 30 -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/auth.js -w '%{http_code}' "$URL/static/genesis-auth-gate.js" || true)"
           echo "auth asset HTTP=$AUTH_CODE"
           test "$AUTH_CODE" = "200"
           grep -q 'window.genesisCreateInstitution' /tmp/auth.js || { echo "::error::institution form hook missing"; exit 18; }
 
-          WORKSPACE_CODE="$(curl -sS -L --max-time 30 -o /tmp/workspace.html -w '%{http_code}' "$URL/?workspace=1" || true)"
+          WORKSPACE_CODE="$(curl -sS -L --max-time 30 -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/workspace.html -w '%{http_code}' "$URL/?workspace=1" || true)"
           echo "workspace HTTP=$WORKSPACE_CODE"
           test "$WORKSPACE_CODE" = "200"
 
-          COACH_CODE="$(curl -sS -L --max-time 30 -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching" || true)"
+          COACH_CODE="$(curl -sS -L --max-time 30 -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching" || true)"
           echo "coaching HTTP=$COACH_CODE"
           test "$COACH_CODE" = "200"
 
