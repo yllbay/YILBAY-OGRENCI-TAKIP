@@ -122,28 +122,41 @@ jobs:
           grep -q '/api/coaching/v3/students/{sid}/homework/auto' "$ROOT/backend/coaching_model_v3.py"
           grep -q 'coach3_homework_assignments' "$ROOT/backend/coaching_model_v3.py"
 
-      - name: Create one-layer image preserving runtime config
+      - name: Create one-layer scratch image preserving runtime config
         run: |
           set -euo pipefail
           ROOT=/tmp/genesis-v3/bundle/rootfs
+          BUILD=/tmp/genesis-v3/flat-build
+          mkdir -p "$BUILD"
           sudo chown -R 0:0 "$ROOT"
-          sudo tar --numeric-owner --xattrs --acls -C "$ROOT" -cf /tmp/genesis-v3/rootfs.tar .
+          sudo tar --numeric-owner -C "$ROOT" -cf "$BUILD/rootfs.tar" .
           NEW_IMAGE="registry.cloudflare.com/$ACCOUNT_ID/genesis-web-0152-genesiscontainer:coach3-v3-${GITHUB_SHA::12}"
-          mapfile -t IMAGE_ENVS < <(jq -r '.config.Env[]?' /tmp/genesis-v3/source-config.json)
-          CHANGES=()
-          for envline in "${IMAGE_ENVS[@]}"; do CHANGES+=(--change "ENV $envline"); done
-          WORKDIR="$(jq -r '.config.WorkingDir // empty' /tmp/genesis-v3/source-config.json)"
-          [ -z "$WORKDIR" ] || CHANGES+=(--change "WORKDIR $WORKDIR")
-          USER_CFG="$(jq -r '.config.User // empty' /tmp/genesis-v3/source-config.json)"
-          [ -z "$USER_CFG" ] || CHANGES+=(--change "USER $USER_CFG")
-          while IFS= read -r port; do [ -z "$port" ] || CHANGES+=(--change "EXPOSE $port"); done < <(jq -r '.config.ExposedPorts // {} | keys[]?' /tmp/genesis-v3/source-config.json)
-          ENTRY="$(jq -c '.config.Entrypoint // null' /tmp/genesis-v3/source-config.json)"
-          [ "$ENTRY" = "null" ] || CHANGES+=(--change "ENTRYPOINT $ENTRY")
-          CMD="$(jq -c '.config.Cmd // null' /tmp/genesis-v3/source-config.json)"
-          [ "$CMD" = "null" ] || CHANGES+=(--change "CMD $CMD")
-          docker import --platform=linux/amd64 "${CHANGES[@]}" /tmp/genesis-v3/rootfs.tar "$NEW_IMAGE" >/tmp/genesis-v3/import-id.txt
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cfg=json.loads(Path('/tmp/genesis-v3/source-config.json').read_text())
+          c=cfg.get('config') or {}
+          lines=['FROM scratch','ADD rootfs.tar /']
+          for item in c.get('Env') or []:
+              if '\n' in item or '\r' in item:
+                  raise SystemExit('Unexpected newline in ENV')
+              lines.append('ENV '+item.replace('\\','\\\\').replace(' ','\\ '))
+          wd=c.get('WorkingDir') or ''
+          if wd: lines.append('WORKDIR '+wd)
+          user=c.get('User') or ''
+          if user: lines.append('USER '+user)
+          for port in (c.get('ExposedPorts') or {}).keys():
+              lines.append('EXPOSE '+port)
+          if c.get('Entrypoint') is not None:
+              lines.append('ENTRYPOINT '+json.dumps(c['Entrypoint'],separators=(',',':')))
+          if c.get('Cmd') is not None:
+              lines.append('CMD '+json.dumps(c['Cmd'],separators=(',',':')))
+          Path('/tmp/genesis-v3/flat-build/Dockerfile').write_text('\n'.join(lines)+'\n')
+          PY
+          cat "$BUILD/Dockerfile"
+          docker build --provenance=false -t "$NEW_IMAGE" "$BUILD"
           LAYERS="$(docker image inspect "$NEW_IMAGE" | jq '.[0].RootFS.Layers|length')"
-          test "$LAYERS" -eq 1 || { echo "::error::Flattened image has $LAYERS layers"; exit 21; }
+          test "$LAYERS" -eq 1 || { echo "::error::Scratch-flattened image has $LAYERS layers"; exit 21; }
           CID="$(docker create "$NEW_IMAGE")"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           docker cp "$CID:/app/APP/backend/app.py" /tmp/genesis-v3/flat-app.py
@@ -243,8 +256,13 @@ jobs:
             F="$(jq -r '.health.instances.failed // 0' /tmp/genesis-v3/container-after.json)"
             E="$(jq -r '.health.errors|length' /tmp/genesis-v3/container-after.json)"
             IMG="$(jq -r '.configuration.image // empty' /tmp/genesis-v3/container-after.json)"
-            if [ "$V" -gt "$PREVIOUS_VERSION" ] && [ "$F" -eq 0 ] && [ "$E" -eq 0 ] && [ "$IMG" = "$NEW_IMAGE" ]; then
+            if [ "$V" -gt "$PREVIOUS_VERSION" ] && [ "$IMG" = "$NEW_IMAGE" ] && [ "$F" -eq 0 ] && [ "$E" -eq 0 ]; then
               READY=1; echo "Container V3 rollout accepted: version $V"; break
+            fi
+            if [ "$V" -gt "$PREVIOUS_VERSION" ] && [ "$IMG" = "$NEW_IMAGE" ] && { [ "$F" -gt 0 ] || [ "$E" -gt 0 ]; }; then
+              echo "::error::New V3 image reported rollout failure"
+              cat /tmp/genesis-v3/container-after.json
+              exit 33
             fi
             curl -sS -L --max-time 8 "$URL/" -o /tmp/genesis-v3/warm.html || true
             sleep 5
