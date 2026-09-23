@@ -453,5 +453,50 @@ Düzeltme:
 - authenticated coaching HTTP 200
 - kurum form hook'u `window.genesisCreateInstitution` mevcut
 
+## 23. Koçluk dashboard API geçmiş HTTP 500 kaydının yeniden doğrulanması
+Tarih: 2026-09-23
+
+Geçmiş tarayıcı kaydı:
+`GET /api/coaching/v2/students/1/dashboard?week_start=2026-09-21` isteğinde daha önce HTTP 500 görülmüştü.
+
+Yeni Koçluk dashboard geliştirmesine başlamadan önce aynı API akışı production üzerinde yeniden test edildi.
+
+Doğrulama:
+- root üzerinden single-ADMIN session cookie alındı
+- `GET /api/coaching/v2/students` HTTP 200
+- mevcut ilk öğrenci için `GET /api/coaching/v2/students/{id}/dashboard?week_start=2026-09-21` HTTP 200
+- response içinde `student`, `summary`, `tasks[]`, `assignments[]` doğrulandı
+- GENESIS Coaching Dashboard API Smoke run: `35904129171`
+- sonuç: SUCCESS
+
+Sonuç:
+Önceki tekil HTTP 500 bu doğrulamada yeniden üretilemedi. Bu nedenle yeni backend hotfix uygulanmadı; dashboard mevcut doğrulanmış API sözleşmesi üzerine kuruldu.
+
+## 24. Koçluk dashboard geliştirmesinde container layer riski
+Tarih: 2026-09-23
+
+Risk:
+Production container image zinciri önceki release'lerde Docker/OCI `max depth exceeded` sınırına ulaşmış olduğundan yalnız UI düzenlemesi için yeni container layer üretmek production güvenliği açısından uygun değildi.
+
+Çözüm:
+- `cloudflare/coaching_dashboard_edge.py` eklendi
+- `GENESIS_COACHING_DASHBOARD_EDGE_V1` yalnız `/coaching` HTML response'una Worker katmanında eklenir
+- backend, SQLite/R2, container image ve container version değiştirilmez
+- Worker deploy `--containers-rollout=none` ile yapılır
+- workflow deploy öncesi/sonrası container image ve version eşitliğini zorunlu olarak doğrular
+
+Production:
+- GENESIS Worker Dashboard Overlay run: `35904421924`
+- sonuç: SUCCESS
+- Worker version ID: `2a2a844c-bf51-407b-a4ce-a71a99dc20f4`
+- Worker version number: 73
+- Container version: 55
+- Container image: `sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e`
+- container failed=0
+- health.errors=[]
+- observability logs=true
+- root dashboard ve coaching dashboard marker'ları smoke testte doğrulandı
+- öğrenci listesi ve dashboard API smoke kontrolleri geçti
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
