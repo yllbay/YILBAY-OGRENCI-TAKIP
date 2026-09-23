@@ -350,15 +350,25 @@ jobs:
         run: |
           set -euo pipefail
           READY=0
-          for i in $(seq 1 24); do
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          for i in $(seq 1 72); do
             npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container-info.json
             VERSION="$(jq -r '.version // 0' /tmp/container-info.json)"
             FAILED="$(jq -r '.health.instances.failed // 0' /tmp/container-info.json)"
             ERRORS="$(jq -r '.health.errors | length' /tmp/container-info.json)"
+            STARTING="$(jq -r '.health.instances.starting // 0' /tmp/container-info.json)"
             if [ "$VERSION" -gt "$PREVIOUS_CONTAINER_VERSION" ] && [ "$FAILED" -eq 0 ] && [ "$ERRORS" -eq 0 ]; then
               READY=1
               echo "Container rollout accepted: version $VERSION (active instances may be 0 until request)"
               break
+            fi
+            if [ "$FAILED" -gt 0 ] || [ "$ERRORS" -gt 0 ]; then
+              echo "::error::Container rollout reported a hard health failure"
+              cat /tmp/container-info.json
+              exit 28
+            fi
+            if [ "$STARTING" -gt 0 ]; then
+              curl -sS -L --max-time 8 "$URL/" -o /tmp/rollout-warmup.html || true
             fi
             sleep 5
           done
