@@ -1,0 +1,2 @@
+triggered_at=2026-09-23T08:15:00Z
+purpose=inspect-current-release-package-before-hotfix
