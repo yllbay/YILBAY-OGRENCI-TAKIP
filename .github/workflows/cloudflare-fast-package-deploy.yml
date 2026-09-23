@@ -362,14 +362,17 @@ jobs:
               echo "Container rollout accepted: version $VERSION (active instances may be 0 until request)"
               break
             fi
-            if [ "$FAILED" -gt 0 ] || [ "$ERRORS" -gt 0 ]; then
-              echo "::error::Container rollout reported a hard health failure"
+            # Cloudflare may keep the previous rollout's failed health event visible
+            # while a newly deployed rollout is still replacing it. Do not abort on a
+            # stale error until the container version has actually advanced.
+            if [ "$VERSION" -gt "$PREVIOUS_CONTAINER_VERSION" ] && { [ "$FAILED" -gt 0 ] || [ "$ERRORS" -gt 0 ]; }; then
+              echo "::error::New container rollout reported a hard health failure"
               cat /tmp/container-info.json
               exit 28
             fi
-            if [ "$STARTING" -gt 0 ]; then
-              curl -sS -L --max-time 8 "$URL/" -o /tmp/rollout-warmup.html || true
-            fi
+            # Warm the Worker during rollout even when the reported error belongs to
+            # the previous version. This helps Cloudflare schedule/unpack the new image.
+            curl -sS -L --max-time 8 "$URL/" -o /tmp/rollout-warmup.html || true
             sleep 5
           done
           test "$READY" = "1" || { echo "::error::Container rollout version did not advance cleanly"; cat /tmp/container-info.json; exit 29; }
