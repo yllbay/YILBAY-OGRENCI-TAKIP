@@ -209,6 +209,94 @@ jobs:
           Path('/tmp/cf-inventory/wrapper-analysis.safe.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
           PY
 
+      - name: Audit production HTTP surface
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          mkdir -p /tmp/cf-inventory/http-audit
+          python3 - <<'PY'
+          import json, re, subprocess
+          from pathlib import Path
+          base="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          out={"probes":[],"static_assets":[],"js_syntax":[]}
+
+          def fetch(path, method="GET"):
+              body=Path("/tmp/cf-inventory/http-audit/body.tmp")
+              cmd=["curl","-sS","-L","-X",method,"-o",str(body),"-w","%{http_code}",base+path]
+              p=subprocess.run(cmd,text=True,capture_output=True)
+              code=int(p.stdout.strip() or 0) if p.returncode==0 else 0
+              text=body.read_text(errors="ignore")[:500] if body.exists() else ""
+              return code,text
+
+          probes=[
+            ("/","public-shell"),
+            ("/api/system/health","public-health"),
+            ("/api/auth/setup-status","public-auth"),
+            ("/api/auth/me","public-auth"),
+            ("/coaching","protected-teacher"),
+            ("/coaching/desk","protected-teacher"),
+            ("/api/coaching/v2/students","protected-api"),
+            ("/api/coaching/curriculum/tree","protected-api"),
+            ("/coaching/student/genesis-audit-invalid-token","public-student-page"),
+            ("/api/coaching/public/genesis-audit-invalid-token/identity","public-student-api"),
+            ("/api/coaching/public/genesis-audit-invalid-token/dashboard","public-student-api"),
+            ("/api/coaching/public/genesis-audit-invalid-token/goals","public-student-api"),
+            ("/api/coaching/public/genesis-audit-invalid-token/learning","public-student-api"),
+            ("/api/coaching/public/genesis-audit-invalid-token/insights","public-student-api"),
+            ("/online/genesis-audit-invalid-token","public-online-page"),
+            ("/api/online/public/genesis-audit-invalid-token/meta","public-online-api"),
+            ("/api/online/public/genesis-audit-invalid-token/page/1","public-online-api"),
+            ("/api/online/session/genesis-audit-invalid-token","public-online-session"),
+            ("/api/online/internet-test/genesis-audit-invalid-token","public-online-api"),
+          ]
+          for path,kind in probes:
+              code,text=fetch(path)
+              out["probes"].append({"path":path,"kind":kind,"status":code,"body_prefix":text.replace("\n"," ")[:240]})
+
+          root_code,root_text=fetch("/")
+          refs=sorted(set(re.findall(r'''(?:src|href)=["']([^"']+)["']''',root_text)))
+          critical=[
+            "/static/genesis-auth-gate.js",
+            "/static/app-0.10.7.js",
+            "/static/genesis-online-01.js",
+            "/static/coaching-v2.html",
+            "/static/coaching-v2.js",
+            "/static/coaching-student.html",
+            "/static/coaching-student.js",
+            "/static/coaching-desk.html",
+            "/static/coaching-desk.js",
+            "/static/coaching-goals.html",
+            "/static/coaching-goals.js",
+            "/static/coaching-goals-public.js",
+            "/static/coaching-learning.html",
+            "/static/coaching-learning.js",
+            "/static/coaching-learning-teacher.js",
+            "/static/coaching-insights.js",
+            "/static/coaching-ops.js",
+            "/static/coaching-curriculum.html",
+            "/static/coaching-curriculum.js",
+            "/static/online-student.html",
+            "/static/online-student.js",
+          ]
+          refs=sorted(set([x.split("?",1)[0] for x in refs if x.startswith("/static/")]+critical))
+          for i,path in enumerate(refs):
+              code,text=fetch(path)
+              row={"path":path,"status":code}
+              out["static_assets"].append(row)
+              if path.endswith(".js") and code==200:
+                  dst=Path(f"/tmp/cf-inventory/http-audit/js-{i}.js")
+                  subprocess.run(["curl","-fsSL",base+path,"-o",str(dst)],check=True)
+                  ck=subprocess.run(["node","--check",str(dst)],text=True,capture_output=True)
+                  out["js_syntax"].append({"path":path,"ok":ck.returncode==0,"error":ck.stderr[:300]})
+          Path("/tmp/cf-inventory/production-http-audit.safe.json").write_text(json.dumps(out,ensure_ascii=False,indent=2))
+          bad_assets=[x for x in out["static_assets"] if x["status"]!=200]
+          bad_js=[x for x in out["js_syntax"] if not x["ok"]]
+          blocked_public=[x for x in out["probes"] if x["kind"].startswith("public-") and x["path"] not in ("/","/api/system/health","/api/auth/setup-status","/api/auth/me") and x["status"] in (401,403)]
+          print(json.dumps({"bad_assets":bad_assets,"bad_js":bad_js,"blocked_public_routes":blocked_public},ensure_ascii=False,indent=2))
+          if bad_assets or bad_js:
+              raise SystemExit("Static production surface audit failed")
+          PY
+
       - name: Produce sanitized inventory
         run: |
           set -euo pipefail
@@ -237,6 +325,7 @@ jobs:
             /tmp/cf-inventory/app-tree.safe.txt
             /tmp/cf-inventory/backend-ast.safe.json
             /tmp/cf-inventory/wrapper-analysis.safe.json
+            /tmp/cf-inventory/production-http-audit.safe.json
             /tmp/cf-inventory/current-source/
             /tmp/cf-inventory/worker-content.bin
             /tmp/cf-inventory/worker-content.sha256
