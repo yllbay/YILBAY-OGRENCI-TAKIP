@@ -1,0 +1,36 @@
+name: GENESIS Coaching Source Inspect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/coaching-inspect-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch live coaching assets and summarize
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          curl -fsS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies "$URL/" -o /tmp/root.html
+          curl -fsS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies "$URL/static/coaching-v2.html" -o /tmp/coaching.html
+          curl -fsS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies "$URL/static/coaching-v2.js" -o /tmp/coaching.js
+          echo "===== HTML ====="
+          sed -n '1,260p' /tmp/coaching.html
+          echo "===== JS STATE/API/FUNCTIONS ====="
+          grep -nE 'const state=|function (render|renderStudents|refreshDashboard|selectStudent|setTab|week|dashboard|overview|courseForm|studentForm)|async function (refreshDashboard|selectStudent)|/api/coaching/v2/' /tmp/coaching.js | head -260 || true
+          echo "===== JS CONTEXT renderStudents ====="
+          LINE="$(grep -n 'function renderStudents' /tmp/coaching.js | head -1 | cut -d: -f1 || true)"
+          if [ -n "$LINE" ]; then START=$((LINE-5)); END=$((LINE+90)); sed -n "${START},${END}p" /tmp/coaching.js; fi
+          echo "===== JS CONTEXT refreshDashboard/renderDashboard ====="
+          LINE="$(grep -nE 'function (renderDashboard|dashboardHtml)|async function refreshDashboard' /tmp/coaching.js | head -1 | cut -d: -f1 || true)"
+          if [ -n "$LINE" ]; then START=$((LINE-10)); END=$((LINE+220)); sed -n "${START},${END}p" /tmp/coaching.js; fi
+          echo "===== ASSET SIZES ====="
+          wc -c /tmp/coaching.html /tmp/coaching.js
