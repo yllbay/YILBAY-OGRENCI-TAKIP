@@ -372,5 +372,48 @@ Bağımsız doğrulama:
 Production etkisi:
 Koçluk Stüdyosu değişikliklerinin tarayıcıda eski immutable assetler nedeniyle gizlenmesi engellendi. Diğer versioned statik assetlerin mevcut cache politikası değiştirilmedi.
 
+## 21. Açılış dashboard release prebuild — Docker max depth exceeded
+Tarih: 2026-09-23
+
+Hata:
+GENESIS açılış Yönetim Paneli release denemesinde Fast Cloudflare Package Deploy run `35871205798`, `Prebuild patched container safely` adımında başarısız oldu.
+
+Hata metni:
+`failed to prepare ...: max depth exceeded`
+
+Hatanın görüldüğü Dockerfile adımı:
+`COPY coaching_sidebar_coursecopy.py /tmp/coaching_sidebar_coursecopy.py`
+
+Kök neden:
+- Production release hattı canlı, zaten çok katmanlı container image'ını base image olarak kullanıyordu.
+- Biriken production hotfix/patch dosyalarının her biri Dockerfile'a ayrı `COPY` ve `RUN` katmanları ekliyordu.
+- Yeni dashboard patch'i eklendiğinde BuildKit'in izin verdiği image/layer derinliği prebuild sırasında aşıldı.
+- Hata dashboard JavaScript/CSS sözdiziminden kaynaklanmadı; package validation aşaması başarılıydı.
+
+Production etkisi:
+Yok. İlk run'da `Deploy one tested package` adımı çalışmadı ve production mevcut Worker v59 / Container v46 üzerinde kaldı.
+
+Çözüm:
+- Online token, single-admin, coaching sidebar, coaching cache ve opening dashboard production patch'leri ayrı Docker katmanları oluşturmak yerine tek toplu `COPY` + tek toplu `RUN` katmanında birleştirildi.
+- release workflow fix commit: `4414e0f62cba5f43e40e092489c8aefc3b63dc76`
+- retry trigger commit: `741f7554de9943745511166740c59917aee40028`
+- Fast Cloudflare Package Deploy run: `35871495303`
+- sonuç: SUCCESS
+- Worker: `26942052-2d03-4e6c-a531-cd94892d8c4b` / version number 60
+- Container version: 47
+- Container image: `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:2a4af72ce7b67c646777324bae1126686a59907c97ace04ff6c4bb4bb8a999fd`
+
+Bağımsız doğrulama:
+- main inventory verification commit: `475a8efdb8216e3a6654a54407b22abf2a77690c`
+- Cloudflare GENESIS Inventory run: `35872114484`
+- sonuç: SUCCESS
+- yeni açılış dashboard kaynak marker'ları production image içinde doğrulandı
+- root HTTP 200
+- 24 kritik statik asset HTTP 200
+- 14 kritik JavaScript syntax kontrolü başarılı
+- container failed=0
+- health.errors=[]
+- observability logs enabled
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
