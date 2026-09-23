@@ -1,0 +1,44 @@
+name: GENESIS Current Worker Metadata
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/worker-metadata-trigger.txt"
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_SCRIPT_NAME: genesis-web-0152
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Read current Worker and container metadata
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/deployments" -H "$AUTH" -o /tmp/deployments.json
+          VERSION_ID="$(jq -r '.result.deployments[0].versions[0].version_id // empty' /tmp/deployments.json)"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/workers/$CF_SCRIPT_NAME/versions/$VERSION_ID" -H "$AUTH" -o /tmp/version.json
+          echo "WORKER_VERSION_ID=$VERSION_ID"
+          echo "WORKER_VERSION_NUMBER=$(jq -r '.result.number // .result.version_number // "unknown"' /tmp/version.json)"
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container.json
+          echo "CONTAINER_VERSION=$(jq -r '.version' /tmp/container.json)"
+          echo "CONTAINER_IMAGE=$(jq -r '.configuration.image' /tmp/container.json)"
+          echo "CONTAINER_FAILED=$(jq -r '.health.instances.failed // 0' /tmp/container.json)"
+          echo "CONTAINER_ERRORS=$(jq -c '.health.errors // []' /tmp/container.json)"
+          echo "OBSERVABILITY_LOGS=$(jq -r '.observability.logs.enabled // false' /tmp/container.json)"
