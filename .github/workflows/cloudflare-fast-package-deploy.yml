@@ -115,6 +115,17 @@ jobs:
           path.write_text(src.replace(needle,replacement,1),encoding='utf-8')
           PY
           printf '\nCOPY patch_online_token.py /tmp/patch_online_token.py\nRUN python /tmp/patch_online_token.py && rm -f /tmp/patch_online_token.py\n' >> cloudflare/package-runtime/Dockerfile
+      - name: Fix curriculum desk navigation
+        run: |
+          set -euo pipefail
+          FILE="cloudflare/package-runtime/coaching-curriculum.html"
+          test -s "$FILE"
+          if grep -q 'href="/coaching-desk"' "$FILE"; then
+            sed -i 's|href="/coaching-desk"|href="/coaching/desk"|g' "$FILE"
+          fi
+          grep -q 'href="/coaching/desk"' "$FILE"
+          ! grep -q 'href="/coaching-desk"' "$FILE"
+
       - name: Validate deployment package
         working-directory: cloudflare/package-runtime
         run: |
@@ -163,6 +174,8 @@ jobs:
           grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' /tmp/patched-app.py
           grep -q '/api/coaching/curriculum/tree' /tmp/patched-curriculum.py
           grep -q 'Ders.*Ünite.*Alt Başlık' /tmp/patched-curriculum.html
+          grep -q 'href="/coaching/desk"' /tmp/patched-curriculum.html
+          ! grep -q 'href="/coaching-desk"' /tmp/patched-curriculum.html
           grep -q 'GENESIS_ONLINE_INVALID_TOKEN_GUARD' /tmp/patched-online-exam.py
           python -m py_compile /tmp/patched-app.py /tmp/patched-curriculum.py /tmp/patched-online-exam.py
           docker rm -f "$CID" >/dev/null
@@ -220,6 +233,8 @@ jobs:
           STATIC_CODE=$(curl -sS -o /tmp/curriculum.html -w '%{http_code}' "$URL/static/coaching-curriculum.html" || true)
           test "$STATIC_CODE" = "200" || { echo "::error::Curriculum UI HTTP $STATIC_CODE"; exit 33; }
           grep -q 'Ders.*Ünite.*Alt Başlık' /tmp/curriculum.html || { echo "::error::Curriculum UI doğrulanamadı"; exit 34; }
+          grep -q 'href="/coaching/desk"' /tmp/curriculum.html || { echo "::error::Curriculum Takip Masası bağlantısı yanlış"; exit 37; }
+          ! grep -q 'href="/coaching-desk"' /tmp/curriculum.html || { echo "::error::Eski kırık curriculum desk bağlantısı hâlâ mevcut"; exit 38; }
 
           ONLINE_CODE=$(curl -sS -o /tmp/online-invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token" || true)
           test "$ONLINE_CODE" = "404" || { echo "::error::Invalid online token beklenen 404 yerine HTTP $ONLINE_CODE"; cat /tmp/online-invalid.json; exit 35; }
