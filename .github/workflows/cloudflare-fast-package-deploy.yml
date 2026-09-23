@@ -93,9 +93,12 @@ jobs:
           from pathlib import Path
           import sys
           image=sys.argv[1]
-          src=Path('cloudflare/package-runtime/Dockerfile.template').read_text()
-          if '__CURRENT_IMAGE__' not in src: raise SystemExit('Dockerfile template placeholder eksik')
-          Path('cloudflare/package-runtime/Dockerfile').write_text(src.replace('__CURRENT_IMAGE__',image,1))
+          template=Path('cloudflare/package-runtime/Dockerfile.template')
+          if not template.is_file():
+              raise SystemExit('Dockerfile template eksik')
+          # The live image is already deeply layered. Start a compact derivative
+          # and add all current GENESIS patches in only two new layers.
+          Path('cloudflare/package-runtime/Dockerfile').write_text(f'FROM {image}\n',encoding='utf-8')
           PY
 
       - name: Add online invalid-token guard hotfix
@@ -131,19 +134,24 @@ jobs:
         run: |
           set -euo pipefail
           cp cloudflare/home_dashboard.py cloudflare/package-runtime/home_dashboard.py
-      - name: Append combined production patches
+      - name: Prepare compact production patch layer
         run: |
           set -euo pipefail
           cat >> cloudflare/package-runtime/Dockerfile <<'EOF'
-          
-          COPY patch_online_token.py single_admin_mode.py single_admin_ui.py coaching_sidebar_coursecopy.py coaching_cache_policy.py home_dashboard.py /tmp/genesis-patches/
-          RUN python /tmp/genesis-patches/patch_online_token.py && \
-              python /tmp/genesis-patches/single_admin_mode.py && \
-              python /tmp/genesis-patches/single_admin_ui.py && \
-              python /tmp/genesis-patches/coaching_sidebar_coursecopy.py && \
-              python /tmp/genesis-patches/coaching_cache_policy.py && \
-              python /tmp/genesis-patches/home_dashboard.py && \
-              rm -rf /tmp/genesis-patches
+          COPY curriculum_step1.py coaching-curriculum.html coaching-curriculum.js coaching-curriculum.css patch_app.py patch_online_token.py single_admin_mode.py single_admin_ui.py coaching_sidebar_coursecopy.py coaching_cache_policy.py home_dashboard.py /tmp/genesis-release/
+          RUN cp /tmp/genesis-release/curriculum_step1.py /app/APP/backend/curriculum_step1.py && \
+              cp /tmp/genesis-release/coaching-curriculum.html /app/APP/frontend/dist/coaching-curriculum.html && \
+              cp /tmp/genesis-release/coaching-curriculum.js /app/APP/frontend/dist/coaching-curriculum.js && \
+              cp /tmp/genesis-release/coaching-curriculum.css /app/APP/frontend/dist/coaching-curriculum.css && \
+              python /tmp/genesis-release/patch_app.py && \
+              python /tmp/genesis-release/patch_online_token.py && \
+              python /tmp/genesis-release/single_admin_mode.py && \
+              python /tmp/genesis-release/single_admin_ui.py && \
+              python /tmp/genesis-release/coaching_sidebar_coursecopy.py && \
+              python /tmp/genesis-release/coaching_cache_policy.py && \
+              python /tmp/genesis-release/home_dashboard.py && \
+              python -m py_compile /app/APP/backend/app.py /app/APP/backend/curriculum_step1.py /app/APP/backend/online_exam_module.py /app/APP/backend/coaching_v2.py && \
+              rm -rf /tmp/genesis-release
           EOF
       - name: Fix curriculum desk navigation
         run: |
