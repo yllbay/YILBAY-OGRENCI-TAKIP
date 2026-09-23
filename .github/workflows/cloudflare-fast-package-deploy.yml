@@ -115,6 +115,12 @@ jobs:
           path.write_text(src.replace(needle,replacement,1),encoding='utf-8')
           PY
           printf '\nCOPY patch_online_token.py /tmp/patch_online_token.py\nRUN python /tmp/patch_online_token.py && rm -f /tmp/patch_online_token.py\n' >> cloudflare/package-runtime/Dockerfile
+      - name: Apply single-admin package patches
+        run: |
+          set -euo pipefail
+          cp cloudflare/single_admin_mode.py cloudflare/package-runtime/single_admin_mode.py
+          cp cloudflare/single_admin_ui.py cloudflare/package-runtime/single_admin_ui.py
+          printf '\nCOPY single_admin_mode.py /tmp/single_admin_mode.py\nRUN python /tmp/single_admin_mode.py && rm -f /tmp/single_admin_mode.py\nCOPY single_admin_ui.py /tmp/single_admin_ui.py\nRUN python /tmp/single_admin_ui.py && rm -f /tmp/single_admin_ui.py\n' >> cloudflare/package-runtime/Dockerfile
       - name: Fix curriculum desk navigation
         run: |
           set -euo pipefail
@@ -137,7 +143,9 @@ jobs:
           test -f curriculum_step1.py
           test -f patch_app.py
           test -f patch_online_token.py
-          python -m py_compile curriculum_step1.py patch_app.py patch_online_token.py
+          test -f single_admin_mode.py
+          test -f single_admin_ui.py
+          python -m py_compile curriculum_step1.py patch_app.py patch_online_token.py single_admin_mode.py single_admin_ui.py
           node --check coaching-curriculum.js
           grep -q 'GenesisContainer = class extends Container' index.js
           grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' patch_app.py
@@ -171,13 +179,23 @@ jobs:
           docker cp "$CID:/app/APP/backend/curriculum_step1.py" /tmp/patched-curriculum.py
           docker cp "$CID:/app/APP/frontend/dist/coaching-curriculum.html" /tmp/patched-curriculum.html
           docker cp "$CID:/app/APP/backend/online_exam_module.py" /tmp/patched-online-exam.py
+          docker cp "$CID:/app/APP/backend/coaching_v2.py" /tmp/patched-coaching-v2.py
+          docker cp "$CID:/app/APP/frontend/dist/app-0.10.7.js" /tmp/patched-app-0.10.7.js
+          docker cp "$CID:/app/APP/frontend/dist/genesis-online-01.js" /tmp/patched-genesis-online-01.js
           grep -q 'GENESIS_COACHING_CURRICULUM_STEP1_START' /tmp/patched-app.py
           grep -q '/api/coaching/curriculum/tree' /tmp/patched-curriculum.py
           grep -q 'Ders.*Ünite.*Alt Başlık' /tmp/patched-curriculum.html
           grep -q 'href="/coaching/desk"' /tmp/patched-curriculum.html
           ! grep -q 'href="/coaching-desk"' /tmp/patched-curriculum.html
           grep -q 'GENESIS_ONLINE_INVALID_TOKEN_GUARD' /tmp/patched-online-exam.py
-          python -m py_compile /tmp/patched-app.py /tmp/patched-curriculum.py /tmp/patched-online-exam.py
+          grep -q 'GENESIS_SINGLE_ADMIN_AUTO_SESSION' /tmp/patched-app.py
+          grep -q 'GENESIS_SINGLE_ADMIN_ACCOUNT_CLEANUP' /tmp/patched-app.py
+          ! grep -q 'Yeni Kurum Oluştur' /tmp/patched-app-0.10.7.js
+          ! grep -q 'Kurum Aç' /tmp/patched-genesis-online-01.js
+          ! grep -q 'Yönetici Şifresini Değiştir' /tmp/patched-genesis-online-01.js
+          python -m py_compile /tmp/patched-app.py /tmp/patched-curriculum.py /tmp/patched-online-exam.py /tmp/patched-coaching-v2.py
+          node --check /tmp/patched-app-0.10.7.js
+          node --check /tmp/patched-genesis-online-01.js
           docker rm -f "$CID" >/dev/null
           trap - EXIT
 
@@ -226,9 +244,19 @@ jobs:
           done
           test "$OK" = "1" || { echo "::error::Production root smoke test başarısız"; exit 30; }
 
-          API_CODE=$(curl -sS -o /tmp/curriculum.json -w '%{http_code}' "$URL/api/coaching/curriculum/tree" || true)
-          test "$API_CODE" = "403" || { echo "::error::Curriculum auth guard beklenen 403 yerine HTTP $API_CODE"; cat /tmp/curriculum.json; exit 31; }
-          grep -q 'Koçluk alanı için GENESIS oturumu gerekli' /tmp/curriculum.json || { echo "::error::Curriculum auth guard mesajı bulunamadı"; exit 32; }
+          ME_CODE=$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/auth-me.json -w '%{http_code}' "$URL/api/auth/me" || true)
+          test "$ME_CODE" = "200" || { echo "::error::Single ADMIN auth/me HTTP $ME_CODE"; cat /tmp/auth-me.json; exit 31; }
+          jq -e '.authenticated == true and .role == "ADMIN" and .institution_id == null and .must_change_password == false' /tmp/auth-me.json >/dev/null || { echo "::error::Single ADMIN session doğrulanamadı"; cat /tmp/auth-me.json; exit 32; }
+
+          API_CODE=$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/curriculum.json -w '%{http_code}' "$URL/api/coaching/curriculum/tree" || true)
+          test "$API_CODE" = "200" || { echo "::error::Curriculum single ADMIN erişimi HTTP $API_CODE"; cat /tmp/curriculum.json; exit 41; }
+
+          USERS_CODE=$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/institutions.json -w '%{http_code}' "$URL/api/admin/institutions" || true)
+          test "$USERS_CODE" = "200" || { echo "::error::Institution list HTTP $USERS_CODE"; exit 42; }
+          jq -e 'type=="array" and length==0' /tmp/institutions.json >/dev/null || { echo "::error::Diğer kullanıcı hesapları temizlenmemiş"; cat /tmp/institutions.json; exit 43; }
+
+          CREATE_CODE=$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/create-user.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{"institution_name":"AUDIT","username":"audit","temporary_password":"12345678"}' "$URL/api/admin/institutions" || true)
+          test "$CREATE_CODE" = "410" || { echo "::error::Kurum kullanıcısı oluşturma kapalı değil: HTTP $CREATE_CODE"; cat /tmp/create-user.json; exit 44; }
 
           STATIC_CODE=$(curl -sS -o /tmp/curriculum.html -w '%{http_code}' "$URL/static/coaching-curriculum.html" || true)
           test "$STATIC_CODE" = "200" || { echo "::error::Curriculum UI HTTP $STATIC_CODE"; exit 33; }
