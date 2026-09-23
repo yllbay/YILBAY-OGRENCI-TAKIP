@@ -6,7 +6,7 @@
 ## Protokol
 - Geliştirme adım adım yürütülür.
 - Bir adım kullanıcı tarafından onaylanmadan sonraki adıma geçilmez.
-- TinyFish kotası gereksiz yere tüketilmez.
+- TinyFish GENESIS WEB çalışmalarında KESİNLİKLE kullanılmaz. Kullanıcının 2026-09-23 tarihli açık talimatıdır.
 - GitHub mümkün olduğunca paket/deploy köprüsü olarak kullanılır.
 - Production yapısı tahmin edilmez; önce canlı yapı doğrulanır.
 - Yerel GENESIS ile web GENESIS birbirinden ayrıdır; kullanıcı açıkça istemedikçe yerelden web'e aktarım yapılmaz.
@@ -15,7 +15,7 @@
 - GitHub: yllbay/YILBAY-OGRENCI-TAKIP
 - Production Worker: genesis-web-0152
 - Production URL: https://genesis-web-0152.yilbayonurcelik.workers.dev/
-- Uygulama sürümü: 0.11.2
+- Uygulama sürümü: 0.15.2
 - source/current paket sürümü: 0.9.0
 
 ## Doğrulanmış Cloudflare mimarisi
@@ -32,6 +32,10 @@
 - Deploy aracı: Wrangler
 - Container observability logs: enabled
 - Kalıcılık: mevcut GENESIS DATA/SQLite yapısı korunur.
+- Son doğrulanmış Worker version ID: c37ee267-f427-4b8d-b00f-6aabd4062d4d
+- Son doğrulanmış Worker version number: 53
+- Son doğrulanmış container version: 40
+- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:74b1f284bc7a8a2035a0392291d6c41c60e861cb8ef0c849490579601c9b261a
 
 ## GitHub dalları
 - main: production envanter/smoke altyapısı ve kaynak
@@ -121,6 +125,88 @@ GENESIS Production Smoke başarıyla tamamlandı:
 - health errors = 0
 - observability logs = enabled
 
+## 10. 2026-09-23 tam production denetimi ve düzeltmeler
+
+Kullanıcının talebiyle GENESIS production üzerinde geniş kapsamlı kontrol uygulandı. Kullanıcının açık talimatı gereği TinyFish bundan sonra hiçbir koşulda kullanılmayacaktır; denetim ve deploy hattı GitHub / GitHub Actions / Cloudflare üzerinden yürütülür.
+
+### Güncel production gerçekliği
+Eski handoff sürümü 0.11.2 iken canlı health endpointinin ve canlı container kaynaklarının daha ileri olduğu doğrulandı:
+- uygulama sürümü: 0.15.2
+- schema: 14
+- storage: ok
+- persistent storage: r2-fuse
+- runtime: container
+- Drive storage: service_account ve root folder configured
+- Worker: c37ee267-f427-4b8d-b00f-6aabd4062d4d, version number 53
+- Container rollout: version 40
+- container failed instance: 0
+- container health errors: []
+- observability.logs.enabled: true
+
+### Public token route regresyonu
+Tam HTTP audit sırasında öğrenci ve online sınav public token yollarının global auth middleware tarafından yanlışlıkla engellendiği önceki regresyon doğrulandı ve public route allowlist düzeltmesi production'a alındı.
+Doğrulanan invalid-token davranışları:
+- /coaching/student/<invalid-token>: 404
+- /api/coaching/public/<invalid-token>/*: 404
+- /online/<invalid-token>: 404
+- /api/online/public/<invalid-token>/*: 404
+- /api/online/session/<invalid-token>: 404
+
+Public route düzeltme deploy'u:
+- cloudflare-release commit: e60e5fcb84981ddd8e2ccb238fdac56f9adbe0b6
+- deploy run: 35841653319
+- sonuç: SUCCESS
+
+### Online internet-test invalid token hatası
+Ek denetimde /api/online/internet-test/{public_token} endpointinde gerçek bir mantık hatası bulundu.
+Eski davranış:
+- biçim olarak geçerli ama sistemde olmayan token, tünel hazır değilse HTTP 200 + STARTING dönebiliyordu.
+Kök neden:
+- endpoint tokenın veritabanında varlığını kontrol etmeden tunnel state kontrolüne geçiyordu.
+Çözüm:
+- online_row_by_token(public_token) doğrulaması tunnel kontrolünden önce eklendi.
+- bilinmeyen token artık HTTP 404 ve "Online sınav bulunamadı." döndürüyor.
+
+Production düzeltme:
+- cloudflare-release workflow fix commit: f53f7696698e74d0ed6c1caa59406832ef3883bc
+- release trigger commit: 6ae24866667d71dfa077070b54c58c055362a8d7
+- Fast Cloudflare Package Deploy run: 35848771978
+- sonuç: SUCCESS
+- Worker version: c37ee267-f427-4b8d-b00f-6aabd4062d4d
+- Container version: 40
+- post-deploy smoke: SUCCESS
+
+Bağımsız post-deploy inventory:
+- main commit: ba4ffe7b89f134275b42c9b13674a5cffccf1d89
+- Cloudflare GENESIS Inventory run: 35849074659
+- sonuç: SUCCESS
+- /api/online/internet-test/genesis-audit-invalid-token: HTTP 404
+- 23 kritik statik asset: tamamı HTTP 200
+- 14 kritik JavaScript dosyası: tamamı node --check başarılı
+
+### Derin canlı kaynak denetimi
+GitHub Actions inventory genişletildi ve canlı container image içindeki production kaynaklarının tam audit snapshot'ı alındı.
+- main commit: b22922386c9a0648fb645c409199b9ee84992d51
+- inventory run: 35847904413
+- sonuç: SUCCESS
+- tüm backend Python kaynakları compileall ile başarılı
+- tüm aktif frontend JavaScript kaynakları node --check ile başarılı
+- backend route envanteri çıkarıldı
+- frontend API çağrıları backend route'larıyla çapraz kontrol edildi
+- localhost:8765 web-capture çağrılarının yerel snapshot companion'a ait olduğu doğrulandı; web backend'e taşınmadı.
+
+### Disposable production-source entegrasyon testleri
+Canlı production source snapshot'ı izole, boş SQLite ortamında çalıştırıldı. Production verisine yazılmadı.
+- auth / first setup / curriculum / student portal / coaching / goals / learning / insights / desk: 33 senaryo, 0 hata
+- topic tree / class / exam builder / PNG source / crop / question flows: 19 senaryo, 0 hata
+- soru → sınav → PDF → online publish → öğrenci oturumu → cevap → submit → sonuç → close: 16 senaryo, 0 hata
+- toplam: 68 senaryo, 0 hata
+
+### Production auth durumu
+Son audit sırasında /api/auth/setup-status:
+{"admin_configured":false}
+Bu, mevcut kodda first-login setup akışının desteklediği bir durumdur; tek başına hata sayılmaz. Kullanıcı tarafından gerçek production yönetici kimlik bilgisi verilmediği için production üzerinde yapay admin hesabı oluşturulmadı. Authenticated browser davranışları disposable production-source entegrasyon testleriyle doğrulandı.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -134,7 +220,13 @@ Adım 1 sonucunda:
 
 ## Şu anki geliştirme noktası
 Adım 1 tamamlanmış durumda.
+2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
+Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
+Güncel Worker: c37ee267-f427-4b8d-b00f-6aabd4062d4d.
+Güncel container version: 40.
 Kullanıcı bir sonraki fonksiyonel geliştirme adımını henüz tarif etmedi.
+Production üzerinde yapay admin hesabı oluşturulmayacak; gerçek kimlik bilgisi olmadan authenticated production verisine müdahale edilmeyecek.
+TinyFish kullanılmayacak.
 Ayrıca GENESIS web geliştirme sohbetlerinin otomatik devir sistemi için Chrome uzantısı geliştiriliyor.
 
 ## Yeni ChatGPT sohbetine talimat
