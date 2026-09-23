@@ -277,5 +277,52 @@ Doğrulama:
 Production etkisi:
 İstenen UI geliştirmesi dışında doğrulanmış regresyon veya yeni hata gözlenmedi. Mevcut single-ADMIN auth, curriculum ve invalid-token davranışları korunmuştur.
 
+## 19. Koçluk Ders Ekle hızlı davranışının bağımsız çalışma alanına geçirilmesi
+Tarih: 2026-09-23
+
+Durum:
+İlk yan panel geliştirmesinde "Ders Ekle" düğmesi mevcut seçili öğrencinin Dersler sekmesine geçip `courseForm()` akışını açıyordu. Bu ilk talebi karşılıyordu; ancak kullanıcı daha sonra kapsamı açıkça ayrıntılandırarak bu davranışın istenmediğini belirtti.
+
+Yeni gereksinim:
+- "ÖĞRENCİLER" başlığı kaldırılacak.
+- Arama alanı en üstte olacak.
+- Altında Öğrenci Ekle, ardından Ders Ekle bulunacak.
+- Ders Ekle ana sayfadaki Konular / Konu Soruları / Testler menülerinin bağımsız bir kopyasını açacak.
+- Bu kopyaya ileride farklı işlevler yüklenirken ana sayfa etkilenmeyecek.
+
+Risk:
+Canlı container image üzerinde önceki `GENESIS_COACHING_SIDEBAR_ACTIONS` patch'i zaten bulunduğu için yalnız orijinal HTML/JS yapısını bekleyen yeni bir patch deploy sırasında başarısız olabilirdi. Ayrıca eski deploy step'i bırakılırsa sonraki release'lerde yeni sidebar yapısını yeniden eski quick-action formatına çevirmeye çalışabilirdi.
+
+Çözüm:
+- Yeni migration-aware patch `cloudflare/coaching_sidebar_coursecopy.py` oluşturuldu.
+- Patch hem orijinal sidebar'ı hem production'daki eski quick-action varyantını tanıyacak şekilde tasarlandı.
+- Eski `Apply coaching sidebar quick actions` deploy adımı kaldırıldı.
+- Eski `sideAddCourse` handler'ı production JS'ten çıkarıldı.
+- Yeni bağımsız `courseCopy` state'i ve `course-copy-*` DOM/CSS isim alanı eklendi.
+- Kopya yalnız `GET /api/topics`, `GET /api/test-tree` ve `GET /api/questions?topic_id=...` çağrılarını kullanır; ana sayfa state'ine veya mutasyon işlevlerine bağlanmaz.
+- Eski `cloudflare/coaching_sidebar_actions.py` release branch'ten emekliye ayrıldı.
+
+Doğrulama:
+- orijinal production-source üzerinde lokal migration testi: SUCCESS
+- önceki quick-action varyantı simülasyonu üzerinde migration testi: SUCCESS
+- idempotency kontrolü: SUCCESS
+- patched `coaching-v2.js` node --check: SUCCESS
+- Fast Cloudflare Package Deploy run 35859953479: SUCCESS
+- Worker version ID: c8d8c872-4570-446e-9506-e9d00bd8c302
+- Worker version number: 58
+- Container version: 45
+- Cloudflare GENESIS Inventory run 35860433564: SUCCESS
+- 23 kritik statik asset: HTTP 200
+- 14 kritik JavaScript syntax kontrolü: başarılı
+- canlı HTML'de "ÖĞRENCİLER" başlığı yok
+- canlı sidebar sırası: arama → Öğrenci Ekle → Ders Ekle → öğrenci listesi
+- canlı JS'te eski `sideAddCourse` handler yok
+- container failed instance: 0
+- health errors: []
+- observability logs: enabled
+
+Production etkisi:
+Önceki hızlı "Ders Ekle → courseForm()" davranışı kullanıcı talebi doğrultusunda kaldırıldı ve bağımsız kopya mimarisiyle değiştirildi. Backend, schema, storage, single-ADMIN auth, curriculum ve public invalid-token davranışlarında değişiklik yapılmadı.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
