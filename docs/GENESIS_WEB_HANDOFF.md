@@ -32,10 +32,10 @@
 - Deploy aracı: Wrangler
 - Container observability logs: enabled
 - Kalıcılık: mevcut GENESIS DATA/SQLite yapısı korunur.
-- Son doğrulanmış Worker version ID: 127aa738-4b0b-4db5-bb19-4b5209eeb748
-- Son doğrulanmış Worker version number: 57
-- Son doğrulanmış container version: 44
-- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:36c3c6a752049d7672a768c520718defe0ea51b2617dabe5f8bc0967176a9fc6
+- Son doğrulanmış Worker version ID: c8d8c872-4570-446e-9506-e9d00bd8c302
+- Son doğrulanmış Worker version number: 58
+- Son doğrulanmış container version: 45
+- Son doğrulanmış container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:fbb8d87d7e967414cbb5788152cdfe28b39a83cfb40160a0cdbd2dc3d68fe39a
 
 ## GitHub dalları
 - main: production envanter/smoke altyapısı ve kaynak
@@ -291,6 +291,72 @@ Bağımsız post-deploy doğrulama:
 
 Bu değişiklik Adım 2 olarak sınıflandırılmamıştır; Adım 1 sonrası kullanıcı tarafından açıkça istenen sınırlı bir Koçluk Stüdyosu UI geliştirmesidir.
 
+## 13. 2026-09-23 Koçluk Stüdyosu bağımsız Ders Ekle çalışma alanı
+
+Kullanıcının önceki hızlı işlem talebini ayrıntılandıran yeni açık talebi:
+- Sol paneldeki "ÖĞRENCİLER" başlığı kaldırılacak.
+- Öğrenci arama alanı panelin en üstünde olacak.
+- Aramanın altında sırasıyla "Öğrenci Ekle" ve "Ders Ekle" düğmeleri olacak.
+- "Ders Ekle" seçili öğrenciye doğrudan ders atama formunu açmayacak.
+- "Ders Ekle", ana GENESIS ekranındaki Konular / Konu Soruları / Testler menülerinin Koçluk Stüdyosu içinde bağımsız bir kopyasını açacak.
+- Bu kopya ileride farklı işlevlerle geliştirilecek ve ana GENESIS sayfasının state, DOM veya işlevlerini etkilemeyecek.
+
+Uygulanan mimari:
+- Önceki geçici `sideAddCourse -> setTab('courses'); courseForm()` davranışı kaldırıldı.
+- Yeni production patch: `cloudflare/coaching_sidebar_coursecopy.py`.
+- HTML marker: `GENESIS_COACHING_SIDEBAR_COURSE_COPY_V1`.
+- JS/CSS marker: `GENESIS_COACHING_COURSE_COPY_V1`.
+- Sidebar sırası canlı kaynakta doğrulandı:
+  1. `studentSearch`
+  2. `addStudent`
+  3. `addCourseWorkspace`
+  4. `studentList`
+- "ÖĞRENCİLER" başlığı production HTML'den kaldırıldı.
+- Ders Ekle alanı için ayrı `courseCopy` state'i oluşturuldu.
+- Ana sayfanın `app-0.10.7.js` state'i veya render fonksiyonları Koçluk Stüdyosu kopyasında kullanılmaz.
+- Bağımsız kopya yalnız salt-okunur veri çağrıları yapar:
+  - `GET /api/topics`
+  - `GET /api/test-tree`
+  - `GET /api/questions?topic_id=...`
+- Kopyanın DOM/CSS isim alanı `course-copy-*` olarak ayrıdır.
+- Öğrenci seçildiğinde bağımsız Ders Ekle çalışma alanı kapanır ve standart öğrenci dashboard'una dönülür.
+- Backend endpoint, schema veya storage değişikliği yapılmadı.
+
+Migration güvenliği:
+- Yeni patch hem orijinal sidebar yapısını hem de daha önce production'a çıkmış `GENESIS_COACHING_SIDEBAR_ACTIONS` hızlı işlem varyantını tanıyıp dönüştürebilecek şekilde hazırlandı.
+- Eski `cloudflare/coaching_sidebar_actions.py` deploy workflow'dan çıkarıldı ve release branch'ten emekliye ayrıldı.
+- Patch idempotency ve iki başlangıç varyantı üzerinde lokal olarak doğrulandı.
+- Patched `coaching-v2.js` için `node --check` başarılı.
+
+Release kayıtları:
+- ilk bağımsız patch commit: 862922530960e2599eb929f5da9b22d3dfce0061
+- migration uyumluluk düzeltmesi: da45c8bc49a1afad9f9278c66092b544dbe9b022
+- release workflow commit: d2a958f2ff268c27b44c9a9733a51903bb3e40de
+- deploy trigger commit: 41691c0a18ba3a56dd73c71fee32b88a56711feb
+- Fast Cloudflare Package Deploy run: 35859953479
+- sonuç: SUCCESS
+- Worker version ID: c8d8c872-4570-446e-9506-e9d00bd8c302
+- Worker version number: 58
+- Container version: 45
+- Container image: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:fbb8d87d7e967414cbb5788152cdfe28b39a83cfb40160a0cdbd2dc3d68fe39a
+- eski hızlı patch cleanup commit: 87d63d55e46f1e3f57eae58aa396d96b51117a93
+
+Bağımsız post-deploy inventory:
+- main inventory trigger commit: 38b7ccd8f31be2c694cb12d008992a8c970cab29
+- Cloudflare GENESIS Inventory run: 35860433564
+- sonuç: SUCCESS
+- canlı health: 0.15.2 / schema 14 / storage ok / r2-fuse
+- 23 kritik statik asset: HTTP 200
+- 14 JavaScript syntax kontrolü: başarılı
+- `coaching-v2.html`: yeni sidebar marker mevcut, eski "ÖĞRENCİLER" başlığı yok
+- `coaching-v2.js`: yeni bağımsız state marker mevcut, eski `sideAddCourse` handler yok
+- `coaching-v2.css`: bağımsız `course-copy-*` stilleri mevcut
+- container failed instance: 0
+- health errors: []
+- observability logs: enabled
+
+Bu geliştirme de Adım 2 olarak sınıflandırılmamıştır; kullanıcı tarafından açıkça istenen Koçluk Stüdyosu UI/mimari düzenlemesidir.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -306,9 +372,9 @@ Adım 1 sonucunda:
 Adım 1 tamamlanmış durumda.
 2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
 Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
-Güncel Worker: 127aa738-4b0b-4db5-bb19-4b5209eeb748 (version number 57).
-Güncel container version: 44.
-Koçluk Stüdyosu yan panelinde "+ Öğrenci Ekle" ve "+ Ders Ekle" hızlı işlem düğmeleri production'da aktif ve bağımsız inventory ile doğrulanmıştır.
+Güncel Worker: c8d8c872-4570-446e-9506-e9d00bd8c302 (version number 58).
+Güncel container version: 45.
+Koçluk Stüdyosu yan paneli artık arama → Öğrenci Ekle → Ders Ekle → öğrenci listesi sırasındadır. Ders Ekle, ana GENESIS konu/soru/test menülerinin Koçluk Stüdyosu içinde bağımsız state ve bağımsız DOM/CSS ile çalışan salt-okunur kopyasını açar; ana sayfanın state veya işlevlerini kullanmaz.
 Bu UI geliştirmesi Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.
 Production auth modu: kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumu. Kurum kullanıcı hesapları kaldırılmıştır; kurum veri klasörleri korunmuştur.
 TinyFish kullanılmayacak.
