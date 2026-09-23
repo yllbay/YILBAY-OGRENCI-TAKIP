@@ -510,6 +510,60 @@ Başarılı final release:
 - `/?workspace=1` ve `/coaching` hedefleri release smoke kapsamındadır.
 - single ADMIN, curriculum, Koçluk Stüdyosu cache policy ve invalid-online-token davranışları korunmuştur.
 
+## 16. 2026-09-23 Yönetim Paneli stüdyo / kurum düğmeleri
+
+Kullanıcının açık talebi:
+- Yönetim Paneli içine alt alta üç düğme eklenecek:
+  1. `Soru Stüdyosu`
+  2. `Koçluk Stüdyosu`
+  3. `Kurum Açma`
+- Düğmeler ilgili mevcut GENESIS ekranlarını/akışlarını açacak.
+
+Uygulanan kullanıcı davranışı:
+- `Soru Stüdyosu` → `/?workspace=1` adresindeki mevcut Konular / Konu Soruları / Testler çalışma alanını açar.
+- `Koçluk Stüdyosu` → `/coaching` sayfasını açar.
+- `Kurum Açma` → mevcut `window.genesisCreateInstitution()` form akışını çağırır.
+- Düğmeler Yönetim Paneli gövdesinde dikey olarak, mevcut GENESIS lacivert/mor tasarım diliyle gösterilir.
+
+Production teknik çözümü:
+- Container image katman derinliği artık yeni bir layer eklemeye izin vermediği için V2 dashboard değişikliği container içine güvenli şekilde yazılamadı.
+- İlk denemelerde `max depth exceeded` ve Cloudflare image unpack / rollback davranışları doğrulandı.
+- Bu nedenle container image'a dokunmadan Worker response katmanında UI overlay uygulanmıştır.
+- Patch dosyası: `cloudflare/home_dashboard_edge.py`.
+- Marker: `GENESIS_HOME_DASHBOARD_EDGE_V1`.
+- Worker deploy workflow: `.github/workflows/cloudflare-worker-dashboard-overlay.yml`.
+- Worker, yalnız `/` HTML yanıtına inline CSS + JS ekler; backend/storage/container içeriğini değiştirmez.
+- Deploy `--containers-rollout=none` ile yapıldı ve container image/version'ın değişmediği workflow içinde doğrulandı.
+
+Release:
+- edge patch commit: `7b880a2c760bd46e513ed7cb301a2ad21e048a52`
+- worker overlay workflow commit: `d8be3a85d0f3d3507bc2c7b22d87ff8c98bb4b1a`
+- trigger commit: `7632d07720fecaeccd1a159bed4fc9a86ee0421f`
+- Worker overlay deploy run: `35880765006`
+- Worker deploy adımı: SUCCESS
+- yeni Worker version ID: `cbd44c06-b95f-4851-869b-946066d30cd0`
+- container image deploy öncesi/sonrası aynı: `sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e`
+- container version deploy öncesi/sonrası: `55`
+
+İlk overlay workflow smoke sonucunda `/coaching` isteği cookie taşımadan yapıldığı için HTTP 403 görüldü; bu production regresyonu değildi. Gerçek tarayıcı akışındaki ADMIN session cookie'si smoke testine eklendi.
+
+Bağımsız canlı HTTP doğrulama:
+- smoke düzeltme commit: `166698d51cd1b8105794db8c605c9709d699c462`
+- trigger commit: `b61b43fa6c931a06b412e4e629d5c73e461a9762`
+- GENESIS Dashboard HTTP Smoke run: `35881051383`
+- sonuç: SUCCESS
+- root HTTP 200
+- Worker overlay marker canlı
+- Soru Stüdyosu, Koçluk Stüdyosu, Kurum Açma metinleri canlı root HTML'de doğrulandı
+- Soru Stüdyosu yönlendirmesi doğrulandı
+- Koçluk Stüdyosu yönlendirmesi doğrulandı
+- `window.genesisCreateInstitution` form hook'u doğrulandı
+- `/?workspace=1` HTTP 200
+- ADMIN session ile `/coaching` HTTP 200
+
+Not:
+`Kurum Açma` düğmesi mevcut kurum formunu açar. Single-ADMIN güvenlik modunda kurum oluşturma backend işleminin HTTP 410 ile kapalı olması değiştirilmemiştir; kullanıcı yalnız ilgili ekranın açılmasını istemiştir.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
