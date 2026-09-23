@@ -26,7 +26,7 @@ jobs:
           }
           check root "$URL/" || exit 11
           grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/root.out || { echo "root overlay missing"; exit 12; }
-          check health "$URL/api/health" || exit 23
+          check health "$URL/api/system/health" || exit 23
           jq -c '{version,schema,storage,persistent_storage,runtime}' /tmp/health.out
           check auth "$URL/api/auth/me" || exit 24
           jq -e '.authenticated==true and .role=="ADMIN"' /tmp/auth.out >/dev/null || exit 25
