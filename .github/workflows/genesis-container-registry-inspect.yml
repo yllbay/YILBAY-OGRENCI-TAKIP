@@ -1,0 +1,28 @@
+name: GENESIS Container Registry Inspect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/registry-inspect-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Show container images and state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 || true
+          npx --yes wrangler@4 containers images list --json
