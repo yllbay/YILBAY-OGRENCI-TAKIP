@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from db import CURRENT_DB, DB, connect
+from curriculum_step1 import _ensure_schema as _ensure_curriculum_schema
 
 VERSION = "0.16.0"
 LEVELS = {"EASY", "MEDIUM", "HARD"}
@@ -60,6 +61,10 @@ def _require_admin_session(request: Request):
 
 
 def ensure_schema():
+    # V3 depends on the canonical Step-1 curriculum tables. The Step-1 module
+    # creates them lazily on first curriculum request, so ensure them here too
+    # before creating/querying V3 foreign-key tables.
+    _ensure_curriculum_schema()
     with connect() as con:
         con.executescript("""
         CREATE TABLE IF NOT EXISTS coach3_classes(
