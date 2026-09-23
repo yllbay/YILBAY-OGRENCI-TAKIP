@@ -1,1 +1,1 @@
-2026-09-24 inspect docker-import V3 rollout
+2026-09-24 inspect one-layer V3 candidate health
