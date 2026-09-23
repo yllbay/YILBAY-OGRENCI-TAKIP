@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   CF_API_BASE: https://api.cloudflare.com/client/v4
@@ -269,3 +269,27 @@ jobs:
           grep -q 'Online sınav bulunamadı' /tmp/online-invalid.json || { echo "::error::Invalid online token mesajı doğrulanamadı"; exit 36; }
 
           echo "GENESIS release smoke tests OK"
+
+      - name: Record release status
+        if: always()
+        env:
+          RELEASE_JOB_STATUS: ${{ job.status }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("cloudflare/last-release-status.json").write_text(json.dumps({
+            "status": os.environ["RELEASE_JOB_STATUS"],
+            "sha": os.environ["RELEASE_SHA"],
+            "run_id": int(os.environ["RELEASE_RUN_ID"])
+          }, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare/last-release-status.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "ci(cloudflare): record release status"
+          git push origin HEAD:cloudflare-release
