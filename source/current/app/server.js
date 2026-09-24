@@ -1,5 +1,6 @@
 /* CELL:00-runtime | layer:backend | generated-from:v0.7.2 */
 const http=require("http"),fs=require("fs"),path=require("path"),cp=require("child_process");
+const {createCurriculumStore}=require("./curriculum-store");
 const {PNG}=require("pngjs");
 
 
@@ -19,6 +20,7 @@ const usageFile=path.join(runtime,"ai_usage.jsonl");
 
 
 fs.mkdirSync(runtime,{recursive:true});
+const curriculumStore=createCurriculumStore(runtime);
 
 
 
@@ -165,6 +167,31 @@ async function readJson(req,max=18*1024*1024){
     req.on("error",reject);
   });
 }
+
+function curriculumError(res,e,status=400){return json(res,status,{ok:false,error:String(e?.message||e||"Müfredat işlemi başarısız")})}
+async function handleCurriculumAction(req,res){
+  try{
+    const b=await readJson(req,4*1024*1024),action=String(b.action||"").trim();
+    if(action==="add-path"){
+      const result=curriculumStore.addPath(b.course,b.unit,b.topic,b.sortOrder);
+      return json(res,200,{ok:true,result,courses:curriculumStore.tree(false),legacy:curriculumStore.legacy()});
+    }
+    if(action==="update"){
+      const result=curriculumStore.update(String(b.entity||""),Number(b.id),{
+        ...(b.name!==undefined?{name:b.name}:{}),
+        ...(b.sortOrder!==undefined?{sortOrder:b.sortOrder}:{}),
+        ...(b.isActive!==undefined?{isActive:b.isActive}:{})
+      });
+      return json(res,200,{ok:true,result,courses:curriculumStore.tree(false),legacy:curriculumStore.legacy()});
+    }
+    if(action==="import"){
+      const result=curriculumStore.importRows(b.rows||[]);
+      return json(res,200,{ok:true,...result,courses:curriculumStore.tree(false),legacy:curriculumStore.legacy()});
+    }
+    return json(res,400,{ok:false,error:"Geçersiz müfredat işlemi"});
+  }catch(e){return curriculumError(res,e)}
+}
+
 
 
 function extractOutputText(data){
@@ -463,6 +490,8 @@ http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,"http://127.0.0.1");
     if(u.pathname==="/health") return json(res,200,{ok:true,version:"0.11.2",integrations:integrationStatus()});
+    if(u.pathname==="/api/coaching/curriculum/tree"&&req.method==="GET") return json(res,200,{ok:true,courses:curriculumStore.tree(false),legacy:curriculumStore.legacy()});
+    if(u.pathname==="/api/coaching/curriculum/action"&&req.method==="POST") return await handleCurriculumAction(req,res);
     if(u.pathname==="/api/integrations/status"&&req.method==="GET") return json(res,200,{ok:true,...integrationStatus()});
     if(u.pathname==="/api/ai/costs"&&req.method==="GET") return json(res,200,{ok:true,...costSummary()});
     if(u.pathname==="/api/drive/status"&&req.method==="GET"){const d=integrationStatus().drive;return json(res,200,{ok:true,...d})}
