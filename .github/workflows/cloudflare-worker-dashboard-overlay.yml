@@ -91,9 +91,9 @@ jobs:
           grep -q 'Soru Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Koçluk Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Kurum Açma' cloudflare/package-runtime/index.js
-          grep -q 'GENESIS_QUESTION_STUDIO_HORIZONTAL_V2' cloudflare/package-runtime/index.js
-          grep -q 'gqs-horizontal' cloudflare/package-runtime/index.js
-          grep -q 'gqsDock' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_QUESTION_STUDIO_RESIZE_V1' cloudflare/package-runtime/index.js
+          grep -q 'gqr-ready' cloudflare/package-runtime/index.js
+          grep -q 'gqr-dragging' cloudflare/package-runtime/index.js
           grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' cloudflare/package-runtime/index.js
           grep -q 'Sınıflar ve Öğrenciler' cloudflare/package-runtime/index.js
           grep -q 'Haftalık Çalışma Programı' cloudflare/package-runtime/index.js
@@ -147,9 +147,19 @@ jobs:
 
           WORKSPACE_CODE="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/workspace.html -w '%{http_code}' "$URL/?workspace=1" || true)"
           test "$WORKSPACE_CODE" = "200"
-          grep -q 'GENESIS_QUESTION_STUDIO_HORIZONTAL_V2' /tmp/workspace.html
-          grep -q 'gqs-horizontal' /tmp/workspace.html
-          grep -q 'gqsDock' /tmp/workspace.html
+          grep -q 'GENESIS_QUESTION_STUDIO_RESIZE_V1' /tmp/workspace.html
+          grep -q 'gqr-ready' /tmp/workspace.html
+          grep -q 'gqr-dragging' /tmp/workspace.html
+
+          TOPICS_CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/topics.json -w '%{http_code}' "$URL/api/topics" || true)"
+          test "$TOPICS_CODE" = "200"
+          jq -e 'type=="array"' /tmp/topics.json >/dev/null
+          echo "TOPIC_ROOT_COUNT=$(jq 'length' /tmp/topics.json)"
+
+          TEST_TREE_CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/test-tree.json -w '%{http_code}' "$URL/api/test-tree" || true)"
+          test "$TEST_TREE_CODE" = "200"
+          jq -e 'type=="array"' /tmp/test-tree.json >/dev/null
+          echo "TEST_ROOT_COUNT=$(jq 'length' /tmp/test-tree.json)"
 
           COACH_CODE="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching" || true)"
           test "$COACH_CODE" = "200" || { echo "::error::Coaching HTTP $COACH_CODE"; exit 41; }
