@@ -77,7 +77,7 @@ jobs:
           PY
           node --check cloudflare/package-runtime/index.js
           grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
-          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' cloudflare/package-runtime/index.js
           npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-v3/container-before.json
           PREVIOUS_IMAGE="$(jq -r '.configuration.image // empty' /tmp/genesis-v3/container-before.json)"
           PREVIOUS_VERSION="$(jq -r '.version // 0' /tmp/genesis-v3/container-before.json)"
@@ -309,7 +309,7 @@ jobs:
 
           COACH="$(curl -sS -L -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/coaching.html -w '%{http_code}' "$URL/coaching" || true)"
           test "$COACH" = "200"
-          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' /tmp/genesis-v3/coaching.html
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' /tmp/genesis-v3/coaching.html
 
           CLASSES="$(curl -sS -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/classes.json -w '%{http_code}' "$URL/api/coaching/v3/classes" || true)"
           test "$CLASSES" = "200"
