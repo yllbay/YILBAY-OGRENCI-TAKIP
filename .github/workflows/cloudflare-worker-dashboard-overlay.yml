@@ -91,7 +91,7 @@ jobs:
           grep -q 'Soru Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Koçluk Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Kurum Açma' cloudflare/package-runtime/index.js
-          grep -q 'GENESIS_QUESTION_STUDIO_HORIZONTAL_V1' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_QUESTION_STUDIO_HORIZONTAL_V2' cloudflare/package-runtime/index.js
           grep -q 'gqs-horizontal' cloudflare/package-runtime/index.js
           grep -q 'gqsDock' cloudflare/package-runtime/index.js
           grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' cloudflare/package-runtime/index.js
@@ -147,7 +147,7 @@ jobs:
 
           WORKSPACE_CODE="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/workspace.html -w '%{http_code}' "$URL/?workspace=1" || true)"
           test "$WORKSPACE_CODE" = "200"
-          grep -q 'GENESIS_QUESTION_STUDIO_HORIZONTAL_V1' /tmp/workspace.html
+          grep -q 'GENESIS_QUESTION_STUDIO_HORIZONTAL_V2' /tmp/workspace.html
           grep -q 'gqs-horizontal' /tmp/workspace.html
           grep -q 'gqsDock' /tmp/workspace.html
 
