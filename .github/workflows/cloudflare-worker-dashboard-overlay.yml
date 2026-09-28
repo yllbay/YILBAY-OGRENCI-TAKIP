@@ -83,10 +83,12 @@ jobs:
       - name: Patch only Worker response
         run: |
           set -euo pipefail
+          python cloudflare/r2_question_pool_readonly_probe.py
           python cloudflare/home_dashboard_edge.py
           python cloudflare/question_studio_horizontal_edge.py
           python cloudflare/coaching_dashboard_edge.py
           node --check cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1' cloudflare/package-runtime/index.js
           grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
           grep -q 'Soru Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Koçluk Stüdyosu' cloudflare/package-runtime/index.js
@@ -161,6 +163,11 @@ jobs:
           test "$TEST_TREE_CODE" = "200"
           jq -e 'type=="array"' /tmp/test-tree.json >/dev/null
           echo "TEST_ROOT_COUNT=$(jq 'length' /tmp/test-tree.json)"
+
+          R2_PROBE_CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/r2-probe.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
+          test "$R2_PROBE_CODE" = "200"
+          jq -e '.read_only==true and .marker=="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1"' /tmp/r2-probe.json >/dev/null
+          echo "R2_PROBE=$(jq -c . /tmp/r2-probe.json)"
 
           COACH_CODE="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching" || true)"
           test "$COACH_CODE" = "200" || { echo "::error::Coaching HTTP $COACH_CODE"; exit 41; }
