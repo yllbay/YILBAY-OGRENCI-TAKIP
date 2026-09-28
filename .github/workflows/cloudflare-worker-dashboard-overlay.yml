@@ -91,9 +91,9 @@ jobs:
           grep -q 'Soru Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Koçluk Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Kurum Açma' cloudflare/package-runtime/index.js
-          grep -q 'GENESIS_QUESTION_STUDIO_RESIZE_V1' cloudflare/package-runtime/index.js
-          grep -q 'gqr-ready' cloudflare/package-runtime/index.js
-          grep -q 'gqr-dragging' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_QUESTION_STUDIO_SPLITTER_CSS_V1' cloudflare/package-runtime/index.js
+          grep -q 'genesis-premium-0.11.7.css' cloudflare/package-runtime/index.js
+          grep -q 'cursor:col-resize' cloudflare/package-runtime/index.js
           grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' cloudflare/package-runtime/index.js
           grep -q 'Sınıflar ve Öğrenciler' cloudflare/package-runtime/index.js
           grep -q 'Haftalık Çalışma Programı' cloudflare/package-runtime/index.js
@@ -147,9 +147,10 @@ jobs:
 
           WORKSPACE_CODE="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/workspace.html -w '%{http_code}' "$URL/?workspace=1" || true)"
           test "$WORKSPACE_CODE" = "200"
-          grep -q 'GENESIS_QUESTION_STUDIO_RESIZE_V1' /tmp/workspace.html
-          grep -q 'gqr-ready' /tmp/workspace.html
-          grep -q 'gqr-dragging' /tmp/workspace.html
+          SPLITTER_CSS_CODE="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/splitter.css -w '%{http_code}' "$URL/static/genesis-premium-0.11.7.css" || true)"
+          test "$SPLITTER_CSS_CODE" = "200"
+          grep -q 'GENESIS_QUESTION_STUDIO_SPLITTER_CSS_V1' /tmp/splitter.css
+          grep -q 'cursor:col-resize' /tmp/splitter.css
 
           TOPICS_CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/topics.json -w '%{http_code}' "$URL/api/topics" || true)"
           test "$TOPICS_CODE" = "200"
