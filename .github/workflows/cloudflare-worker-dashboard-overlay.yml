@@ -90,10 +90,13 @@ jobs:
           grep -q 'Soru Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Koçluk Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Kurum Açma' cloudflare/package-runtime/index.js
-          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V2' cloudflare/package-runtime/index.js
           grep -q 'Sınıflar ve Öğrenciler' cloudflare/package-runtime/index.js
           grep -q 'Haftalık Çalışma Programı' cloudflare/package-runtime/index.js
           grep -q 'Akademik Yapı ve Atamalar' cloudflare/package-runtime/index.js
+          grep -q 'Sınıf Yönetimi' cloudflare/package-runtime/index.js
+          grep -q 'Sınıfa Ata' cloudflare/package-runtime/index.js
+          grep -q '/api/coaching/v3/classes' cloudflare/package-runtime/index.js
 
       - name: Deploy Worker without container rollout
         uses: cloudflare/wrangler-action@v4
@@ -141,15 +144,23 @@ jobs:
 
           COACH_CODE="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching" || true)"
           test "$COACH_CODE" = "200" || { echo "::error::Coaching HTTP $COACH_CODE"; exit 41; }
-          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V1' /tmp/coaching.html || { echo "::error::Coaching dashboard edge overlay not live"; exit 42; }
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V2' /tmp/coaching.html || { echo "::error::Coaching dashboard edge overlay not live"; exit 42; }
           grep -q 'Sınıflar ve Öğrenciler' /tmp/coaching.html
           grep -q 'Haftalık Çalışma Programı' /tmp/coaching.html
           grep -q 'Akademik Yapı ve Atamalar' /tmp/coaching.html
+          grep -q 'Sınıf Yönetimi' /tmp/coaching.html
+          grep -q 'Sınıfa Ata' /tmp/coaching.html
           grep -q '/api/coaching/v2/students' /tmp/coaching.html
+          grep -q '/api/coaching/v3/classes' /tmp/coaching.html
+          grep -q '/api/coaching/v3/students/' /tmp/coaching.html
           grep -q 'data-gcd-action="courses"' /tmp/coaching.html
           grep -q 'data-gcd-action="curriculum"' /tmp/coaching.html
           grep -q 'data-gcd-action="exams"' /tmp/coaching.html
           grep -q 'data-gcd-action="insights"' /tmp/coaching.html
+
+          CLASSES_CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/classes.json -w '%{http_code}' "$URL/api/coaching/v3/classes" || true)"
+          test "$CLASSES_CODE" = "200"
+          jq -e '(.classes|type=="array")' /tmp/classes.json >/dev/null
 
           STUDENTS_CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/students.json -w '%{http_code}' "$URL/api/coaching/v2/students" || true)"
           test "$STUDENTS_CODE" = "200"
@@ -158,6 +169,9 @@ jobs:
             DASH_CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/dashboard.json -w '%{http_code}' "$URL/api/coaching/v2/students/$SID/dashboard?week_start=2026-09-21" || true)"
             test "$DASH_CODE" = "200" || { echo "::error::Dashboard API HTTP $DASH_CODE"; cat /tmp/dashboard.json; exit 43; }
             jq -e '.student and .summary and (.tasks|type=="array") and (.assignments|type=="array")' /tmp/dashboard.json >/dev/null
+            MODEL_CODE="$(curl -sS -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/student-model.json -w '%{http_code}' "$URL/api/coaching/v3/students/$SID/model?week_start=2026-09-21" || true)"
+            test "$MODEL_CODE" = "200" || { echo "::error::V3 student model HTTP $MODEL_CODE"; cat /tmp/student-model.json; exit 44; }
+            jq -e '.student and (.courses|type=="array") and (.responsibilities|type=="array") and (.homework|type=="array")' /tmp/student-model.json >/dev/null
           fi
 
           curl -fsS "$URL/static/genesis-auth-gate.js" -o /tmp/auth.js
