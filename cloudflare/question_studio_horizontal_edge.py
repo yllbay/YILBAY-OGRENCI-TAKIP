@@ -2,7 +2,7 @@ from pathlib import Path
 
 p=Path("cloudflare/package-runtime/index.js")
 src=p.read_text(encoding="utf-8")
-MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V1"
+MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V2"\nOLD_MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V1"
 
 if MARK in src:
     print("question studio horizontal overlay already present")
@@ -14,14 +14,14 @@ anchor='''      // GENESIS_HOME_DASHBOARD_EDGE_V1
 if anchor not in src:
     raise SystemExit("Home dashboard route anchor missing; refusing unsafe patch")
 
-block=r'''      // GENESIS_QUESTION_STUDIO_HORIZONTAL_V1
+block=r'''      // GENESIS_QUESTION_STUDIO_HORIZONTAL_V2
       // Workspace-only UI overlay. No API, R2, Drive or container data mutation.
-      if (request.method === "GET" && url.pathname === "/" && url.searchParams.get("workspace") === "1" && contentType.includes("text/html")) {
+      if (request.method === "GET" && new URL(request.url).pathname === "/" && new URL(request.url).searchParams.get("workspace") === "1" && (headers.get("content-type") || "").includes("text/html")) {
         let html = await upstream.text();
-        if (!html.includes("GENESIS_QUESTION_STUDIO_HORIZONTAL_V1")) {
+        if (!html.includes("GENESIS_QUESTION_STUDIO_HORIZONTAL_V2")) {
           const questionStudioOverlay = String.raw`
 <style id="genesisQuestionStudioHorizontalStyle">
-/* GENESIS_QUESTION_STUDIO_HORIZONTAL_V1 */
+/* GENESIS_QUESTION_STUDIO_HORIZONTAL_V2 */
 body.gqs-ready .genesis{min-width:0!important}
 body.gqs-ready #workspace.gqs-horizontal{
   overflow-x:auto!important;
@@ -135,7 +135,7 @@ body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-active .pane-body>.fab{
 }
 </style>
 <script id="genesisQuestionStudioHorizontalScript">
-/* GENESIS_QUESTION_STUDIO_HORIZONTAL_V1 */
+/* GENESIS_QUESTION_STUDIO_HORIZONTAL_V2 */
 (()=>{if(new URLSearchParams(location.search).get("workspace")!=="1")return;
 const IDS=["leftPane","middlePane","rightPane"];
 const TITLES={leftPane:"Konular",middlePane:"Konu Soruları",rightPane:"Testler"};
