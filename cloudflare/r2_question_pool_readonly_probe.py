@@ -3,9 +3,19 @@ from pathlib import Path
 p=Path("cloudflare/package-runtime/index.js")
 src=p.read_text(encoding="utf-8")
 MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2"
+OLD_MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1"
 if MARK in src:
-    print("R2 readonly probe already present")
+    print("R2 readonly probe V2 already present")
     raise SystemExit(0)
+
+if OLD_MARK in src:
+    old_cond='if (request.method === "GET" && probeUrl.pathname === "/api/internal/r2-question-pool-readonly") {'
+    pos=src.find(OLD_MARK)
+    cpos=src.find(old_cond,pos)
+    if cpos<0:
+        raise SystemExit("V1 R2 probe marker found but route shape changed")
+    src=src[:cpos]+old_cond.replace("if (","if (false && ",1)+src[cpos+len(old_cond):]
+    src=src.replace(OLD_MARK,"GENESIS_R2_QUESTION_POOL_READONLY_PROBE_RETIRED_V1",1)
 
 needle='''      const upstream = await container.fetch(forwarded);
       const headers = new Headers(upstream.headers);'''
