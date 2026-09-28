@@ -1,1 +1,1 @@
-Inspect live Worker/container after successful V3 production activation.
+post-v3-class-ui-v2-2026-09-28
