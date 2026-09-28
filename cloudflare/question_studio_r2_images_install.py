@@ -13,7 +13,7 @@ if anchor not in src:
     raise SystemExit("db import anchor changed")
 src=src.replace(
     anchor,
-    anchor+'\nfrom r2_object_store import put_file as r2_put_file, get_file as r2_get_file, remove as r2_remove, head as r2_head',
+    anchor+'\nfrom r2_object_store import put_file as r2_put_file, get_file as r2_get_file, delete as r2_remove, head as r2_head',
     1,
 )
 
