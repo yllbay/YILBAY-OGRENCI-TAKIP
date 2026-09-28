@@ -2,7 +2,8 @@ from pathlib import Path
 
 p=Path("cloudflare/package-runtime/index.js")
 src=p.read_text(encoding="utf-8")
-MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V2"\nOLD_MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V1"
+MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V2"
+OLD_MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V1"
 
 if MARK in src:
     print("question studio horizontal overlay V2 already present")
