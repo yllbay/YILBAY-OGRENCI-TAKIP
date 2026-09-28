@@ -45,6 +45,8 @@ def _process_delete_tombstone(path:Path):
             fp=abs_data(rel)
             if fp.exists():
                 fp.unlink()
+            if "r2_remove" in globals():
+                r2_remove("DATA/"+str(rel).replace("\\","/"))
             local_deleted.append(rel)
         except Exception as exc:
             local_pending.append({"path":rel,"reason":str(exc)[:300]})
