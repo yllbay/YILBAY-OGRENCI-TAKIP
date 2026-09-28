@@ -342,9 +342,22 @@ jobs:
             jq -e '.student and (.courses|type=="array") and (.responsibilities|type=="array") and (.homework|type=="array")' /tmp/genesis-v3/model.json >/dev/null
           fi
 
+          TOPICS="$(curl -sS -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/topics.json -w '%{http_code}' "$URL/api/topics" || true)"
+          test "$TOPICS" = "200"
+          jq -e 'type=="array" and length>=2' /tmp/genesis-v3/topics.json >/dev/null
+
+          TESTTREE="$(curl -sS -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/test-tree.json -w '%{http_code}' "$URL/api/test-tree" || true)"
+          test "$TESTTREE" = "200"
+          jq -e 'type=="array" and length>=1' /tmp/genesis-v3/test-tree.json >/dev/null
+
+          R2P="$(curl -sS -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/r2.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
+          test "$R2P" = "200"
+          jq -e '.genesis_db.exists==true and (.genesis_db.size|tonumber)>0' /tmp/genesis-v3/r2.json >/dev/null
+          echo "QUESTION_STUDIO_R2=$(jq -c '{genesis_db,prefix_counts,total_objects_under_DATA}' /tmp/genesis-v3/r2.json)"
+
           INVALID="$(curl -sS -o /tmp/genesis-v3/invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token" || true)"
           test "$INVALID" = "404"
-          echo "GENESIS_COACHING_MODEL_V3_PRODUCTION_SMOKE_OK"
+          echo "GENESIS_QUESTION_STUDIO_DURABLE_STORAGE_SMOKE_OK"
 
       - name: Roll back previous image on failure
         if: failure()
