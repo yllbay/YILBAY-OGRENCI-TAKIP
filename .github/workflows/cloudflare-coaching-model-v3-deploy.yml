@@ -124,6 +124,7 @@ jobs:
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_shells_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/coaching_model_v3_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_pool_guard_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_delete_upgrade.py
           python3 -m py_compile "$ROOT/backend/r2_object_store.py" "$ROOT/backend/db.py" "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_BBOX_SAVEFIX_V1' "$ROOT/backend/app.py"
