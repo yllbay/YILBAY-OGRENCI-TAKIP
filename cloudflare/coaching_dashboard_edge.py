@@ -3,12 +3,12 @@ from pathlib import Path
 p=Path("cloudflare/package-runtime/index.js")
 src=p.read_text(encoding="utf-8")
 MARK="GENESIS_COACHING_DASHBOARD_EDGE_V2"
-OLD_MARK="GENESIS_COACHING_DASHBOARD_EDGE_V2"
+OLD_MARK="GENESIS_COACHING_DASHBOARD_EDGE_V1"
 if MARK in src:
     print("coaching dashboard edge V2 overlay already present")
     raise SystemExit(0)
 if OLD_MARK in src:
-    old_route='// GENESIS_COACHING_DASHBOARD_EDGE_V2\n      if (request.method === "GET" && url.pathname === "/coaching" && contentType.includes("text/html")) {'
+    old_route='// GENESIS_COACHING_DASHBOARD_EDGE_V1\n      if (request.method === "GET" && url.pathname === "/coaching" && contentType.includes("text/html")) {'
     retired='// GENESIS_COACHING_DASHBOARD_EDGE_RETIRED_V1\n      if (false && request.method === "GET" && url.pathname === "/coaching" && contentType.includes("text/html")) {'
     if old_route not in src:
         raise SystemExit("Old coaching dashboard route marker found but route shape is unknown")
@@ -92,7 +92,6 @@ overlay=r'''
   function renderClasses(){
     var host=document.getElementById("gcdClassList");if(!host)return;
     host.innerHTML=S.classes.map(function(c){return '<button class="gcd-class-card" data-gcd-class-edit="'+c.id+'"><span><b>'+esc(c.name)+'</b><small>'+esc((c.grade_label||"Sınıf düzeyi belirtilmedi")+" • "+(c.student_count||0)+" öğrenci")+'</small></span><span class="gcd-level '+esc(c.difficulty_level||"")+'">'+esc(levelText(c.difficulty_level))+'</span></button>'}).join("")||'<div class="gcd-empty">Henüz sınıf yok.</div>';
-  }
   }
   function renderSummary(){
     var d=S.dashboard,sm=d&&d.summary?d.summary:{courses:0,tasks:0,done:0,minutes:0,exams:0};
