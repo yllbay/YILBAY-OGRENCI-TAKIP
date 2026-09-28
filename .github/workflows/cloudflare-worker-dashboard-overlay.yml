@@ -90,14 +90,14 @@ jobs:
           grep -q 'Soru Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Koçluk Stüdyosu' cloudflare/package-runtime/index.js
           grep -q 'Kurum Açma' cloudflare/package-runtime/index.js
-          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V3' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' cloudflare/package-runtime/index.js
           grep -q 'Sınıflar ve Öğrenciler' cloudflare/package-runtime/index.js
           grep -q 'Haftalık Çalışma Programı' cloudflare/package-runtime/index.js
           grep -q 'Akademik Yapı ve Atamalar' cloudflare/package-runtime/index.js
           grep -q 'Sınıf Yönetimi' cloudflare/package-runtime/index.js
           grep -q 'Sınıfa Ata' cloudflare/package-runtime/index.js
           grep -q 'Yeni Öğrenci' cloudflare/package-runtime/index.js
-          grep -q 'legacyRoot' cloudflare/package-runtime/index.js
+          grep -q 'dashboard bağımsız çalışır' cloudflare/package-runtime/index.js
           grep -q '/api/coaching/v3/classes' cloudflare/package-runtime/index.js
 
       - name: Deploy Worker without container rollout
@@ -146,14 +146,14 @@ jobs:
 
           COACH_CODE="$(curl -sS -L -c /tmp/genesis.cookies -b /tmp/genesis.cookies -o /tmp/coaching.html -w '%{http_code}' "$URL/coaching" || true)"
           test "$COACH_CODE" = "200" || { echo "::error::Coaching HTTP $COACH_CODE"; exit 41; }
-          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V3' /tmp/coaching.html || { echo "::error::Coaching dashboard edge overlay not live"; exit 42; }
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' /tmp/coaching.html || { echo "::error::Coaching dashboard edge overlay not live"; exit 42; }
           grep -q 'Sınıflar ve Öğrenciler' /tmp/coaching.html
           grep -q 'Haftalık Çalışma Programı' /tmp/coaching.html
           grep -q 'Akademik Yapı ve Atamalar' /tmp/coaching.html
           grep -q 'Sınıf Yönetimi' /tmp/coaching.html
           grep -q 'Sınıfa Ata' /tmp/coaching.html
           grep -q 'Yeni Öğrenci' /tmp/coaching.html
-          grep -q 'legacyRoot' /tmp/coaching.html
+          grep -q 'dashboard bağımsız çalışır' /tmp/coaching.html
           grep -q '/api/coaching/v2/students' /tmp/coaching.html
           grep -q '/api/coaching/v3/classes' /tmp/coaching.html
           grep -q '/api/coaching/v3/students/' /tmp/coaching.html
