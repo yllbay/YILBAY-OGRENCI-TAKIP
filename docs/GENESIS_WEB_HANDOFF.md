@@ -865,6 +865,34 @@ Adım 1 sonucunda:
 - toplu yükleme altyapısı hazır
 - gerçek müfredat veri listesi henüz kullanıcı tarafından verilmediği için veri uydurulmadı
 
+## 22. 2026-09-28 — Soru havuzu kalıcılık ve silme politikası kilitlendi
+
+Kullanıcı gereksinimi:
+- Soru havuzu cihazdan bağımsız tek production havuzu olacak.
+- Kullanıcı soru sildiğinde kayıt R2'den ve Google Drive yedeğinden de silinecek.
+- Geliştirme/deploy aşamalarında production R2 soru verisine ve Drive soru yedeklerine otomatik/destructive bakım yapılmayacak.
+- Kullanıcı production `/?workspace=1` adresine nereden girerse girsin aynı soru havuzuna erişecek.
+
+Production incelemesi:
+- `DELETE /api/questions/{question_id}` zaten veritabanı kaydını, R2 raw/display görsellerini, legacy backup ZIP kopyalarını, Drive snapshot kopyalarını ve `drive_file_id` ile bağlı Drive soru PNG'sini temizleyen zincire sahip.
+- Drive/R2 geçici silme hatalarında `DATA/DeletionTombstones` dayanıklı retry kaydı kullanılıyor.
+- Sınavlarda kullanılan soru 409 ile korunuyor.
+- Guard patch, kullanıcı silme tombstone'unu startup'ta tamamlamaya devam ederken otomatik startup storage-maintenance işlemlerini varsayılan kapalı hale getiriyor.
+- `GENESIS_STARTUP_STORAGE_MAINTENANCE` varsayılanı 0; production geliştirme deploylarında 1 verilmemeli.
+
+Production guard:
+- marker: `GENESIS_QUESTION_POOL_GUARD_V1`
+- image: `genesis-web-0152-genesiscontainer:question-pool-guard-2cdf91e290f8`
+- activation run: `36476929683` — SUCCESS
+- container version: `64`
+- failed instances: `0`
+- health errors: `0`
+- read-only smoke: `GENESIS_QUESTION_POOL_GUARD_PRODUCTION_OK`
+
+Kanonik politika:
+- `docs/QUESTION_POOL_DATA_PROTECTION.md`
+- Kod/Worker/container değişebilir; production soru verisi yalnız açık kullanıcı veri işlemleriyle değişebilir.
+
 ## Şu anki geliştirme noktası
 2026-09-28 itibarıyla Koçluk Stüdyosu Worker overlay'i V4 seviyesindedir. Sınıf yönetimi, V3 native öğrenci ekleme, öğrenciyi sınıfa bağlama ve gerçek efektif zorluk düzeyi production'da aktiftir. Sürekli legacy DOM gözlemcisi kaldırılmış ve dashboard ile eski coaching-v2 çalışma alanı birbirinden ayrılmıştır. Final V4 deploy run 36470831798 ve bağımsız metadata run 36470950591 SUCCESS tamamlanmıştır. Container ve persistent data katmanı değişmemiştir.
 
