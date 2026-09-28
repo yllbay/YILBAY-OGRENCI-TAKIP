@@ -893,6 +893,32 @@ Kanonik politika:
 - `docs/QUESTION_POOL_DATA_PROTECTION.md`
 - Kod/Worker/container değişebilir; production soru verisi yalnız açık kullanıcı veri işlemleriyle değişebilir.
 
+## 23. 2026-09-28 — Soru Stüdyosu yatay panel gezintisi
+
+Production `/?workspace=1` Soru Stüdyosu için Worker-only UI overlay eklendi.
+
+Aktif marker:
+- `GENESIS_QUESTION_STUDIO_HORIZONTAL_V2`
+
+Davranış:
+- Konular, Konu Soruları ve Testler panelleri yatay kaydırılabilir çalışma alanında çalışır.
+- Panel minimum genişlikleri okunabilirliği koruyacak şekilde sabitlenir; dar ekranlarda yatay scroll açılır.
+- Görünür alanın en büyük bölümünü kaplayan panel `gqs-active` olur.
+- Kısmen görünen paneller `gqs-partial` / `gqs-dim` durumlarıyla başlık yazılarını ve menü düğmelerini kompaktlaştırır.
+- Panel başlıkları yatay kaydırmada sticky davranışla görünürlüğünü korur.
+- Alt kısımda aktif panele göre değişen `gqsDock` bulunur: önceki/sonraki panel, aktif panel başlığı-alt başlığı, aktif panel menüsü ve + eylemi.
+- DOM yeniden render olduğunda yatay scroll konumu korunur.
+- Mobil/dar ekranda paneller yaklaşık viewport genişliğine geçer.
+- Soru verisi/API/R2/Drive katmanı değiştirilmez.
+
+Production deploy:
+- feature: `ef8ef964a0f3bdf5126b8e3ee1aeae7aaa7523af`
+- final repair: `80df621ee7566448cd26e2b0c16d20e7ce080029`
+- final production trigger: `0df2e393769225f8ce46298b41684e578049c22e`
+- Worker overlay run: `36479694227` — SUCCESS.
+- Worker deploy, container unchanged ve canlı smoke test adımlarının tamamı SUCCESS.
+- Container / R2 / Drive veri katmanı değiştirilmedi.
+
 ## Şu anki geliştirme noktası
 2026-09-28 itibarıyla Koçluk Stüdyosu Worker overlay'i V4 seviyesindedir. Sınıf yönetimi, V3 native öğrenci ekleme, öğrenciyi sınıfa bağlama ve gerçek efektif zorluk düzeyi production'da aktiftir. Sürekli legacy DOM gözlemcisi kaldırılmış ve dashboard ile eski coaching-v2 çalışma alanı birbirinden ayrılmıştır. Final V4 deploy run 36470831798 ve bağımsız metadata run 36470950591 SUCCESS tamamlanmıştır. Container ve persistent data katmanı değişmemiştir.
 
