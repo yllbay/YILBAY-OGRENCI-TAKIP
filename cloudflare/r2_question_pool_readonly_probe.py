@@ -20,7 +20,9 @@ probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2
           const prefixCounts = {};
           const sampleKeys = [];
           let cursor = undefined;
-          let total = 0;\n          let bucketTotal = 0;\n          const bucketSamples = [];
+          let total = 0;
+          let bucketTotal = 0;
+          const bucketSamples = [];
           let truncated = false;
           do {
             const page = await env.GENESIS_DATA.list({prefix:"DATA/", limit:1000, cursor});
