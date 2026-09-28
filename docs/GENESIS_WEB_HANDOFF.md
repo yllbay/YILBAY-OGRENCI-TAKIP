@@ -765,6 +765,57 @@ Production'da artık aşağıdaki V3 backend yetenekleri aktiftir ve canary/prod
 
 Bu aktivasyon backend V3 özelliklerini production'da kullanılabilir hâle getirmiştir. Mevcut sade Koçluk dashboard edge katmanı korunmuştur; V3 için ayrıca yeni bir görsel frontend tasarımı bu aktivasyonun parçası değildir.
 
+## 20. 2026-09-28 — V3 Sınıf Yönetimi ve Öğrenci-Sınıf Bağlama Arayüzü
+
+Kullanıcı talebi: geliştirmeye kaldığı yerden devam edilmesi.
+
+Başlangıç noktası:
+- V3 backend production'da aktifti.
+- `/api/coaching/v3/classes`, `/api/coaching/v3/students/{sid}/profile` ve `/api/coaching/v3/students/{sid}/model` endpointleri hazırdı.
+- Koçluk dashboard'undaki `+ Sınıf` düğmesi yalnız placeholder mesaj gösteriyordu.
+- Sınıf listesi, sınıf CRUD arayüzü ve öğrenciyi sınıfa bağlama UI akışı yoktu.
+
+Uygulanan geliştirme:
+- `cloudflare/coaching_dashboard_edge.py` V2 overlay'e yükseltildi.
+- Marker: `GENESIS_COACHING_DASHBOARD_EDGE_V2`.
+- Canlı Worker'da eski V1 route'u migration sırasında devre dışı bırakılıp V2 route'u eklenir.
+- Sol panelde gerçek V3 sınıf listesi gösterilir.
+- Her sınıfta ad, sınıf/seviye etiketi, öğrenci sayısı ve Kolay/Orta/Zor düzeyi gösterilir.
+- `+ Sınıf` artık gerçek Sınıf Yönetimi penceresini açar.
+- Yeni sınıf oluşturma `POST /api/coaching/v3/classes` ile yapılır.
+- Sınıf düzenleme/pasifleştirme `PATCH /api/coaching/v3/classes/{cid}` ile yapılır.
+- Seçili öğrenci kartında gerçek sınıf bilgisi gösterilir.
+- `Sınıfa Ata` işlemi `PATCH /api/coaching/v3/students/{sid}/profile` endpointine bağlandı.
+- Öğrenci için sınıf düzeyini kullanma veya EASY/MEDIUM/HARD özel düzey seçme desteklenir.
+- Dashboard'un düzey alanı artık placeholder değildir; `/api/coaching/v3/students/{sid}/model` üzerinden gerçek effective_level ve sınıf bilgisini gösterir.
+- Mevcut coaching-v2 haftalık dashboard verileri korunmuştur.
+
+Güvenli rollout:
+- Container image değiştirilmedi.
+- Worker-only overlay deploy hattı kullanıldı.
+- Deploy commitleri:
+  - `bc5776d48237f7a2346e7dafccce0dccbff5e2e9` — V3 sınıf yönetimi UI
+  - `c5764347db762d90e35c3a6025ca3b2c76cf82be` — V1→V2 migration güvenliği
+  - `5803faff2f781dc809c06399e43747c8dc3ba5ea` — V3 sınıf smoke kontrolleri
+  - `b9b736c0333d97da17788b0b3e780105d68587d2` — production deploy trigger
+- GENESIS Worker Dashboard Overlay run: `36469664476` — SUCCESS.
+- Deploy öncesi patch ve `node --check`: SUCCESS.
+- Worker deploy: SUCCESS.
+- Container unchanged doğrulaması: SUCCESS.
+- Canlı smoke: SUCCESS.
+- Smoke kapsamında V2 marker, Sınıf Yönetimi, Sınıfa Ata, `/api/coaching/v3/classes`, coaching-v2 students ve varsa V3 student model doğrulandı.
+- Bağımsız metadata run: `36469770614` — SUCCESS.
+- Metadata trigger commit: `55530fee7da5b5a45ca85e8c132bc02e7cc1ee03`.
+
+Production etkisi:
+- Koçluk Stüdyosu artık V3 sınıf modelini görsel olarak kullanmaya başlamıştır.
+- V3 backend yeniden yazılmadı.
+- Container rollout yapılmadı; mevcut V3 container ve kalıcı veri katmanı korundu.
+
+Sonraki geliştirme noktası:
+- Sınıf/öğrenci temel ilişkisi artık UI'da aktiftir.
+- Sıradaki ana iş: V3 ders atama + ünite/alt başlık sorumluluğu ekranlarını eski coaching-v2 çalışma alanından ayırıp doğrudan V3 API'lerine bağlamak; ardından kaynak (PDF/TEST/VIDEO) ve otomatik haftalık ödev arayüzünü tamamlamak.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -777,17 +828,12 @@ Adım 1 sonucunda:
 - gerçek müfredat veri listesi henüz kullanıcı tarafından verilmediği için veri uydurulmadı
 
 ## Şu anki geliştirme noktası
-2026-09-23 22:55 UTC itibarıyla V3 backend production aktivasyonu başarıyla tamamlandı. Doğrulanmış V3 image digest `sha256:494f438de1007bf42bdbac110a963e94c5e7b019c2aba87193dfc54373cca6fe`, Worker v82 ve Container v62 aktiftir. `/api/coaching/v3/classes` ve `/api/coaching/v3/curriculum` HTTP 200 vermektedir; bağımsız V3 production smoke başarıyla geçmiştir. Eski 0.15.2 sağlık/kalıcılık ve coaching-v2 uyumluluğu korunmuştur. Ayrıntı bölüm 19'dadır.\nAdım 1 tamamlanmış durumda.
-2026-09-23 production tam denetiminde bulunan doğrulanmış public-token ve online internet-test invalid-token hataları production'da düzeltildi ve bağımsız audit ile doğrulandı.
-Canlı production health: 0.15.2 / schema 14 / storage ok / r2-fuse.
-Güncel Worker: 333099cd-a686-4d97-8e31-df00ea4f0ebb (version number 81).
-Güncel container version: 61.
-GENESIS WEB kök açılış sayfası koyu lacivert/mor görsel dilde üç panelli Yönetim Panelidir. İlk panelde alt alta Soru Stüdyosu, Koçluk Stüdyosu ve Kurum Açma düğmeleri bulunur. Soru Stüdyosu `/?workspace=1`, Koçluk Stüdyosu `/coaching` hedefini açar; Kurum Açma mevcut kurum açma diyaloğunu çağırır. Önceki Konular / Konu Soruları / Testler çalışma alanı silinmemiştir.
-Koçluk Stüdyosu artık sade üç alanlı yönetim dashboard'u ile açılır: Sınıflar ve Öğrenciler / Haftalık Çalışma Programı / Akademik Yapı ve Atamalar. Gerçek öğrenci listesi ve haftalık görev/sınav verileri mevcut coaching-v2 API'lerinden alınır. Ayrıntılı eski çalışma alanı silinmemiştir; ders, sorumluluk, sınav ve analiz işlemleri gerektiğinde aynı sayfa içinde açılır ve Dashboard'a geri dönülebilir. Henüz backend'i olmayan sınıf ve zorluk-düzeyi otomasyonları sahte veri üretmeden gelecekteki adımlar için ayrılmıştır. Koçluk Stüdyosu JS/CSS assetleri için uzun süreli immutable browser cache kapalıdır.
-Bu UI geliştirmeleri Adım 2 olarak kabul edilmez; kullanıcı yeni fonksiyonel adımı ayrıca tarif etmeden yeni adım varsayılmayacaktır.
-Production auth modu: kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumu. Kurum kullanıcı hesapları kaldırılmıştır; kurum veri klasörleri korunmuştur.
-TinyFish kullanılmayacak.
-Ayrıca GENESIS web geliştirme sohbetlerinin otomatik devir sistemi için Chrome uzantısı geliştiriliyor.
+2026-09-28 itibarıyla V3 backend production'da aktiftir ve Koçluk Stüdyosu Worker overlay'i V2'ye yükseltilmiştir. Sınıf listeleme/oluşturma/düzenleme, öğrenciyi sınıfa bağlama ve gerçek efektif zorluk düzeyini gösterme akışları production'da canlıdır. Deploy run 36469664476 ve bağımsız metadata run 36469770614 SUCCESS tamamlanmıştır. Container değiştirilmemiş, mevcut V3 production image/data katmanı korunmuştur.
+
+Adım 1 tamamlanmıştır. V3 sınıf/öğrenci temel UI bağlantısı da tamamlanmıştır. Sıradaki fonksiyonel geliştirme noktası V3 ders atama ve ünite/alt başlık sorumluluk yönetiminin doğrudan yeni dashboard arayüzüne taşınmasıdır; bunun ardından PDF/TEST/VIDEO kaynak yönetimi ve otomatik haftalık ödev üretim arayüzü gelecektir.
+
+Production auth modu halen kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumudur.
+GENESIS WEB çalışmalarında mevcut güvenli GitHub/Cloudflare deploy hattı korunmalıdır.
 
 ## Yeni ChatGPT sohbetine talimat
 - Bu dosyayı tek gerçek handoff kaynağı olarak kullan.
