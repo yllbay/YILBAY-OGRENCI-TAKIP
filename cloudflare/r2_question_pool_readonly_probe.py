@@ -2,7 +2,7 @@ from pathlib import Path
 
 p=Path("cloudflare/package-runtime/index.js")
 src=p.read_text(encoding="utf-8")
-MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1"
+MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2"
 if MARK in src:
     print("R2 readonly probe already present")
     raise SystemExit(0)
@@ -12,7 +12,7 @@ needle='''      const upstream = await container.fetch(forwarded);
 if needle not in src:
     raise SystemExit("Worker upstream anchor missing")
 
-probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1
+probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2
       // Temporary read-only diagnostics. Never put/delete/write R2 objects here.
       {
         const probeUrl = new URL(request.url);
@@ -20,7 +20,7 @@ probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1
           const prefixCounts = {};
           const sampleKeys = [];
           let cursor = undefined;
-          let total = 0;
+          let total = 0;\n          let bucketTotal = 0;\n          const bucketSamples = [];
           let truncated = false;
           do {
             const page = await env.GENESIS_DATA.list({prefix:"DATA/", limit:1000, cursor});
@@ -41,12 +41,26 @@ probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1
             truncated = Boolean(page.truncated);
           } while (cursor && total < 100000);
 
+          let rootCursor = undefined;
+          do {
+            const rootPage = await env.GENESIS_DATA.list({limit:1000, cursor:rootCursor});
+            for (const obj of rootPage.objects || []) {
+              bucketTotal++;
+              if (bucketSamples.length < 80) bucketSamples.push({key:obj.key,size:obj.size,uploaded:obj.uploaded,etag:obj.etag});
+            }
+            rootCursor = rootPage.truncated ? rootPage.cursor : undefined;
+          } while (rootCursor && bucketTotal < 200000);
+
           const dbHead = await env.GENESIS_DATA.head("DATA/genesis.db");
+          const rootDbHead = await env.GENESIS_DATA.head("genesis.db");
           const response = {
-            marker:"GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1",
+            marker:"GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2",
             read_only:true,
             total_objects_under_DATA:total,
             prefix_counts:prefixCounts,
+            bucket_total_objects:bucketTotal,
+            bucket_sample_keys:bucketSamples,
+            root_genesis_db:rootDbHead ? {exists:true,size:rootDbHead.size,uploaded:rootDbHead.uploaded,etag:rootDbHead.etag} : {exists:false},
             genesis_db:dbHead ? {
               exists:true,
               size:dbHead.size,
