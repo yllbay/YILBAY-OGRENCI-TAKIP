@@ -1,0 +1,167 @@
+name: GENESIS Question Pool Guard Activate
+
+on:
+  push:
+    branches:
+      - cloudflare-release
+    paths:
+      - "cloudflare/question-pool-guard-activate-trigger.txt"
+
+concurrency:
+  group: genesis-web-0152-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+  CF_SCRIPT_NAME: genesis-web-0152
+  GUARD_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer:question-pool-guard-2cdf91e290f8
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Hydrate exact live Worker and capture current container
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          rm -rf cloudflare/question-pool-runtime
+          mkdir -p cloudflare/question-pool-runtime
+          cat cloudflare/package-bundle.part1.b64 cloudflare/package-bundle.part2.b64 | base64 -d | tar -xJ -C cloudflare/question-pool-runtime
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          echo "ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/qpg-worker.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path('/tmp/qpg-worker.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          candidates=[]
+          for part in raw.split(boundary)[1:]:
+              part=part.strip(b'\r\n-')
+              if not part: continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part: continue
+              _,payload=part.split(sep,1)
+              payload=payload.rstrip(b'\r\n')
+              if b'GenesisContainer' in payload and b'GENESIS_CONTAINER' in payload and b'container.fetch' in payload:
+                  candidates.append(payload)
+          if len(candidates)!=1:
+              raise SystemExit(f'Expected one Worker wrapper, got {len(candidates)}')
+          Path('cloudflare/question-pool-runtime/index.js').write_bytes(candidates[0])
+          PY
+          node --check cloudflare/question-pool-runtime/index.js
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/question-pool-runtime/index.js
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' cloudflare/question-pool-runtime/index.js
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/qpg-before.json
+          PREVIOUS_IMAGE="$(jq -r '.configuration.image // empty' /tmp/qpg-before.json)"
+          PREVIOUS_VERSION="$(jq -r '.version // 0' /tmp/qpg-before.json)"
+          test -n "$PREVIOUS_IMAGE"
+          echo "PREVIOUS_IMAGE=$PREVIOUS_IMAGE" >> "$GITHUB_ENV"
+          echo "PREVIOUS_VERSION=$PREVIOUS_VERSION" >> "$GITHUB_ENV"
+
+      - name: Pin verified guard image and validate config
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('cloudflare/question-pool-runtime/wrangler.jsonc')
+          cfg=json.loads(p.read_text(encoding='utf-8'))
+          assert cfg['name']=='genesis-web-0152'
+          assert any(x.get('binding')=='GENESIS_DATA' and x.get('bucket_name')=='genesis-web-0152-data' for x in cfg['r2_buckets'])
+          assert any(x.get('name')=='GENESIS_CONTAINER' and x.get('class_name')=='GenesisContainer' for x in cfg['durable_objects']['bindings'])
+          cfg['containers'][0]['image']=os.environ['GUARD_IMAGE']
+          p.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          grep -Fq "$GUARD_IMAGE" cloudflare/question-pool-runtime/wrangler.jsonc
+          (cd cloudflare/question-pool-runtime && npx --yes wrangler@4 deploy --dry-run --keep-vars --containers-rollout=none)
+
+      - name: Activate verified guard image
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          (cd cloudflare/question-pool-runtime && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate)
+          echo "DEPLOY_ATTEMPTED=1" >> "$GITHUB_ENV"
+
+      - name: Wait for healthy rollout
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          READY=0
+          for i in $(seq 1 70); do
+            npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/qpg-after.json
+            V="$(jq -r '.version // 0' /tmp/qpg-after.json)"
+            F="$(jq -r '.health.instances.failed // 0' /tmp/qpg-after.json)"
+            E="$(jq -r '.health.errors|length' /tmp/qpg-after.json)"
+            IMG="$(jq -r '.configuration.image // empty' /tmp/qpg-after.json)"
+            echo "CHECK=$i VERSION=$V FAILED=$F ERRORS=$E IMAGE=$IMG"
+            if [ "$IMG" = "$GUARD_IMAGE" ] && [ "$F" -eq 0 ] && [ "$E" -eq 0 ]; then
+              READY=1
+              break
+            fi
+            curl -sS -L --connect-timeout 5 --max-time 10 "$URL/" -o /tmp/qpg-warm.html || true
+            sleep 5
+          done
+          test "$READY" = "1" || { cat /tmp/qpg-after.json; exit 31; }
+
+      - name: Production read-only smoke
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          for i in $(seq 1 20); do
+            CODE="$(curl -sS -L --connect-timeout 5 --max-time 15 -c /tmp/qpg-c -b /tmp/qpg-c -o /tmp/qpg-root.html -w '%{http_code}' "$URL/" || true)"
+            [ "$CODE" = "200" ] && break
+            sleep 3
+          done
+          test "$CODE" = "200"
+          grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/qpg-root.html
+          test "$(curl -sS -c /tmp/qpg-c -b /tmp/qpg-c -o /tmp/qpg-me.json -w '%{http_code}' "$URL/api/auth/me")" = "200"
+          jq -e '.authenticated==true and .role=="ADMIN"' /tmp/qpg-me.json >/dev/null
+          test "$(curl -sS -L -c /tmp/qpg-c -b /tmp/qpg-c -o /tmp/qpg-coaching.html -w '%{http_code}' "$URL/coaching")" = "200"
+          grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' /tmp/qpg-coaching.html
+          test "$(curl -sS -c /tmp/qpg-c -b /tmp/qpg-c -o /tmp/qpg-storage.json -w '%{http_code}' "$URL/api/maintenance/storage-policy")" = "200"
+          jq -e '.questions>=0 and (.display.files>=0)' /tmp/qpg-storage.json >/dev/null
+          test "$(curl -sS -c /tmp/qpg-c -b /tmp/qpg-c -o /tmp/qpg-classes.json -w '%{http_code}' "$URL/api/coaching/v3/classes")" = "200"
+          jq -e '.classes|type=="array"' /tmp/qpg-classes.json >/dev/null
+          test "$(curl -sS -o /tmp/qpg-invalid.json -w '%{http_code}' "$URL/api/online/internet-test/genesis-audit-invalid-token")" = "404"
+          echo "GENESIS_QUESTION_POOL_GUARD_PRODUCTION_OK"
+
+      - name: Roll back on failure
+        if: failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ "${DEPLOY_ATTEMPTED:-0}" != "1" ]; then
+            echo "Deploy did not start; rollback not needed."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('cloudflare/question-pool-runtime/wrangler.jsonc')
+          cfg=json.loads(p.read_text(encoding='utf-8'))
+          cfg['containers'][0]['image']=os.environ['PREVIOUS_IMAGE']
+          p.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          (cd cloudflare/question-pool-runtime && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate)
