@@ -10,7 +10,18 @@ if mark in src:
 
 src=src.replace(
     "import contextvars\nfrom pathlib import Path\nfrom contextlib import contextmanager\n",
-    "import contextvars\nimport tempfile, os\nfrom pathlib import Path\nfrom contextlib import contextmanager\nfrom r2_object_store import persist_primary_db\n",
+    "import contextvars\nimport tempfile, os\nfrom pathlib import Path\nfrom contextlib import contextmanager\nfrom r2_object_store import persist_primary_db, restore_primary_db\n",
+    1,
+)
+src=src.replace(
+    'DATA=ROOT/"DATA"\\nDB=DATA/"genesis.db"\\n',
+    '''# GENESIS_QUESTION_STUDIO_DB_PERSIST_V1
+DATA=Path(os.environ.get("GENESIS_RUNTIME_DATA_DIR","/app/GENESIS_RUNTIME_DATA"))
+DB=DATA/"genesis.db"
+DATA.mkdir(parents=True,exist_ok=True)
+if os.environ.get("R2_ACCOUNT_ID") and not DB.exists():
+    restore_primary_db(DB)
+''',
     1,
 )
 anchor='CURRENT_INSTITUTION_ID=contextvars.ContextVar("genesis_current_institution_id",default=None)\n'
