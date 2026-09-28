@@ -126,7 +126,7 @@ jobs:
 
       - name: Smoke test live overlays and destinations
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
           OK=0
           for i in $(seq 1 18); do
