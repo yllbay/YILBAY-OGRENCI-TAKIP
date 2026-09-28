@@ -116,9 +116,13 @@ jobs:
           ROOT=/tmp/genesis-v3/bundle/rootfs/app/APP
           cp cloudflare/coaching_model_v3.py "$ROOT/backend/coaching_model_v3.py"
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/coaching_model_v3_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_pool_guard_install.py
           python3 -m py_compile "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
           grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' "$ROOT/backend/app.py"
           grep -q 'install_coaching_model_v3(app)' "$ROOT/backend/app.py"
+          grep -q 'GENESIS_QUESTION_POOL_GUARD_V1' "$ROOT/backend/app.py"
+          grep -q 'GENESIS_STARTUP_STORAGE_MAINTENANCE' "$ROOT/backend/app.py"
+          grep -q '"deletion_complete"' "$ROOT/backend/app.py"
           grep -q '/api/coaching/v3/students/{sid}/homework/auto' "$ROOT/backend/coaching_model_v3.py"
           grep -q 'coach3_homework_assignments' "$ROOT/backend/coaching_model_v3.py"
 
@@ -165,6 +169,8 @@ jobs:
           docker cp "$CID:/app/APP/backend/app.py" /tmp/genesis-v3/flat-app.py
           docker cp "$CID:/app/APP/backend/coaching_model_v3.py" /tmp/genesis-v3/flat-model.py
           grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' /tmp/genesis-v3/flat-app.py
+          grep -q 'GENESIS_QUESTION_POOL_GUARD_V1' /tmp/genesis-v3/flat-app.py
+          grep -q 'GENESIS_STARTUP_STORAGE_MAINTENANCE' /tmp/genesis-v3/flat-app.py
           grep -q 'VERSION = "0.16.0"' /tmp/genesis-v3/flat-model.py
           docker rm -f "$CID" >/dev/null
           trap - EXIT
@@ -220,6 +226,49 @@ jobs:
               db.CURRENT_DB.reset(tok)
           PY
           docker run --rm --entrypoint python -v /tmp/genesis-v3/model_test.py:/tmp/model_test.py:ro "$NEW_IMAGE" /tmp/model_test.py
+
+      - name: Disposable question-pool deletion durability test
+        run: |
+          set -euo pipefail
+          cat > /tmp/genesis-v3/question_pool_guard_test.py <<'PY'
+          import json, tempfile
+          from pathlib import Path
+          import sys
+          sys.path.insert(0,'/app/APP/backend')
+          import app as a
+
+          root=Path(tempfile.mkdtemp(prefix='genesis-question-pool-'))
+          a.DATA=root
+          a.RAW=root/'RawCrops'
+          a.DISPLAY=root/'DisplayImages'
+          a.DELETION_TOMBSTONES=root/'DeletionTombstones'
+          a.BACKUPS=root/'Backups'
+          a.RAW.mkdir(parents=True,exist_ok=True)
+          a.DISPLAY.mkdir(parents=True,exist_ok=True)
+          a.DELETION_TOMBSTONES.mkdir(parents=True,exist_ok=True)
+          raw_rel='RawCrops/q.png'
+          dis_rel='DisplayImages/q.png'
+          (root/raw_rel).write_bytes(b'raw')
+          (root/dis_rel).write_bytes(b'display')
+          tomb=a._write_delete_tombstone(77,raw_rel,dis_rel,'drive-file-77')
+
+          a._purge_question_from_backup_zips=lambda *args,**kwargs:{'checked':0,'changed':0}
+          a._purge_question_from_drive_snapshots=lambda *args,**kwargs:{'status':'PENDING','reason':'offline','snapshots_checked':0,'snapshots_changed':0}
+          a.drive_delete_file=lambda *args,**kwargs:{'status':'PENDING','reason':'offline'}
+          first=a._process_delete_tombstone(tomb)
+          assert first['local']['status']=='PURGED'
+          assert not (root/raw_rel).exists()
+          assert not (root/dis_rel).exists()
+          assert tomb.exists(), 'tombstone must survive while Drive deletion is pending'
+
+          a._purge_question_from_drive_snapshots=lambda *args,**kwargs:{'status':'PURGED','snapshots_checked':1,'snapshots_changed':1}
+          a.drive_delete_file=lambda *args,**kwargs:{'status':'PURGED','file_id':'drive-file-77'}
+          second=a._process_delete_tombstone(tomb)
+          assert second['complete'] is True
+          assert not tomb.exists(), 'tombstone must clear only after R2 and Drive deletion finish'
+          print('QUESTION_POOL_GUARD_DISPOSABLE_OK')
+          PY
+          docker run --rm --entrypoint python -v /tmp/genesis-v3/question_pool_guard_test.py:/tmp/question_pool_guard_test.py:ro "$NEW_IMAGE" /tmp/question_pool_guard_test.py
 
       - name: Configure Wrangler to use the pushed registry image
         run: |
