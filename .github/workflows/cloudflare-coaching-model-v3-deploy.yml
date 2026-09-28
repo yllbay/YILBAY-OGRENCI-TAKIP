@@ -126,44 +126,12 @@ jobs:
           grep -q '/api/coaching/v3/students/{sid}/homework/auto' "$ROOT/backend/coaching_model_v3.py"
           grep -q 'coach3_homework_assignments' "$ROOT/backend/coaching_model_v3.py"
 
-      - name: Create guaranteed one-layer image with docker import
+      - name: Build Cloudflare-safe app-layer image
         run: |
           set -euo pipefail
-          ROOT=/tmp/genesis-v3/bundle/rootfs
-          BUILD=/tmp/genesis-v3/flat-build
-          mkdir -p "$BUILD"
-          sudo chown -R 0:0 "$ROOT"
-          sudo tar --numeric-owner -C "$ROOT" -cf "$BUILD/rootfs.tar" .
-          NEW_IMAGE="registry.cloudflare.com/$ACCOUNT_ID/genesis-web-0152-genesiscontainer:coach3-v3-import-${GITHUB_SHA::12}"
+          NEW_IMAGE="registry.cloudflare.com/$ACCOUNT_ID/genesis-web-0152-genesiscontainer:question-pool-guard-${GITHUB_SHA::12}"
           export NEW_IMAGE
-          python3 - <<'PY'
-          import json, os, subprocess
-          from pathlib import Path
-          cfg=json.loads(Path('/tmp/genesis-v3/source-config.json').read_text())
-          c=cfg.get('config') or {}
-          cmd=['docker','import']
-          for item in c.get('Env') or []:
-              if '\n' in item or '\r' in item:
-                  raise SystemExit('Unexpected newline in ENV')
-              cmd += ['--change','ENV '+item]
-          wd=c.get('WorkingDir') or ''
-          if wd:
-              cmd += ['--change','WORKDIR '+wd]
-          user=c.get('User') or ''
-          if user:
-              cmd += ['--change','USER '+user]
-          for port in (c.get('ExposedPorts') or {}).keys():
-              cmd += ['--change','EXPOSE '+port]
-          if c.get('Entrypoint') is not None:
-              cmd += ['--change','ENTRYPOINT '+json.dumps(c['Entrypoint'],separators=(',',':'))]
-          if c.get('Cmd') is not None:
-              cmd += ['--change','CMD '+json.dumps(c['Cmd'],separators=(',',':'))]
-          cmd += ['/tmp/genesis-v3/flat-build/rootfs.tar',os.environ['NEW_IMAGE']]
-          print('docker import with', (len(cmd)-4)//2, 'runtime config changes')
-          subprocess.run(cmd,check=True)
-          PY
-          LAYERS="$(docker image inspect "$NEW_IMAGE" | jq '.[0].RootFS.Layers|length')"
-          test "$LAYERS" -eq 1 || { echo "::error::Imported image has $LAYERS layers"; exit 21; }
+          python3 cloudflare/rebuild_v3_image.py
           CID="$(docker create "$NEW_IMAGE")"
           trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           docker cp "$CID:/app/APP/backend/app.py" /tmp/genesis-v3/flat-app.py
