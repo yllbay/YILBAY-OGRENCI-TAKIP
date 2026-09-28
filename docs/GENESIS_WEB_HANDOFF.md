@@ -816,6 +816,44 @@ Sonraki geliştirme noktası:
 - Sınıf/öğrenci temel ilişkisi artık UI'da aktiftir.
 - Sıradaki ana iş: V3 ders atama + ünite/alt başlık sorumluluğu ekranlarını eski coaching-v2 çalışma alanından ayırıp doğrudan V3 API'lerine bağlamak; ardından kaynak (PDF/TEST/VIDEO) ve otomatik haftalık ödev arayüzünü tamamlamak.
 
+## 21. 2026-09-28 — Koçluk V3 stabilizasyonu: Öğrenci Ekle ve donma düzeltmeleri
+
+Kullanıcı bildirimi:
+- Koçluk Stüdyosu'nda + Öğrenci tıklamasından sonra Chrome "Sayfa Yanıt Vermiyor" uyarısı gösterdi.
+
+Bulunan nedenler:
+- Yeni V3 dashboard'daki + Öğrenci düğmesi hâlâ gizlenmiş eski coaching-v2 #addStudent kontrolünü tetikliyordu.
+- Dashboard, gizli eski V2 öğrenci DOM'unu MutationObserver ile sürekli izliyordu.
+- Öğrenci seçimi ve hafta değişiminde legacy öğrenci butonu gereksiz yere tekrar tıklanabiliyordu.
+- Sınıf formunda Pasif seçeneği vardı; mevcut V3 backend pasif sınıfı _require_class üzerinden yeniden düzenleyemediği için bu seçenek kullanıcıyı çıkmaz duruma sokabilirdi.
+
+Uygulanan düzeltmeler:
+- Koçluk Worker overlay marker'ı V4'e yükseltildi: GENESIS_COACHING_DASHBOARD_EDGE_V4.
+- + Öğrenci artık doğrudan POST /api/coaching/v3/students ile çalışan native V3 modal form açar.
+- Öğrenci adı, numarası, sınıf, özel EASY/MEDIUM/HARD düzeyi ve not alanları V3 API'ye bağlandı.
+- Eski #addStudent köprüsü kaldırıldı.
+- Dashboard'da sürekli legacy DOM MutationObserver kaldırıldı.
+- legacyStudentClick yalnız eski coaching-v2 ayrıntı çalışma alanı açılırken çalışır.
+- Haftalık dashboard yüklemesi artık eski V2 DOM'a tıklama yapmadan V2 dashboard API + V3 student model API üzerinden yüklenir.
+- Sınıf formundaki riskli Pasif seçeneği arayüzden kaldırıldı; mevcut backend davranışı düzeltilmeden kullanıcıya sunulmayacak.
+
+Release kayıtları:
+- native V3 öğrenci formu + observer fix: a7516d73640cc5c82d827b1c39826bb7ab06b470
+- smoke güncellemesi: 35558950911badb552ccb019e60dcfec3004161c
+- ilk fix deploy: b20af73f52b7a53c5bfc0016fb7d6c7a269e0dd6
+- legacy DOM izolasyonu: db6853e847796357ff126a496b9adcdeea088bc2
+- V4 smoke güncellemesi: ea480f4142f8865d263bbe29dba58f6550dfedb9
+- final V4 deploy trigger: 0601753dc31bb10ab1063bbbeb5cd3ab540f6a37
+- GENESIS Worker Dashboard Overlay run: 36470831798 — SUCCESS.
+- Patch, node --check, Worker deploy, container unchanged ve canlı smoke adımlarının tamamı SUCCESS.
+- Bağımsız metadata trigger: ee7855d815ea00262adbc2a93dd06f616233f473
+- Current Worker Metadata run: 36470950591 — SUCCESS.
+
+Production etkisi:
+- Container image ve kalıcı veri katmanı değiştirilmedi.
+- Koçluk dashboard artık öğrenci ekleme ve sınıf/öğrenci temel yönetiminde V3 API'leri doğrudan kullanır.
+- Eski coaching-v2 DOM yalnız kullanıcı eski detay çalışma alanına bilinçli geçtiğinde kullanılır.
+
 ## Adım durumu
 Adım 1 kullanıcı tarafından ONAYLANDI ve kapatıldı.
 
@@ -828,12 +866,9 @@ Adım 1 sonucunda:
 - gerçek müfredat veri listesi henüz kullanıcı tarafından verilmediği için veri uydurulmadı
 
 ## Şu anki geliştirme noktası
-2026-09-28 itibarıyla V3 backend production'da aktiftir ve Koçluk Stüdyosu Worker overlay'i V2'ye yükseltilmiştir. Sınıf listeleme/oluşturma/düzenleme, öğrenciyi sınıfa bağlama ve gerçek efektif zorluk düzeyini gösterme akışları production'da canlıdır. Deploy run 36469664476 ve bağımsız metadata run 36469770614 SUCCESS tamamlanmıştır. Container değiştirilmemiş, mevcut V3 production image/data katmanı korunmuştur.
+2026-09-28 itibarıyla Koçluk Stüdyosu Worker overlay'i V4 seviyesindedir. Sınıf yönetimi, V3 native öğrenci ekleme, öğrenciyi sınıfa bağlama ve gerçek efektif zorluk düzeyi production'da aktiftir. Sürekli legacy DOM gözlemcisi kaldırılmış ve dashboard ile eski coaching-v2 çalışma alanı birbirinden ayrılmıştır. Final V4 deploy run 36470831798 ve bağımsız metadata run 36470950591 SUCCESS tamamlanmıştır. Container ve persistent data katmanı değişmemiştir.
 
-Adım 1 tamamlanmıştır. V3 sınıf/öğrenci temel UI bağlantısı da tamamlanmıştır. Sıradaki fonksiyonel geliştirme noktası V3 ders atama ve ünite/alt başlık sorumluluk yönetiminin doğrudan yeni dashboard arayüzüne taşınmasıdır; bunun ardından PDF/TEST/VIDEO kaynak yönetimi ve otomatik haftalık ödev üretim arayüzü gelecektir.
-
-Production auth modu halen kullanıcı adı/şifre olmadan otomatik tek ADMIN oturumudur.
-GENESIS WEB çalışmalarında mevcut güvenli GitHub/Cloudflare deploy hattı korunmalıdır.
+Sıradaki geliştirme noktası V3 ders atama ve ünite/alt başlık sorumluluk yönetimini doğrudan yeni dashboard arayüzüne taşımaktır; ardından PDF/TEST/VIDEO kaynak yönetimi ve otomatik haftalık ödev arayüzü tamamlanacaktır.
 
 ## Yeni ChatGPT sohbetine talimat
 - Bu dosyayı tek gerçek handoff kaynağı olarak kullan.
