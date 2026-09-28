@@ -1,0 +1,66 @@
+name: GENESIS Question Pool Readonly Audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cloudflare/question-pool-audit-trigger.txt"
+
+permissions:
+  contents: read
+
+env:
+  CF_SCRIPT_NAME: genesis-web-0152
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+  BUCKET: genesis-web-0152-data
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Read live APIs
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          curl -fsS -L -c /tmp/c -b /tmp/c "$URL/" -o /tmp/root.html
+          curl -fsS -c /tmp/c -b /tmp/c "$URL/api/maintenance/storage-policy" -o /tmp/storage.json
+          curl -fsS -c /tmp/c -b /tmp/c "$URL/api/topics" -o /tmp/topics.json
+          curl -fsS -c /tmp/c -b /tmp/c "$URL/api/test-tree" -o /tmp/tests.json
+          echo "LIVE_STORAGE=$(jq -c . /tmp/storage.json)"
+          echo "LIVE_TOPIC_ROOTS=$(jq 'length' /tmp/topics.json)"
+          echo "LIVE_TEST_ROOTS=$(jq 'length' /tmp/tests.json)"
+
+      - name: Download canonical R2 database read-only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          rm -f /tmp/genesis-r2.db
+          npx --yes wrangler@4 r2 object get "$BUCKET/DATA/genesis.db" --remote --file=/tmp/genesis-r2.db
+          test -s /tmp/genesis-r2.db
+          file /tmp/genesis-r2.db
+          sqlite3 /tmp/genesis-r2.db "PRAGMA quick_check;"
+          echo "R2_DB_BYTES=$(stat -c%s /tmp/genesis-r2.db)"
+          echo "R2_TABLES=$(sqlite3 -json /tmp/genesis-r2.db \"select name from sqlite_master where type='table' order by name;\")"
+          echo "R2_TOPICS=$(sqlite3 /tmp/genesis-r2.db 'select count(*) from topics;')"
+          echo "R2_QUESTIONS=$(sqlite3 /tmp/genesis-r2.db 'select count(*) from questions;')"
+          echo "R2_TEST_CLASSES=$(sqlite3 /tmp/genesis-r2.db 'select count(*) from test_classes;')"
+          echo "R2_EXAMS=$(sqlite3 /tmp/genesis-r2.db 'select count(*) from exams;')"
+          echo "R2_DISPLAY_PATHS=$(sqlite3 /tmp/genesis-r2.db \"select count(*) from questions where coalesce(display_image_path,'')<>'';\")"
+          echo "R2_DRIVE_SYNCED=$(sqlite3 /tmp/genesis-r2.db \"select count(*) from questions where drive_status='SYNCED';\")"
+
+      - name: Read current container metadata
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container.json
+          jq '{version,image:.configuration.image,health}' /tmp/container.json
