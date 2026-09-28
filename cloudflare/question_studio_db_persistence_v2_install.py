@@ -28,6 +28,8 @@ anchor='CURRENT_INSTITUTION_ID=contextvars.ContextVar("genesis_current_instituti
 helper=anchor+'''
 
 def _persist_primary_snapshot(target:Path):
+    if not os.environ.get("R2_ACCOUNT_ID"):
+        return False
     if target.resolve()!=DB.resolve() or not target.exists():
         return False
     fd,name=tempfile.mkstemp(prefix="genesis-snap-",suffix=".db")
