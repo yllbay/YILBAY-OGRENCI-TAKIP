@@ -5,7 +5,21 @@ src=p.read_text(encoding="utf-8")
 MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V2"\nOLD_MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V1"
 
 if MARK in src:
-    print("question studio horizontal overlay already present")
+    print("question studio horizontal overlay V2 already present")
+    raise SystemExit(0)
+
+if OLD_MARK in src:
+    old_cond='if (request.method === "GET" && url.pathname === "/" && url.searchParams.get("workspace") === "1" && contentType.includes("text/html")) {'
+    new_cond='if (request.method === "GET" && new URL(request.url).pathname === "/" && new URL(request.url).searchParams.get("workspace") === "1" && (headers.get("content-type") || "").includes("text/html")) {'
+    if old_cond not in src:
+        raise SystemExit("V1 question studio route found but condition shape changed; refusing unsafe repair")
+    src=src.replace(old_cond,new_cond,1)
+    src=src.replace(OLD_MARK,MARK)
+    p.write_text(src,encoding="utf-8")
+    out=p.read_text(encoding="utf-8")
+    assert MARK in out
+    assert new_cond in out
+    print("GENESIS question studio horizontal V1 -> V2 repair: OK")
     raise SystemExit(0)
 
 anchor='''      // GENESIS_HOME_DASHBOARD_EDGE_V1
