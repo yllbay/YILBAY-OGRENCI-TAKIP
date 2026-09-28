@@ -1,0 +1,39 @@
+name: Web Step 1 Curriculum Test
+
+on:
+  push:
+    branches:
+      - web-step1-curriculum
+    paths:
+      - "source/current/app/curriculum-store.js"
+      - "source/current/app/curriculum-store.test.js"
+      - "source/current/app/server.js"
+      - "source/current/app/public/curriculum-step1.js"
+      - "source/current/app/public/index.html"
+      - ".github/workflows/web-step1-curriculum-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax checks
+        run: |
+          node --check source/current/app/curriculum-store.js
+          node --check source/current/app/server.js
+          node --check source/current/app/public/curriculum-step1.js
+      - name: Curriculum store tests
+        run: node source/current/app/curriculum-store.test.js
+      - name: Integration markers
+        run: |
+          grep -q 'createCurriculumStore' source/current/app/server.js
+          grep -q '/api/coaching/curriculum/tree' source/current/app/server.js
+          grep -q '/api/coaching/curriculum/action' source/current/app/server.js
+          grep -q 'curriculum-step1.js' source/current/app/public/index.html
