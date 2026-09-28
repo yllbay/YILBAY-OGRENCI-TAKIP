@@ -627,5 +627,31 @@ Kök neden:
 Sonuç:
 Sayfa donmasına yol açabilecek yeni/legacy DOM geri-besleme yolu kaldırıldı. Production kesintisi oluşmadı ve container/data katmanı korunmuştur.
 
+## 29. Soru Stüdyosu yatay overlay ilk rollout — Worker değişken sırası hatası
+Tarih: 2026-09-28
+
+Belirti:
+İlk `GENESIS_QUESTION_STUDIO_HORIZONTAL_V1` Worker-only deploy sonrası ana sayfa smoke testi başarısız oldu.
+
+Kök neden:
+- Workspace overlay bloğu mevcut home-dashboard route marker'ının önüne eklendi.
+- Bu konum Worker'daki ortak `const url` ve `const contentType` tanımlarından önceydi.
+- V1 koşulu bu değişkenleri erken kullandığı için root isteklerinde ReferenceError oluştu.
+
+Düzeltme:
+- Route koşulu `new URL(request.url)` ve `headers.get("content-type")` ifadelerini doğrudan kullanacak şekilde self-contained yapıldı.
+- Marker `GENESIS_QUESTION_STUDIO_HORIZONTAL_V2` olarak yükseltildi.
+- Migration script başlığındaki literal `\\n` yazım hatası ayrıca düzeltildi.
+- Son smoke adımı komut bazında izlenebilir hale getirildi.
+- Final run `36479694227`: SUCCESS.
+- Container unchanged: SUCCESS.
+- Root dashboard smoke: SUCCESS.
+- Workspace V2 marker / `gqs-horizontal` / `gqsDock` smoke: SUCCESS.
+- Coaching overlay ve API smoke kontrolleri: SUCCESS.
+
+Veri etkisi:
+- Hata yalnız Worker UI katmanındaydı.
+- Container, R2 soru havuzu ve Google Drive soru yedekleri değiştirilmedi.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
