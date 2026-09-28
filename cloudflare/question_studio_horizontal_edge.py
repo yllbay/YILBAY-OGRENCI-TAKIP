@@ -2,26 +2,24 @@ from pathlib import Path
 
 p=Path("cloudflare/package-runtime/index.js")
 src=p.read_text(encoding="utf-8")
-MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V2"
-OLD_MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V1"
+MARK="GENESIS_QUESTION_STUDIO_RESIZE_V1"
+OLD_MARK="GENESIS_QUESTION_STUDIO_HORIZONTAL_V2"
 
 if MARK in src:
-    print("question studio horizontal overlay V2 already present")
+    print("question studio resize overlay already present")
     raise SystemExit(0)
 
+# Retire the incorrect horizontal-scroll workspace route without touching backend/data.
 if OLD_MARK in src:
-    old_cond='if (request.method === "GET" && url.pathname === "/" && url.searchParams.get("workspace") === "1" && contentType.includes("text/html")) {'
-    new_cond='if (request.method === "GET" && new URL(request.url).pathname === "/" && new URL(request.url).searchParams.get("workspace") === "1" && (headers.get("content-type") || "").includes("text/html")) {'
-    if old_cond not in src:
-        raise SystemExit("V1 question studio route found but condition shape changed; refusing unsafe repair")
-    src=src.replace(old_cond,new_cond,1)
-    src=src.replace(OLD_MARK,MARK)
-    p.write_text(src,encoding="utf-8")
-    out=p.read_text(encoding="utf-8")
-    assert MARK in out
-    assert new_cond in out
-    print("GENESIS question studio horizontal V1 -> V2 repair: OK")
-    raise SystemExit(0)
+    old_route='''      // GENESIS_QUESTION_STUDIO_HORIZONTAL_V2
+      // Workspace-only UI overlay. No API, R2, Drive or container data mutation.
+      if (request.method === "GET" && new URL(request.url).pathname === "/" && new URL(request.url).searchParams.get("workspace") === "1" && (headers.get("content-type") || "").includes("text/html")) {'''
+    retired='''      // GENESIS_QUESTION_STUDIO_HORIZONTAL_RETIRED_V2
+      // Retired: replaced by native splitter resize enhancement.
+      if (false && request.method === "GET" && new URL(request.url).pathname === "/" && new URL(request.url).searchParams.get("workspace") === "1" && (headers.get("content-type") || "").includes("text/html")) {'''
+    if old_route not in src:
+        raise SystemExit("Horizontal V2 route shape changed; refusing unsafe retirement")
+    src=src.replace(old_route,retired,1)
 
 anchor='''      // GENESIS_HOME_DASHBOARD_EDGE_V1
       // UI-only overlay: keep the current verified container image untouched.
@@ -29,205 +27,146 @@ anchor='''      // GENESIS_HOME_DASHBOARD_EDGE_V1
 if anchor not in src:
     raise SystemExit("Home dashboard route anchor missing; refusing unsafe patch")
 
-block=r'''      // GENESIS_QUESTION_STUDIO_HORIZONTAL_V2
-      // Workspace-only UI overlay. No API, R2, Drive or container data mutation.
+block=r'''      // GENESIS_QUESTION_STUDIO_RESIZE_V1
+      // Workspace-only UI enhancement: expose the app's native split1/split2 resize handles.
       if (request.method === "GET" && new URL(request.url).pathname === "/" && new URL(request.url).searchParams.get("workspace") === "1" && (headers.get("content-type") || "").includes("text/html")) {
         let html = await upstream.text();
-        if (!html.includes("GENESIS_QUESTION_STUDIO_HORIZONTAL_V2")) {
-          const questionStudioOverlay = String.raw`
-<style id="genesisQuestionStudioHorizontalStyle">
-/* GENESIS_QUESTION_STUDIO_HORIZONTAL_V2 */
-body.gqs-ready .genesis{min-width:0!important}
-body.gqs-ready #workspace.gqs-horizontal{
-  overflow-x:auto!important;
-  overflow-y:hidden!important;
-  overscroll-behavior-x:contain;
-  scroll-behavior:smooth;
-  scroll-snap-type:x proximity;
-  scrollbar-gutter:stable;
-  touch-action:pan-x pan-y;
-  padding-bottom:25px!important;
+        if (!html.includes("GENESIS_QUESTION_STUDIO_RESIZE_V1")) {
+          const resizeOverlay = String.raw`
+<style id="genesisQuestionStudioResizeStyle">
+/* GENESIS_QUESTION_STUDIO_RESIZE_V1 */
+body.gqr-ready #workspace{
+  overflow:hidden!important;
 }
-body.gqs-ready #workspace.gqs-horizontal::-webkit-scrollbar{height:14px}
-body.gqs-ready #workspace.gqs-horizontal::-webkit-scrollbar-track{background:#ebe7f1;border-radius:999px}
-body.gqs-ready #workspace.gqs-horizontal::-webkit-scrollbar-thumb{background:#8062aa;border:3px solid #ebe7f1;border-radius:999px}
-body.gqs-ready #workspace.gqs-horizontal>.pane{
-  flex:none!important;
-  flex-shrink:0!important;
-  scroll-snap-align:start;
-  transition:opacity .16s ease,box-shadow .16s ease,border-color .16s ease,transform .16s ease;
+body.gqr-ready #workspace>.pane{
+  min-width:0!important;
+  transition:box-shadow .12s ease,border-color .12s ease;
 }
-body.gqs-ready #workspace.gqs-horizontal>#leftPane{width:clamp(350px,29vw,500px)!important;min-width:350px}
-body.gqs-ready #workspace.gqs-horizontal>#middlePane{width:clamp(500px,39vw,720px)!important;min-width:500px}
-body.gqs-ready #workspace.gqs-horizontal>#rightPane{width:clamp(400px,32vw,560px)!important;min-width:400px}
-body.gqs-ready #workspace.gqs-horizontal>.splitter{flex:0 0 18px;scroll-snap-align:none}
-body.gqs-ready #workspace.gqs-horizontal>.pane .pane-header{
-  position:sticky;
-  left:0;
-  z-index:55;
-  box-shadow:0 5px 16px rgba(50,24,89,.13);
-  transition:filter .16s ease,opacity .16s ease,box-shadow .16s ease;
+body.gqr-ready #workspace>.splitter{
+  position:relative!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:16px!important;
+  min-width:16px!important;
+  max-width:16px!important;
+  flex:0 0 16px!important;
+  cursor:col-resize!important;
+  background:linear-gradient(90deg,transparent 0 5px,#d8cde5 5px 11px,transparent 11px 16px)!important;
+  z-index:80!important;
+  user-select:none!important;
+  touch-action:none!important;
 }
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-active{
-  border-color:#8054bd;
-  box-shadow:0 12px 30px rgba(62,34,104,.20);
+body.gqr-ready #workspace>.splitter::before{
+  content:""!important;
+  width:5px!important;
+  height:54px!important;
+  border-radius:999px!important;
+  background:#7d5aa9!important;
+  box-shadow:0 0 0 3px rgba(125,90,169,.13),0 3px 10px rgba(47,26,70,.18)!important;
+  transition:width .12s ease,height .12s ease,background .12s ease,box-shadow .12s ease!important;
 }
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-active .pane-header{
-  filter:saturate(1.12) brightness(1.03);
-  box-shadow:0 6px 19px rgba(55,25,96,.26);
+body.gqr-ready #workspace>.splitter span{
+  display:none!important;
 }
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-dim{opacity:.91}
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-partial .pane-header{
-  min-width:min(420px,calc(100vw - 42px));
-  padding-left:12px;
-  padding-right:12px;
+body.gqr-ready #workspace>.splitter:hover::before,
+body.gqr-resizing #workspace>.splitter.gqr-dragging::before{
+  width:7px!important;
+  height:72px!important;
+  background:#61358f!important;
+  box-shadow:0 0 0 5px rgba(125,90,169,.18),0 5px 16px rgba(47,26,70,.28)!important;
 }
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-partial .head-title{font-size:19px;line-height:23px}
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-partial .head-sub{font-size:13px;line-height:17px;max-width:210px}
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-partial .head-actions{gap:5px}
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-partial .head-btn{
-  background:rgba(255,255,255,.14);
-  border-radius:9px;
+body.gqr-resizing,body.gqr-resizing *{
+  cursor:col-resize!important;
+  user-select:none!important;
 }
-body.gqs-ready #workspace.gqs-horizontal>.pane .head-copy{min-width:0}
-body.gqs-ready #workspace.gqs-horizontal>.pane .head-actions{flex:0 0 auto}
-body.gqs-ready #workspace.gqs-horizontal>.pane .head-btn{
-  transition:background .16s ease,transform .16s ease;
+body.gqr-ready #workspace>.pane.gqr-narrow .pane-header{
+  padding-left:10px!important;
+  padding-right:8px!important;
+  gap:7px!important;
 }
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-active .head-btn:hover{background:rgba(255,255,255,.16)}
-body.gqs-ready #workspace.gqs-horizontal>.pane.gqs-active .pane-body>.fab{
-  box-shadow:0 7px 18px rgba(62,27,110,.28);
+body.gqr-ready #workspace>.pane.gqr-narrow .head-title{
+  font-size:17px!important;
+  line-height:20px!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
 }
-#gqsDock{
-  position:fixed;
-  z-index:850;
-  left:50%;
-  bottom:18px;
-  transform:translateX(-50%);
-  display:flex;
-  align-items:center;
-  gap:7px;
-  min-width:350px;
-  max-width:min(720px,calc(100vw - 28px));
-  height:54px;
-  padding:6px 8px;
-  border:1px solid rgba(117,88,158,.42);
-  border-radius:16px;
-  background:rgba(255,255,255,.94);
-  box-shadow:0 12px 34px rgba(28,15,49,.24);
-  backdrop-filter:blur(14px);
-  color:#281b38;
+body.gqr-ready #workspace>.pane.gqr-narrow .head-sub{
+  max-width:120px!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
 }
-#gqsDock .gqs-nav,#gqsDock .gqs-action{
-  width:42px;
-  height:42px;
-  flex:0 0 42px;
-  border:1px solid #d3c7e0;
-  border-radius:11px;
-  background:#f7f2fc;
-  color:#542b82;
-  font:700 20px "Segoe UI",Arial,sans-serif;
-  cursor:pointer;
+body.gqr-ready #workspace>.pane.gqr-narrow .head-actions{
+  flex:0 0 auto!important;
+  gap:3px!important;
 }
-#gqsDock .gqs-action{
-  background:linear-gradient(145deg,#6a35b9,#7b49ca);
-  border-color:#7141be;
-  color:#fff;
+body.gqr-ready #workspace>.pane.gqr-narrow .head-btn{
+  min-width:34px!important;
+  width:34px!important;
+  height:34px!important;
+  padding:0!important;
 }
-#gqsDock .gqs-action.menu{font-size:24px;line-height:1}
-#gqsDock .gqs-action[hidden]{display:none!important}
-#gqsDock .gqs-nav:disabled{opacity:.35;cursor:default}
-#gqsDock .gqs-copy{min-width:0;flex:1;padding:0 6px;text-align:center}
-#gqsDock .gqs-title{display:block;font-size:15px;font-weight:800;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#gqsDock .gqs-sub{display:block;margin-top:2px;font-size:11px;color:#6e6478;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-@media(max-width:760px){
-  body.gqs-ready #workspace.gqs-horizontal>#leftPane{width:88vw!important;min-width:320px}
-  body.gqs-ready #workspace.gqs-horizontal>#middlePane{width:92vw!important;min-width:360px}
-  body.gqs-ready #workspace.gqs-horizontal>#rightPane{width:88vw!important;min-width:320px}
-  #gqsDock{bottom:10px;min-width:0;width:calc(100vw - 20px);height:50px}
-  #gqsDock .gqs-nav,#gqsDock .gqs-action{width:38px;height:38px;flex-basis:38px}
-  #gqsDock .gqs-sub{display:none}
+body.gqr-ready #workspace>.pane.gqr-very-narrow .head-sub{
+  display:none!important;
+}
+body.gqr-ready #workspace>.pane.gqr-very-narrow .head-icon{
+  transform:scale(.88);
+  transform-origin:center;
+}
+body.gqr-resizing #workspace>.pane{
+  box-shadow:inset 0 0 0 1px rgba(125,90,169,.26)!important;
 }
 </style>
-<script id="genesisQuestionStudioHorizontalScript">
-/* GENESIS_QUESTION_STUDIO_HORIZONTAL_V2 */
+<script id="genesisQuestionStudioResizeScript">
+/* GENESIS_QUESTION_STUDIO_RESIZE_V1 */
 (()=>{if(new URLSearchParams(location.search).get("workspace")!=="1")return;
-const IDS=["leftPane","middlePane","rightPane"];
-const TITLES={leftPane:"Konular",middlePane:"Konu Soruları",rightPane:"Testler"};
-let savedX=0,raf=0,activeIndex=0,currentWs=null;
-
-function ensureDock(){
-  let d=document.getElementById("gqsDock");
-  if(d)return d;
-  d=document.createElement("div");
-  d.id="gqsDock";
-  d.setAttribute("role","navigation");
-  d.setAttribute("aria-label","Soru Stüdyosu panel gezintisi");
-  d.innerHTML='<button class="gqs-nav" id="gqsPrev" type="button" title="Önceki panel">‹</button><div class="gqs-copy"><span class="gqs-title" id="gqsTitle">Konular</span><span class="gqs-sub" id="gqsSub">Konu Seç</span></div><button class="gqs-action menu" id="gqsMenu" type="button" title="Panel menüsü" hidden>⋮</button><button class="gqs-action" id="gqsAdd" type="button" title="Bu panelde yeni kayıt">+</button><button class="gqs-nav" id="gqsNext" type="button" title="Sonraki panel">›</button>';
-  document.body.appendChild(d);
-  d.querySelector("#gqsPrev").onclick=()=>scrollToPane(activeIndex-1);
-  d.querySelector("#gqsNext").onclick=()=>scrollToPane(activeIndex+1);
-  d.querySelector("#gqsAdd").onclick=()=>{const p=document.getElementById(IDS[activeIndex]);const b=p&&p.querySelector(".pane-body>.fab");if(b)b.click()};
-  d.querySelector("#gqsMenu").onclick=()=>{const p=document.getElementById(IDS[activeIndex]);const b=p&&p.querySelector(".head-btn,[data-head-menu]");if(b)b.click()};
-  return d
-}
-function scrollToPane(i){
-  const ws=document.getElementById("workspace");if(!ws)return;
-  i=Math.max(0,Math.min(IDS.length-1,i));
-  const p=document.getElementById(IDS[i]);if(!p)return;
-  const target=Math.max(0,p.offsetLeft-ws.offsetLeft-8);
-  ws.scrollTo({left:target,behavior:"smooth"})
-}
-function update(){
-  raf=0;
-  const ws=document.getElementById("workspace");if(!ws)return;
-  const wr=ws.getBoundingClientRect();
-  let best=-1,bestVisible=-1;
-  IDS.forEach((id,i)=>{
+let ro=null;
+function classify(){
+  ["leftPane","middlePane","rightPane"].forEach(id=>{
     const p=document.getElementById(id);if(!p)return;
-    const r=p.getBoundingClientRect();
-    const visible=Math.max(0,Math.min(r.right,wr.right)-Math.max(r.left,wr.left));
-    const ratio=visible/Math.max(1,r.width);
-    if(visible>bestVisible){bestVisible=visible;best=i}
-    p.classList.toggle("gqs-partial",ratio>0&&ratio<.72);
-    p.classList.toggle("gqs-dim",ratio>0&&ratio<.48);
+    const w=p.getBoundingClientRect().width;
+    p.classList.toggle("gqr-narrow",w<390);
+    p.classList.toggle("gqr-very-narrow",w<315);
   });
-  if(best>=0)activeIndex=best;
-  IDS.forEach((id,i)=>{const p=document.getElementById(id);if(p)p.classList.toggle("gqs-active",i===activeIndex)});
-  const p=document.getElementById(IDS[activeIndex]),dock=ensureDock();
-  const title=p?.querySelector(".head-title")?.textContent?.trim()||TITLES[IDS[activeIndex]];
-  const sub=p?.querySelector(".head-sub")?.textContent?.trim()||"";
-  dock.querySelector("#gqsTitle").textContent=title;
-  dock.querySelector("#gqsSub").textContent=sub;
-  dock.querySelector("#gqsPrev").disabled=activeIndex===0;
-  dock.querySelector("#gqsNext").disabled=activeIndex===IDS.length-1;
-  const menu=p&&p.querySelector(".head-btn,[data-head-menu]");
-  dock.querySelector("#gqsMenu").hidden=!menu;
 }
-function schedule(){if(!raf)raf=requestAnimationFrame(update)}
+function bindSplitter(s){
+  if(!s||s.dataset.gqrBound==="1")return;
+  s.dataset.gqrBound="1";
+  s.setAttribute("role","separator");
+  s.setAttribute("aria-orientation","vertical");
+  s.title="Tut ve sağa/sola sürükle";
+  s.addEventListener("mousedown",()=>{
+    document.body.classList.add("gqr-resizing");
+    s.classList.add("gqr-dragging");
+  },true);
+}
+function finish(){
+  document.body.classList.remove("gqr-resizing");
+  document.querySelectorAll("#workspace>.splitter.gqr-dragging").forEach(x=>x.classList.remove("gqr-dragging"));
+  classify();
+}
 function install(){
   const ws=document.getElementById("workspace");
-  if(!ws||!IDS.every(id=>document.getElementById(id)))return false;
-  document.body.classList.add("gqs-ready");
-  ws.classList.add("gqs-horizontal");
-  if(currentWs!==ws){
-    if(currentWs)savedX=currentWs.scrollLeft||savedX;
-    currentWs=ws;
-    ws.addEventListener("scroll",()=>{savedX=ws.scrollLeft;schedule()},{passive:true});
-    ws.addEventListener("wheel",e=>{
-      if(Math.abs(e.deltaY)>Math.abs(e.deltaX)&&e.shiftKey){e.preventDefault();ws.scrollLeft+=e.deltaY}
-    },{passive:false});
-    requestAnimationFrame(()=>{ws.scrollLeft=savedX;schedule()});
+  const p1=document.getElementById("leftPane"),p2=document.getElementById("middlePane"),p3=document.getElementById("rightPane");
+  const s1=document.getElementById("split1"),s2=document.getElementById("split2");
+  if(!ws||!p1||!p2||!p3||!s1||!s2)return false;
+  document.body.classList.add("gqr-ready");
+  bindSplitter(s1);bindSplitter(s2);
+  if(!ro&&window.ResizeObserver){
+    ro=new ResizeObserver(classify);ro.observe(p1);ro.observe(p2);ro.observe(p3);
   }
-  ensureDock();schedule();return true
+  classify();return true
 }
+document.addEventListener("mouseup",finish,true);
+window.addEventListener("blur",finish);
 install();
-const mo=new MutationObserver(()=>{if(install())schedule()});
+const mo=new MutationObserver(()=>install());
 mo.observe(document.getElementById("app")||document.documentElement,{childList:true,subtree:true});
-window.addEventListener("resize",schedule,{passive:true});
 })();
 </script>`;
-          html = html.includes("</body>") ? html.replace("</body>", questionStudioOverlay + "</body>") : html + questionStudioOverlay;
+          html = html.includes("</body>") ? html.replace("</body>", resizeOverlay + "</body>") : html + resizeOverlay;
           headers.delete("content-length");
         }
         headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
@@ -243,8 +182,8 @@ src=src.replace(anchor,block+anchor,1)
 p.write_text(src,encoding="utf-8")
 out=p.read_text(encoding="utf-8")
 assert MARK in out
-assert "gqs-horizontal" in out
-assert "gqsDock" in out
-assert "scrollToPane" in out
-assert 'url.searchParams.get("workspace") === "1"' in out
-print("GENESIS question studio horizontal overlay patch: OK")
+assert "GENESIS_QUESTION_STUDIO_HORIZONTAL_RETIRED_V2" in out
+assert 'id="split1"' not in out  # DOM remains owned by the application
+assert "gqr-dragging" in out
+assert "ResizeObserver" in out
+print("GENESIS question studio native splitter enhancement: OK")
