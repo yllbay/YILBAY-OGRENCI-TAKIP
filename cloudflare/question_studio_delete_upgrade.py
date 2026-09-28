@@ -17,7 +17,7 @@ new='''            # GENESIS_QUESTION_STUDIO_DELETE_UPGRADE_V1
             fp=abs_data(rel)
             if fp.exists():
                 fp.unlink()
-            r2_remove("DATA/"+str(rel).replace("\\\\","/"))
+            if os.environ.get("R2_ACCOUNT_ID"):\n                r2_remove("DATA/"+str(rel).replace("\\\\","/"))
             local_deleted.append(rel)
 '''
 if old not in src:
