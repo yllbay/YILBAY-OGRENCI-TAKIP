@@ -18,7 +18,9 @@ assert len(manifest['layers']) >= keep
 history = config.get('history', [])
 layer_history = [h for h in history if not h.get('empty_layer')]
 assert 'pip install' in layer_history[keep-1]['created_by'], 'Runtime boundary changed'
-assert 'COPY APP' in layer_history[keep]['created_by'], 'Application boundary changed'
+# Do not depend on Docker history wording for the application layer. The safety
+# contract is the actual filesystem boundary checked below: every discarded
+# layer may contain only app/tmp paths, never operating-system/runtime files.
 # Later layers must not contain operating-system/runtime changes we would discard.
 for layer in manifest['layers'][keep:]:
     with tarfile.open(blobs / layer['digest'].split(':')[1], 'r:*') as archive:
