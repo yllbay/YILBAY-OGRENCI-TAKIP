@@ -601,5 +601,31 @@ Etkisi:
 Sonuç:
 V3 sınıf yönetimi ve öğrenci-sınıf bağlama UI production'a güvenli biçimde alınmıştır; bu geliştirme sırasında production kesintisi oluşmamıştır.
 
+## 28. Koçluk Stüdyosu sayfa yanıt vermiyor — legacy DOM etkileşimi
+Tarih: 2026-09-28
+
+Belirti:
+Kullanıcı Koçluk Stüdyosu'nda + Öğrenci işlemi sırasında Chrome "Sayfa Yanıt Vermiyor" uyarısı gördü.
+
+Kök neden:
+- V3 dashboard'daki + Öğrenci düğmesi gizli coaching-v2 #addStudent butonunu programatik tıklıyordu.
+- Dashboard eski öğrenci listesi DOM'unu MutationObserver ile sürekli izliyordu.
+- Legacy seçim senkronizasyonu yeni dashboard render akışıyla gereksiz tekrar oluşturabilecek yapıdaydı.
+
+Çözüm:
+- + Öğrenci native V3 modal forma taşındı ve POST /api/coaching/v3/students endpointine doğrudan bağlandı.
+- Sürekli legacy MutationObserver kaldırıldı.
+- Legacy öğrenci tıklaması yalnız eski ayrıntı workspace açılırken yapılacak şekilde sınırlandı.
+- Dashboard veri yüklemesi yalnız API tabanlı hâle getirildi.
+- Riskli sınıf pasifleştirme kontrolü UI'dan kaldırıldı.
+- Final overlay marker: GENESIS_COACHING_DASHBOARD_EDGE_V4.
+- Final deploy run 36470831798: SUCCESS.
+- Container unchanged: SUCCESS.
+- Live smoke: SUCCESS.
+- Independent metadata run 36470950591: SUCCESS.
+
+Sonuç:
+Sayfa donmasına yol açabilecek yeni/legacy DOM geri-besleme yolu kaldırıldı. Production kesintisi oluşmadı ve container/data katmanı korunmuştur.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
