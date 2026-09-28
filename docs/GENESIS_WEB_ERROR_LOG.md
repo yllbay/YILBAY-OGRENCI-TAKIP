@@ -573,5 +573,33 @@ Production aktivasyonu:
 Sonuç:
 Önceki V3 `ImagePullError / failed unpacking image` yolu kullanılmadı. Yeniden oluşturulan doğrulanmış 11-layer aday Cloudflare canary'de gerçek API testlerinden geçtikten sonra aynı digest production'a alınmış ve bağımsız smoke ile doğrulanmıştır.
 
+## 27. V3 sınıf arayüzü rollout öncesi patch hataları ve güvenli düzeltme
+Tarih: 2026-09-28
+
+Geliştirme:
+Koçluk dashboard V1 overlay'inin V3 sınıf yönetimi ve öğrenci-sınıf bağlama arayüzüne yükseltilmesi.
+
+Production öncesi bulunan sorunlar:
+- İlk kod dönüşümünde eski V1 marker sabiti yanlışlıkla V2 değerine çevrilmişti; bu durum canlı V1 route migration'ını bozabilirdi.
+- `renderClasses()` eklenirken bir fazla JavaScript kapanış parantezi oluşmuştu.
+
+Etkisi:
+- Production etkisi olmadı.
+- Hatalar deploy trigger çalıştırılmadan önce repo kaynak denetiminde bulundu.
+
+Çözüm:
+- `OLD_MARK` tekrar `GENESIS_COACHING_DASHBOARD_EDGE_V1` olarak düzeltildi.
+- Eski V1 route'u yalnız migration sırasında `false && ...` ile emekliye ayıran güvenli dönüşüm korundu.
+- Fazla JavaScript kapanış parantezi kaldırıldı.
+- Fix commit: `c5764347db762d90e35c3a6025ca3b2c76cf82be`.
+- Production workflow'da `node --check` deploy öncesi başarıyla geçti.
+- Worker Dashboard Overlay run `36469664476`: SUCCESS.
+- Container unchanged kontrolü: SUCCESS.
+- Canlı V2 smoke testleri: SUCCESS.
+- Metadata run `36469770614`: SUCCESS.
+
+Sonuç:
+V3 sınıf yönetimi ve öğrenci-sınıf bağlama UI production'a güvenli biçimde alınmıştır; bu geliştirme sırasında production kesintisi oluşmamıştır.
+
 ## Kural
 Yeni hatalar bu dosyaya tarih, adım, hata metni, kök neden ve çözüm ile eklenmelidir.
