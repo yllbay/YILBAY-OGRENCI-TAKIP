@@ -74,7 +74,13 @@ jobs:
           if len(candidates)!=1:
               raise SystemExit(f'Expected one Worker module, found {len(candidates)}')
           Path('cloudflare/package-runtime/index.js').write_bytes(candidates[0])
+          Path('/tmp/genesis-v3/worker-before.js').write_bytes(candidates[0])
+          import hashlib
+          worker_sha=hashlib.sha256(candidates[0]).hexdigest()
+          print('PREVIOUS_WORKER_SOURCE_SHA256='+worker_sha)
           PY
+          python3 cloudflare/container_cold_start_race_fix.py cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_CONTAINER_COLD_START_COALESCED_V1' cloudflare/package-runtime/index.js
           python3 cloudflare/question_studio_integrity_probe_v4.py
           node --check cloudflare/package-runtime/index.js
           grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
@@ -485,8 +491,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          (cd cloudflare/package-runtime && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate)
           echo "DEPLOY_ATTEMPTED=1" >> "$GITHUB_ENV"
+          (cd cloudflare/package-runtime && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate)
 
       - name: Wait for clean rollout
         env:
@@ -589,7 +595,7 @@ jobs:
           test "$INVALID" = "404"
           echo "GENESIS_QUESTION_STUDIO_DURABLE_STORAGE_SMOKE_OK"
 
-      - name: Roll back previous image on failure
+      - name: Roll back Worker and container image on failure
         if: failure()
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -601,6 +607,7 @@ jobs:
             exit 0
           fi
           echo "::warning::Rolling back to previous container image $PREVIOUS_IMAGE"
+          cp /tmp/genesis-v3/worker-before.js cloudflare/package-runtime/index.js
           python3 - <<'PY'
           import json,os
           from pathlib import Path
@@ -626,6 +633,30 @@ jobs:
             sleep 5
           done
           test "$ROLLBACK_OK" = "1" || { cat /tmp/genesis-v3/container-rollback.json; exit 51; }
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/content/v2" -H "$AUTH" -o /tmp/genesis-v3/worker-rollback.bin
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          raw=Path('/tmp/genesis-v3/worker-rollback.bin').read_bytes()
+          boundary=raw.splitlines()[0].strip()
+          modules=[]
+          for part in raw.split(boundary)[1:]:
+              part=part.strip(b'\r\n-')
+              if not part: continue
+              sep=b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
+              if sep not in part: continue
+              _,payload=part.split(sep,1)
+              payload=payload.rstrip(b'\r\n')
+              if b'GenesisContainer' in payload and b'GENESIS_CONTAINER' in payload and b'container.fetch' in payload:
+                  modules.append(payload)
+          if len(modules)!=1:
+              raise SystemExit(f'Expected one rolled-back Worker module, found {len(modules)}')
+          expected=Path('/tmp/genesis-v3/worker-before.js').read_bytes()
+          if hashlib.sha256(modules[0]).hexdigest()!=hashlib.sha256(expected).hexdigest():
+              raise SystemExit('Worker source rollback does not match the pre-candidate bundle')
+          print('WORKER_ROLLBACK_SOURCE_OK',hashlib.sha256(modules[0]).hexdigest())
+          PY
           URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
           ROOT_CODE="$(curl -sS -L --connect-timeout 5 --max-time 45 -o /tmp/genesis-v3/rollback-root.html -w '%{http_code}' "$URL/" || true)"
           test "$ROOT_CODE" = "200" || { echo "ROLLBACK_ROOT_HTTP=$ROOT_CODE"; head -c 1000 /tmp/genesis-v3/rollback-root.html || true; echo; exit 52; }

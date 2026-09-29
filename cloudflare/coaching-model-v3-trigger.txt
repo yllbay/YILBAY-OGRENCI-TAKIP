@@ -1,1 +1,1 @@
-genesis-default-runtime-local-diagnostic-final-2026-09-29
+genesis-container-cold-start-coalescing-2026-09-30
