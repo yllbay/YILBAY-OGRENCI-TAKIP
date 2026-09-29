@@ -1,1 +1,1 @@
-2026-09-29 detect R2 env references in live Worker
+2026-09-29 inventory live Question Studio endpoints
