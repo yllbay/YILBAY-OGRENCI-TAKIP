@@ -1,6 +1,14 @@
 from pathlib import Path
 import os
 
+# Production-safe by default. This historical helper may seed an EMPTY Question
+# Studio only when a developer explicitly opts in inside an isolated environment.
+# Production deploy/restart/migration must never create, rename, delete, or alter
+# Question Studio folders/tests/exams.
+if os.environ.get("GENESIS_ALLOW_QUESTION_STUDIO_SEED","0")!="1":
+    print("Question Studio seed skipped: immutable production guard")
+    raise SystemExit(0)
+
 root=Path(os.environ.get("GENESIS_APP_ROOT","/app/APP"))
 path=root/"backend"/"app.py"
 src=path.read_text(encoding="utf-8")
