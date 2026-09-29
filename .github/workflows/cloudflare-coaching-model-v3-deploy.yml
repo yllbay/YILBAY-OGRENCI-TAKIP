@@ -344,14 +344,13 @@ jobs:
           echo "QS_R2_ASSET_BASELINE=$(cat /tmp/genesis-v3/qs-r2-before.sha) COUNT=$(cat /tmp/genesis-v3/qs-r2-before.count)"
 
           FP_CODE="$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/genesis-v3/qs-fingerprint-before.json -w '%{http_code}' "$URL/api/internal/question-studio-fingerprint" || true)"
-          if [ "$FP_CODE" = "200" ]; then
-            jq -e '.marker=="GENESIS_QUESTION_STUDIO_HARD_LOCK_V1" and (.sha256|type=="string")' /tmp/genesis-v3/qs-fingerprint-before.json >/dev/null
+          if [ "$FP_CODE" = "200" ] && jq -e '.marker=="GENESIS_QUESTION_STUDIO_HARD_LOCK_V1" and (.sha256|type=="string")' /tmp/genesis-v3/qs-fingerprint-before.json >/dev/null 2>&1; then
             jq -r '.sha256' /tmp/genesis-v3/qs-fingerprint-before.json > /tmp/genesis-v3/qs-fingerprint-before.sha
             echo "QS_STRICT_BASELINE=1" >> "$GITHUB_ENV"
             echo "Question Studio strict baseline captured."
           else
             echo "QS_STRICT_BASELINE=0" >> "$GITHUB_ENV"
-            echo "::warning::First hard-lock rollout: strict DB fingerprint endpoint not yet present; topics/test-tree fallback baseline captured."
+            echo "::warning::First hard-lock rollout: strict DB fingerprint endpoint not yet valid; topics/test-tree + R2 asset fingerprint baseline captured."
           fi
 
       - name: Disposable Question Studio hard-lock test
