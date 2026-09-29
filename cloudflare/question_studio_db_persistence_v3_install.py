@@ -60,4 +60,15 @@ def _cols(con,table):
 if anchor not in src:
     raise SystemExit("db helper anchor changed")
 src=src.replace(anchor,bootstrap,1)
+
+old_tail='''    if changed:
+        _persist_primary_snapshot(target)
+'''
+new_tail='''    if changed or (target.resolve()==DB.resolve() and not r2_head("DATA/genesis.db")):
+        _persist_primary_snapshot(target)
+'''
+if old_tail not in src:
+    raise SystemExit("db persist tail anchor changed")
+src=src.replace(old_tail,new_tail,1)
+
 path.write_text(src,encoding="utf-8")
