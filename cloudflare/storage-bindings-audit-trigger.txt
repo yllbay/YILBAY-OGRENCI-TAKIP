@@ -1,1 +1,1 @@
-2026-09-29 audit sanitized container env structure
+2026-09-29 detect R2 env references in live Worker
