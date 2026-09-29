@@ -1,0 +1,49 @@
+name: GENESIS Question Studio Storage Bindings Audit
+
+on:
+  push:
+    branches: [cloudflare-release]
+    paths:
+      - "cloudflare/storage-bindings-audit-trigger.txt"
+
+permissions:
+  contents: read
+
+env:
+  CF_API_BASE: https://api.cloudflare.com/client/v4
+  CF_SCRIPT_NAME: genesis-web-0152
+  CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Read sanitized production bindings and health
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$CF_API_BASE/accounts/$ACCOUNT_ID/workers/scripts/$CF_SCRIPT_NAME/settings" -H "$AUTH" -o /tmp/settings.json
+          echo "BINDINGS="
+          jq -c '[.result.bindings[]? | {name,type,class_name,bucket_name}]' /tmp/settings.json
+
+          npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/container.json
+          jq '{version,image:.configuration.image,health,observability}' /tmp/container.json
+
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          ROOT="$(curl -sS -L --connect-timeout 5 --max-time 15 -o /tmp/root.out -w '%{http_code}' "$URL/" || true)"
+          echo "ROOT_HTTP=$ROOT"
+          printf 'ROOT_BODY='; head -c 800 /tmp/root.out 2>/dev/null || true; echo
+
+          R2P="$(curl -sS --connect-timeout 5 --max-time 15 -o /tmp/r2.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
+          echo "R2_PROBE_HTTP=$R2P"
+          cat /tmp/r2.json 2>/dev/null || true
