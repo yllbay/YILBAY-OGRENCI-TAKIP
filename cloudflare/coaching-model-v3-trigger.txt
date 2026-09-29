@@ -1,1 +1,1 @@
-genesis-startup-phase-immutable-guard-final-2026-09-29
+genesis-deterministic-uvicorn-startup-final-2026-09-29
