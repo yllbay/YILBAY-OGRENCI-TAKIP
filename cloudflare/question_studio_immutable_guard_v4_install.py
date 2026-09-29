@@ -17,7 +17,6 @@ helper_anchor='''_QS_DENY_ACTIONS={
     sqlite3.SQLITE_UPDATE,
     sqlite3.SQLITE_DELETE,
     sqlite3.SQLITE_DROP_TABLE,
-    sqlite3.SQLITE_ALTER_TABLE,
 }
 '''
 helper=helper_anchor+'''
