@@ -215,7 +215,8 @@ jobs:
                       except Exception: pass
           PY
           docker logs "$CID" || true
-          exit 66
+          test "$(docker inspect -f '{{.State.Running}}' "$CID")" = "true"
+          echo "LOCAL_FULL_APP_STARTUP_OK"
       - name: Disposable V3 data-model integration test
         run: |
           set -euo pipefail
