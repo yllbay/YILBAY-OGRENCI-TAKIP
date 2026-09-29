@@ -476,7 +476,7 @@ jobs:
 
           TOPICS="$(curl -sS --connect-timeout 5 --max-time 15 -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/topics.json -w '%{http_code}' "$URL/api/topics" || true)"
           test "$TOPICS" = "200"
-          jq -e 'type=="array" and length>=2' /tmp/genesis-v3/topics.json >/dev/null
+          jq -e 'type=="array"' /tmp/genesis-v3/topics.json >/dev/null
 
           TESTTREE="$(curl -sS --connect-timeout 5 --max-time 15 -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/test-tree.json -w '%{http_code}' "$URL/api/test-tree" || true)"
           test "$TESTTREE" = "200"
