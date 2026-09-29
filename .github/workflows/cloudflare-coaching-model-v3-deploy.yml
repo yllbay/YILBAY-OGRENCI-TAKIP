@@ -124,6 +124,7 @@ jobs:
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v4_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_bbox_fix_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_r2_images_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_shells_retire_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/coaching_model_v3_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_pool_guard_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_hard_lock_install.py
@@ -137,6 +138,7 @@ jobs:
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V4_NO_STARTUP_WRITE' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_BBOX_SAVEFIX_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_R2_IMAGES_V1' "$ROOT/backend/app.py"
+          grep -q 'GENESIS_QUESTION_STUDIO_SHELLS_RETIRED_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_HARD_LOCK_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_HARD_LOCK_V1' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V2' "$ROOT/backend/app.py"
