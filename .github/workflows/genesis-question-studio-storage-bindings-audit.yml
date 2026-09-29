@@ -53,9 +53,11 @@ jobs:
                   if end<0: end=min(len(text),start+5000)
                   snippet=text[start:end]
                   # Only structure / binding names; never print secret values.
-                  for line in snippet.splitlines():
-                      if any(k in line for k in ('GenesisContainer','envVars','R2_','AWS_','defaultPort','sleepAfter')):
-                          print('WORKER_CLASS:',line[:500])
+                  print('WORKER_HAS_ENVVARS=', 'envVars' in text)
+                  for key in ('R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ACCOUNT_ID','R2_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY'):
+                      print('WORKER_HAS_'+key+'=', key in text)
+                  compact=' '.join(snippet.split())
+                  print('WORKER_CLASS_SNIPPET=',compact[:3000])
                   break
           PY
           echo "BINDINGS="
