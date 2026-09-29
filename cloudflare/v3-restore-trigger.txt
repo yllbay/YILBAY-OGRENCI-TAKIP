@@ -1,1 +1,1 @@
-2026-09-29 restore stable V3 before immutable Question Studio lock rollout
+2026-09-29 trace stable V3 recovery before immutable Question Studio lock
