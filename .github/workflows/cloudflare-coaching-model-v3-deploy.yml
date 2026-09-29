@@ -122,6 +122,10 @@ jobs:
           done
           echo "=== storage strings in startup ==="
           grep -En 'R2|r2|FUSE|fuse|tigris|s3fs|rclone|mount|DATA' "$ROOT/app/start-container.sh" || true
+          echo "=== db persistence section ==="
+          grep -n -A55 -B12 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/app/APP/backend/db.py" || true
+          echo "=== r2 object store ==="
+          sed -n '1,220p' "$ROOT/app/APP/backend/r2_object_store.py" || true
           echo "::error::Intentional diagnostic stop before patch/build/deploy"
           exit 42
 
