@@ -1,1 +1,1 @@
-2026-09-29 read-only Question Studio storage bindings audit
+2026-09-29 audit container R2 env forwarding
