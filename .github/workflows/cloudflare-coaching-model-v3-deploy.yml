@@ -192,14 +192,11 @@ jobs:
       - name: Local full-app root diagnostic
         run: |
           set -euo pipefail
+          mkdir -p /tmp/genesis-v3/local-r2/DATA
           CID="$(docker run -d \
             -e GENESIS_SKIP_R2_SNAPSHOT=1 \
-            -e R2_ACCOUNT_ID=local-diagnostic \
-            -e R2_BUCKET_NAME=local-diagnostic \
-            -e R2_ACCESS_KEY_ID=local-diagnostic \
-            -e R2_SECRET_ACCESS_KEY=local-diagnostic \
-            -e AWS_ACCESS_KEY_ID=local-diagnostic \
-            -e AWS_SECRET_ACCESS_KEY=local-diagnostic \
+            -e GENESIS_R2_MOUNT=/mnt/r2 \
+            -v /tmp/genesis-v3/local-r2:/mnt/r2 \
             "$NEW_IMAGE")"
           trap 'docker logs "$CID" || true; docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           sleep 5
