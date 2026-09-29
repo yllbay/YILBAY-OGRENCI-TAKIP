@@ -98,6 +98,12 @@ jobs:
             npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/info.json || true
             IMAGE="$(jq -r '.configuration.image // empty' /tmp/info.json 2>/dev/null || true)"
             CODE="$(curl -sS -L --max-time 12 -c /tmp/cookies -b /tmp/cookies -o /tmp/root.html -w '%{http_code}' "$URL/" || true)"
+            echo "RECOVERY_CHECK=$i HTTP=$CODE IMAGE=$IMAGE"
+            if [ "$CODE" != "200" ]; then
+              printf 'ROOT_BODY='
+              head -c 600 /tmp/root.html 2>/dev/null || true
+              echo
+            fi
             if [ "$IMAGE" = "$STABLE_V3_IMAGE" ] && [ "$CODE" = "200" ] && grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' /tmp/root.html; then
               READY=1
               break
