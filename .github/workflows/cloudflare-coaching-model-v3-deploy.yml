@@ -75,6 +75,7 @@ jobs:
               raise SystemExit(f'Expected one Worker module, found {len(candidates)}')
           Path('cloudflare/package-runtime/index.js').write_bytes(candidates[0])
           PY
+          python3 cloudflare/r2_question_pool_readonly_probe.py
           node --check cloudflare/package-runtime/index.js
           grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
           grep -q 'GENESIS_COACHING_DASHBOARD_EDGE_V4' cloudflare/package-runtime/index.js
@@ -120,22 +121,26 @@ jobs:
           cp cloudflare/coaching_model_v3.py "$ROOT/backend/coaching_model_v3.py"
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v2_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v3_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v4_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_bbox_fix_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_r2_images_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/coaching_model_v3_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_pool_guard_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_hard_lock_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_immutable_guard_v2_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_immutable_guard_v3_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_delete_upgrade.py
           python3 -m py_compile "$ROOT/backend/r2_object_store.py" "$ROOT/backend/db.py" "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V3_BOOTSTRAP' "$ROOT/backend/db.py"
+          grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V4_NO_STARTUP_WRITE' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_BBOX_SAVEFIX_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_R2_IMAGES_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_HARD_LOCK_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_HARD_LOCK_V1' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V2' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V2' "$ROOT/backend/db.py"
+          grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V3' "$ROOT/backend/app.py"
           grep -q '/api/internal/question-studio-fingerprint' "$ROOT/backend/app.py"
           grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' "$ROOT/backend/app.py"
           grep -q 'install_coaching_model_v3(app)' "$ROOT/backend/app.py"
@@ -159,6 +164,7 @@ jobs:
           grep -q 'GENESIS_QUESTION_POOL_GUARD_V1' /tmp/genesis-v3/flat-app.py
           grep -q 'GENESIS_QUESTION_STUDIO_HARD_LOCK_V1' /tmp/genesis-v3/flat-app.py
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V2' /tmp/genesis-v3/flat-app.py
+          grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V3' /tmp/genesis-v3/flat-app.py
           grep -q 'GENESIS_STARTUP_STORAGE_MAINTENANCE' /tmp/genesis-v3/flat-app.py
           grep -q 'VERSION = "0.16.0"' /tmp/genesis-v3/flat-model.py
           docker rm -f "$CID" >/dev/null
@@ -267,6 +273,33 @@ jobs:
           PY
           docker run --rm -e GENESIS_SKIP_R2_SNAPSHOT=1 --entrypoint python -v /tmp/genesis-v3/question_pool_guard_test.py:/tmp/question_pool_guard_test.py:ro "$NEW_IMAGE" /tmp/question_pool_guard_test.py
 
+      - name: Activate read-only integrity probe on current image
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('cloudflare/package-runtime/wrangler.jsonc')
+          cfg=json.loads(p.read_text(encoding='utf-8'))
+          cfg['containers'][0]['image']=os.environ['PREVIOUS_IMAGE']
+          p.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          grep -q 'GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3' cloudflare/package-runtime/index.js
+          (cd cloudflare/package-runtime && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=none)
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          for i in 1 2 3 4 5 6; do
+            CODE="$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/genesis-v3/r2-probe-ready.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
+            if [ "$CODE" = "200" ] && jq -e '.marker=="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3" and (.question_assets_fingerprint.sha256|type=="string")' /tmp/genesis-v3/r2-probe-ready.json >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 3
+          done
+          cat /tmp/genesis-v3/r2-probe-ready.json 2>/dev/null || true
+          exit 61
+
       - name: Capture production Question Studio baseline
         run: |
           set -euo pipefail
@@ -300,6 +333,13 @@ jobs:
           jq -S . /tmp/genesis-v3/qs-tests-before.json > /tmp/genesis-v3/qs-tests-before.canon
           sha256sum /tmp/genesis-v3/qs-topics-before.canon | awk '{print $1}' > /tmp/genesis-v3/qs-topics-before.sha
           sha256sum /tmp/genesis-v3/qs-tests-before.canon | awk '{print $1}' > /tmp/genesis-v3/qs-tests-before.sha
+
+          R2_CODE="$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/genesis-v3/qs-r2-before.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
+          test "$R2_CODE" = "200"
+          jq -e '.marker=="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3" and (.question_assets_fingerprint.sha256|type=="string") and (.question_assets_fingerprint.count|type=="number")' /tmp/genesis-v3/qs-r2-before.json >/dev/null
+          jq -r '.question_assets_fingerprint.sha256' /tmp/genesis-v3/qs-r2-before.json > /tmp/genesis-v3/qs-r2-before.sha
+          jq -r '.question_assets_fingerprint.count' /tmp/genesis-v3/qs-r2-before.json > /tmp/genesis-v3/qs-r2-before.count
+          echo "QS_R2_ASSET_BASELINE=$(cat /tmp/genesis-v3/qs-r2-before.sha) COUNT=$(cat /tmp/genesis-v3/qs-r2-before.count)"
 
           FP_CODE="$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/genesis-v3/qs-fingerprint-before.json -w '%{http_code}' "$URL/api/internal/question-studio-fingerprint" || true)"
           if [ "$FP_CODE" = "200" ]; then
@@ -503,6 +543,10 @@ jobs:
           R2P="$(curl -sS --connect-timeout 5 --max-time 15 -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/r2.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
           test "$R2P" = "200"
           echo "R2_PROBE=$(cat /tmp/genesis-v3/r2.json)"
+          jq -e '.marker=="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3" and (.question_assets_fingerprint.sha256|type=="string")' /tmp/genesis-v3/r2.json >/dev/null
+          test "$(jq -r '.question_assets_fingerprint.sha256' /tmp/genesis-v3/r2.json)" = "$(cat /tmp/genesis-v3/qs-r2-before.sha)"
+          test "$(jq -r '.question_assets_fingerprint.count' /tmp/genesis-v3/r2.json)" = "$(cat /tmp/genesis-v3/qs-r2-before.count)"
+          echo "GENESIS_QUESTION_STUDIO_R2_ASSETS_IMMUTABLE_OK"
           jq -e '.genesis_db.exists==true and (.genesis_db.size|tonumber)>0' /tmp/genesis-v3/r2.json >/dev/null
           echo "QUESTION_STUDIO_R2=$(jq -c '{genesis_db,prefix_counts,total_objects_under_DATA}' /tmp/genesis-v3/r2.json)"
 
