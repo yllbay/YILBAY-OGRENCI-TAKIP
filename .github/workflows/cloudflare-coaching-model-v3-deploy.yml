@@ -288,6 +288,67 @@ jobs:
             echo "::warning::First hard-lock rollout: strict DB fingerprint endpoint not yet present; topics/test-tree fallback baseline captured."
           fi
 
+      - name: Disposable Question Studio hard-lock test
+        run: |
+          set -euo pipefail
+          cat > /tmp/genesis-v3/question_studio_hard_lock_test.py <<'PY'
+          import sqlite3, tempfile, sys
+          from pathlib import Path
+          sys.path.insert(0,'/app/APP/backend')
+          import db
+
+          root=Path(tempfile.mkdtemp(prefix='genesis-hard-lock-'))
+          path=root/'genesis.db'
+          raw=sqlite3.connect(path)
+          raw.executescript("""
+          CREATE TABLE questions(id INTEGER PRIMARY KEY, body TEXT);
+          CREATE TABLE topics(id INTEGER PRIMARY KEY, name TEXT);
+          CREATE TABLE exams(id INTEGER PRIMARY KEY, name TEXT);
+          CREATE TABLE coaching_students(id INTEGER PRIMARY KEY, name TEXT);
+          INSERT INTO questions(id,body) VALUES(1,'protected');
+          INSERT INTO topics(id,name) VALUES(1,'protected-topic');
+          INSERT INTO exams(id,name) VALUES(1,'protected-exam');
+          """)
+          raw.commit()
+          raw.close()
+
+          tok=db.CURRENT_DB.set(path)
+          try:
+              blocked=0
+              for sql in (
+                  "UPDATE questions SET body='mutated' WHERE id=1",
+                  "DELETE FROM topics WHERE id=1",
+                  "INSERT INTO exams(id,name) VALUES(2,'mutated-exam')",
+              ):
+                  try:
+                      with db.connect() as con:
+                          con.execute(sql)
+                  except sqlite3.DatabaseError:
+                      blocked+=1
+              assert blocked==3, f'expected 3 protected writes blocked, got {blocked}'
+
+              with db.connect() as con:
+                  con.execute("INSERT INTO coaching_students(id,name) VALUES(1,'allowed-background')")
+              with sqlite3.connect(path) as con:
+                  assert con.execute("SELECT body FROM questions WHERE id=1").fetchone()[0]=='protected'
+                  assert con.execute("SELECT count(*) FROM topics").fetchone()[0]==1
+                  assert con.execute("SELECT count(*) FROM exams").fetchone()[0]==1
+                  assert con.execute("SELECT count(*) FROM coaching_students").fetchone()[0]==1
+
+              user_tok=db.QUESTION_STUDIO_USER_WRITE.set(True)
+              try:
+                  with db.connect() as con:
+                      con.execute("UPDATE questions SET body='user-change' WHERE id=1")
+              finally:
+                  db.QUESTION_STUDIO_USER_WRITE.reset(user_tok)
+              with sqlite3.connect(path) as con:
+                  assert con.execute("SELECT body FROM questions WHERE id=1").fetchone()[0]=='user-change'
+              print('QUESTION_STUDIO_HARD_LOCK_DISPOSABLE_OK')
+          finally:
+              db.CURRENT_DB.reset(tok)
+          PY
+          docker run --rm -e GENESIS_SKIP_R2_SNAPSHOT=1 --entrypoint python -v /tmp/genesis-v3/question_studio_hard_lock_test.py:/tmp/question_studio_hard_lock_test.py:ro "$NEW_IMAGE" /tmp/question_studio_hard_lock_test.py
+
       - name: Configure Wrangler to use the pushed registry image
         run: |
           set -euo pipefail
