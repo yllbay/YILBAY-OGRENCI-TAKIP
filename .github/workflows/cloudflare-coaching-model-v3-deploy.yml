@@ -154,8 +154,16 @@ jobs:
           grep -q 'VERSION = "0.16.0"' /tmp/genesis-v3/flat-model.py
           docker rm -f "$CID" >/dev/null
           trap - EXIT
-          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null
-          docker push "$NEW_IMAGE" >/tmp/genesis-v3/push.txt
+          PUSH_OK=0
+          for attempt in 1 2 3 4 5; do
+            if printf '%s' "$REG_PASS" | docker login registry.cloudflare.com -u "$REG_USER" --password-stdin >/dev/null 2>&1 && docker push "$NEW_IMAGE" >/tmp/genesis-v3/push.txt 2>&1; then
+              PUSH_OK=1
+              break
+            fi
+            echo "::warning::Registry push attempt $attempt failed; retrying."
+            sleep $((attempt * 4))
+          done
+          test "$PUSH_OK" = "1" || { cat /tmp/genesis-v3/push.txt || true; exit 41; }
           echo "NEW_IMAGE=$NEW_IMAGE" >> "$GITHUB_ENV"
 
       - name: Disposable V3 data-model integration test
