@@ -129,6 +129,7 @@ jobs:
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_hard_lock_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_immutable_guard_v2_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_immutable_guard_v3_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_immutable_guard_v4_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_delete_upgrade.py
           python3 -m py_compile "$ROOT/backend/r2_object_store.py" "$ROOT/backend/db.py" "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/backend/db.py"
@@ -141,6 +142,7 @@ jobs:
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V2' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V2' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V3' "$ROOT/backend/app.py"
+          grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V4_AUTHORIZE_ALL_CONNECTIONS' "$ROOT/backend/db.py"
           grep -q '/api/internal/question-studio-fingerprint' "$ROOT/backend/app.py"
           grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' "$ROOT/backend/app.py"
           grep -q 'install_coaching_model_v3(app)' "$ROOT/backend/app.py"
