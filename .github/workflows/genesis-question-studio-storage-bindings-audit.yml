@@ -61,6 +61,17 @@ jobs:
                       print('WORKER_HAS_'+key+'=', key in text)
                   compact=' '.join(snippet.split())
                   print('WORKER_CONTAINER_SNIPPET=',compact[:6000])
+                  for needle in ('container.fetch','startAndWaitForPorts','container.start','containerFetch'):
+                      search_from=0
+                      hit=0
+                      while hit<6:
+                          pos=text.find(needle,search_from)
+                          if pos<0:
+                              break
+                          context=' '.join(text[max(0,pos-700):min(len(text),pos+1400)].split())
+                          print('WORKER_LIFECYCLE_CONTEXT',needle,hit,'=',context)
+                          search_from=pos+len(needle)
+                          hit+=1
                   break
           PY
           echo "BINDINGS="
