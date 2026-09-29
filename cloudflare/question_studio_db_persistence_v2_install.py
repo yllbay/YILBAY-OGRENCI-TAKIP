@@ -20,7 +20,7 @@ src=src.replace(
 )
 src=src.replace(
     'DB=DATA/"genesis.db"',
-    'DB=DATA/"genesis.db"\nDATA.mkdir(parents=True,exist_ok=True)\nif os.environ.get("R2_ACCOUNT_ID") and not DB.exists():\n    restore_primary_db(DB)',
+    'DB=DATA/"genesis.db"\nDATA.mkdir(parents=True,exist_ok=True)\nif not DB.exists():\n    restore_primary_db(DB)',
     1,
 )
 
@@ -28,8 +28,6 @@ anchor='CURRENT_INSTITUTION_ID=contextvars.ContextVar("genesis_current_instituti
 helper=anchor+'''
 
 def _persist_primary_snapshot(target:Path):
-    if not os.environ.get("R2_ACCOUNT_ID"):
-        return False
     if target.resolve()!=DB.resolve() or not target.exists():
         return False
     fd,name=tempfile.mkstemp(prefix="genesis-snap-",suffix=".db")
