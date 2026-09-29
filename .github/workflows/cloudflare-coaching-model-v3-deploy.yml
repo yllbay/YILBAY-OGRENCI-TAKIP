@@ -110,6 +110,21 @@ jobs:
           test -f "$ROOT/app/APP/backend/curriculum_step1.py"
           test -f "$ROOT/app/start-container.sh"
 
+      - name: Diagnose live storage runtime
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/genesis-v3/bundle/rootfs
+          echo "=== /app/start-container.sh ==="
+          sed -n '1,260p' "$ROOT/app/start-container.sh"
+          echo "=== storage-related binaries ==="
+          for b in tigrisfs s3fs rclone mount fusermount fusermount3; do
+            if [ -e "$ROOT/usr/bin/$b" ] || [ -e "$ROOT/usr/local/bin/$b" ] || [ -e "$ROOT/bin/$b" ]; then echo "FOUND_BINARY=$b"; fi
+          done
+          echo "=== storage strings in startup ==="
+          grep -En 'R2|r2|FUSE|fuse|tigris|s3fs|rclone|mount|DATA' "$ROOT/app/start-container.sh" || true
+          echo "::error::Intentional diagnostic stop before patch/build/deploy"
+          exit 42
+
       - name: Patch and compile canonical V3 model
         run: |
           set -euo pipefail
