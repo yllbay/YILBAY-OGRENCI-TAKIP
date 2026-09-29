@@ -154,6 +154,25 @@ jobs:
           grep -q '/api/coaching/v3/students/{sid}/homework/auto' "$ROOT/backend/coaching_model_v3.py"
           grep -q 'coach3_homework_assignments' "$ROOT/backend/coaching_model_v3.py"
 
+      - name: Diagnose legacy Question Studio writes
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/genesis-v3/bundle/rootfs/app/APP
+          python3 - <<'PY'
+          from pathlib import Path
+          for fn in ('backend/app.py','backend/db.py'):
+              p=Path('/tmp/genesis-v3/bundle/rootfs/app/APP')/fn
+              lines=p.read_text(encoding='utf-8').splitlines()
+              print('===',fn,'===')
+              needles=('insert into topics','update topics','delete from topics','insert into exams','update exams','delete from exams','insert into tests','update tests','delete from tests','insert into test_classes','update test_classes','delete from test_classes','insert into questions','update questions','delete from questions')
+              for i,line in enumerate(lines):
+                  if any(k in line.lower() for k in needles):
+                      lo=max(0,i-4); hi=min(len(lines),i+5)
+                      for j in range(lo,hi): print(str(j+1)+': '+lines[j])
+                      print('---')
+          raise SystemExit(66)
+          PY
+
       - name: Build Cloudflare-safe app-layer image
         run: |
           set -euo pipefail
