@@ -75,6 +75,15 @@ jobs:
           echo "ROOT_HTTP=$ROOT"
           printf 'ROOT_BODY='; head -c 800 /tmp/root.out 2>/dev/null || true; echo
 
+          for ep in /api/topics /api/test-tree /api/questions /api/crops /api/sources; do
+            safe="$(printf '%s' "$ep" | tr '/?' '__')"
+            code="$(curl -sS --connect-timeout 5 --max-time 20 -o "/tmp/${safe}.json" -w '%{http_code}' "$URL$ep" || true)"
+            echo "QS_ENDPOINT $ep HTTP=$code"
+            if [ "$code" = "200" ]; then
+              jq -c 'if type=="array" then {type:"array",count:length} elif type=="object" then {type:"object",keys:(keys|sort),array_counts:(to_entries|map(select(.value|type=="array")|{key:.key,count:(.value|length)}))} else {type:type} end' "/tmp/${safe}.json" 2>/dev/null || true
+            fi
+          done
+
           R2P="$(curl -sS --connect-timeout 5 --max-time 15 -o /tmp/r2.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
           echo "R2_PROBE_HTTP=$R2P"
           cat /tmp/r2.json 2>/dev/null || true
