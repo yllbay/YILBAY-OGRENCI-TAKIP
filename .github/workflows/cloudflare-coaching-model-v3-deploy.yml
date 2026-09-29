@@ -198,16 +198,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/genesis-v3/local-r2
+          echo "NEW_IMAGE_RUNTIME_CONFIG=$(docker image inspect "$NEW_IMAGE" --format '{{json .Config}}')"
           CID="$(docker run -d \
             -e GENESIS_SKIP_R2_SNAPSHOT=1 \
             -e GENESIS_R2_MOUNT=/app/DATA \
             -v /tmp/genesis-v3/local-r2:/app/DATA \
-            -w /app/APP/backend \
-            --entrypoint python \
-            "$NEW_IMAGE" -m uvicorn app:app --host 0.0.0.0 --port 8000)"
-          trap 'docker logs "$CID" || true; docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+            "$NEW_IMAGE")"
+          trap 'docker logs "$CID" || true; docker inspect "$CID" || true; docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           sleep 5
           docker logs "$CID" || true
+          STATE="$(docker inspect -f '{{.State.Status}}' "$CID")"
+          EXIT_CODE="$(docker inspect -f '{{.State.ExitCode}}' "$CID")"
+          echo "DEFAULT_RUNTIME_STATE=$STATE EXIT_CODE=$EXIT_CODE"
+          test "$STATE" = "running"
           docker exec "$CID" python - <<'PY'
           import urllib.request
           with urllib.request.urlopen('http://127.0.0.1:8000/',timeout=10) as r:
@@ -215,7 +218,6 @@ jobs:
               print('ROOT_DIAG',r.status,body)
               assert r.status==200
           PY
-          test "$(docker inspect -f '{{.State.Running}}' "$CID")" = "true"
           echo "LOCAL_FULL_APP_STARTUP_OK"
       - name: Disposable V3 data-model integration test
         run: |
