@@ -40,7 +40,6 @@ _QS_DENY_ACTIONS={
     sqlite3.SQLITE_UPDATE,
     sqlite3.SQLITE_DELETE,
     sqlite3.SQLITE_DROP_TABLE,
-    sqlite3.SQLITE_ALTER_TABLE,
 }
 '''
     db=db.replace(ctx_anchor,ctx_insert,1)
