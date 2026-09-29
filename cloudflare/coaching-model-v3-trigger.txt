@@ -1,1 +1,1 @@
-question-studio-immutable-lock-retire-legacy-shells-2026-09-29
+question-studio-diagnose-protected-writes-2026-09-29
