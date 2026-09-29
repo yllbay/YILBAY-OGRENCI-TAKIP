@@ -268,8 +268,28 @@ jobs:
           set -euo pipefail
           URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
           mkdir -p /tmp/genesis-v3
-          TOPICS_CODE="$(curl -sS --connect-timeout 5 --max-time 15 -o /tmp/genesis-v3/qs-topics-before.json -w '%{http_code}' "$URL/api/topics" || true)"
-          TESTS_CODE="$(curl -sS --connect-timeout 5 --max-time 15 -o /tmp/genesis-v3/qs-tests-before.json -w '%{http_code}' "$URL/api/test-tree" || true)"
+
+          # Cold-start safe, read-only fetch. Never POST/PUT/PATCH/DELETE here.
+          curl -sS -L --connect-timeout 5 --max-time 20 "$URL/" -o /tmp/genesis-v3/qs-warm.html || true
+
+          fetch_json() {
+            local path="$1"
+            local out="$2"
+            local code=""
+            for i in 1 2 3 4 5 6; do
+              code="$(curl -sS --connect-timeout 5 --max-time 20 -o "$out" -w '%{http_code}' "$URL$path" || true)"
+              if [ "$code" = "200" ]; then
+                printf '%s' "$code"
+                return 0
+              fi
+              sleep 3
+            done
+            printf '%s' "$code"
+            return 1
+          }
+
+          TOPICS_CODE="$(fetch_json /api/topics /tmp/genesis-v3/qs-topics-before.json)"
+          TESTS_CODE="$(fetch_json /api/test-tree /tmp/genesis-v3/qs-tests-before.json)"
           test "$TOPICS_CODE" = "200"
           test "$TESTS_CODE" = "200"
           jq -S . /tmp/genesis-v3/qs-topics-before.json > /tmp/genesis-v3/qs-topics-before.canon
@@ -277,7 +297,7 @@ jobs:
           sha256sum /tmp/genesis-v3/qs-topics-before.canon | awk '{print $1}' > /tmp/genesis-v3/qs-topics-before.sha
           sha256sum /tmp/genesis-v3/qs-tests-before.canon | awk '{print $1}' > /tmp/genesis-v3/qs-tests-before.sha
 
-          FP_CODE="$(curl -sS --connect-timeout 5 --max-time 15 -o /tmp/genesis-v3/qs-fingerprint-before.json -w '%{http_code}' "$URL/api/internal/question-studio-fingerprint" || true)"
+          FP_CODE="$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/genesis-v3/qs-fingerprint-before.json -w '%{http_code}' "$URL/api/internal/question-studio-fingerprint" || true)"
           if [ "$FP_CODE" = "200" ]; then
             jq -e '.marker=="GENESIS_QUESTION_STUDIO_HARD_LOCK_V1" and (.sha256|type=="string")' /tmp/genesis-v3/qs-fingerprint-before.json >/dev/null
             jq -r '.sha256' /tmp/genesis-v3/qs-fingerprint-before.json > /tmp/genesis-v3/qs-fingerprint-before.sha
