@@ -332,6 +332,7 @@ jobs:
           CREATE TABLE raw_crops(id INTEGER PRIMARY KEY, name TEXT);
           CREATE TABLE source_documents(id INTEGER PRIMARY KEY, name TEXT);
           CREATE TABLE coaching_students(id INTEGER PRIMARY KEY, name TEXT);
+          CREATE TABLE coaching_curriculum_topics(id INTEGER PRIMARY KEY, name TEXT);
           INSERT INTO questions(id,body) VALUES(1,'protected');
           INSERT INTO topics(id,name) VALUES(1,'protected-topic');
           INSERT INTO exams(id,name) VALUES(1,'protected-exam');
@@ -362,11 +363,13 @@ jobs:
 
               with db.connect() as con:
                   con.execute("INSERT INTO coaching_students(id,name) VALUES(1,'allowed-background')")
+                  con.execute("INSERT INTO coaching_curriculum_topics(id,name) VALUES(1,'allowed-coaching-topic')")
               with sqlite3.connect(path) as con:
                   assert con.execute("SELECT body FROM questions WHERE id=1").fetchone()[0]=='protected'
                   assert con.execute("SELECT count(*) FROM topics").fetchone()[0]==1
                   assert con.execute("SELECT count(*) FROM exams").fetchone()[0]==1
                   assert con.execute("SELECT count(*) FROM coaching_students").fetchone()[0]==1
+                  assert con.execute("SELECT count(*) FROM coaching_curriculum_topics").fetchone()[0]==1
 
               user_tok=db.QUESTION_STUDIO_USER_WRITE.set(True)
               try:
