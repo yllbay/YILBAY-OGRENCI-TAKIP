@@ -51,17 +51,16 @@ jobs:
                   print('WORKER_HAS_ENVVARS=', 'envVars' in text)
                   for key in ('R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ACCOUNT_ID','R2_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY'):
                       print('WORKER_HAS_'+key+'=', key in text)
-              if 'class GenesisContainer' in text:
-                  start=text.find('class GenesisContainer')
-                  end=text.find('export default',start)
-                  if end<0: end=min(len(text),start+5000)
+              if 'GenesisContainer' in text:
+                  start=max(0,text.find('GenesisContainer')-1200)
+                  end=min(len(text),start+7000)
                   snippet=text[start:end]
                   # Only structure / binding names; never print secret values.
                   print('WORKER_HAS_ENVVARS=', 'envVars' in text)
                   for key in ('R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ACCOUNT_ID','R2_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY'):
                       print('WORKER_HAS_'+key+'=', key in text)
                   compact=' '.join(snippet.split())
-                  print('WORKER_CLASS_SNIPPET=',compact[:3000])
+                  print('WORKER_CONTAINER_SNIPPET=',compact[:6000])
                   break
           PY
           echo "BINDINGS="
