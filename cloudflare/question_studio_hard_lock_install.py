@@ -46,26 +46,34 @@ _QS_DENY_ACTIONS={
     db=db.replace(ctx_anchor,ctx_insert,1)
 
     row_anchor='con.row_factory=sqlite3.Row'
-    if row_anchor not in db:
+    db_lines=db.splitlines()
+    row_idx=None
+    for i,line in enumerate(db_lines):
+        if row_anchor in line:
+            row_idx=i
+            break
+    if row_idx is None:
         raise SystemExit("db connection anchor changed; refusing unsafe hard-lock patch")
-    auth_insert=row_anchor+'''
-    # Protect only tables that already exist. This permits first-time schema creation
-    # while making existing Question Studio content immutable outside user requests.
-    _qs_existing={
-        str(r[0]).lower()
-        for r in con.execute("select name from sqlite_master where type='table'").fetchall()
-    }
-    _qs_protected={n for n in _qs_existing if _question_studio_protected_table(n)}
-    def _qs_authorizer(action,arg1,arg2,db_name,trigger_name):
-        if QUESTION_STUDIO_USER_WRITE.get():
-            return sqlite3.SQLITE_OK
-        table=str(arg1 or "").lower()
-        if action in _QS_DENY_ACTIONS and table in _qs_protected:
-            return sqlite3.SQLITE_DENY
-        return sqlite3.SQLITE_OK
-    con.set_authorizer(_qs_authorizer)
-'''
-    db=db.replace(row_anchor,auth_insert,1)
+    indent=db_lines[row_idx][:len(db_lines[row_idx])-len(db_lines[row_idx].lstrip())]
+    block=[
+        "# Protect only tables that already exist. This permits first-time schema creation",
+        "# while making existing Question Studio content immutable outside user requests.",
+        "_qs_existing={",
+        "    str(r[0]).lower()",
+        "    for r in con.execute(\"select name from sqlite_master where type='table'\").fetchall()",
+        "}",
+        "_qs_protected={n for n in _qs_existing if _question_studio_protected_table(n)}",
+        "def _qs_authorizer(action,arg1,arg2,db_name,trigger_name):",
+        "    if QUESTION_STUDIO_USER_WRITE.get():",
+        "        return sqlite3.SQLITE_OK",
+        "    table=str(arg1 or \"\").lower()",
+        "    if action in _QS_DENY_ACTIONS and table in _qs_protected:",
+        "        return sqlite3.SQLITE_DENY",
+        "    return sqlite3.SQLITE_OK",
+        "con.set_authorizer(_qs_authorizer)",
+    ]
+    db_lines[row_idx+1:row_idx+1]=[indent+x for x in block]
+    db="\n".join(db_lines)+"\n"
     db_path.write_text(db,encoding="utf-8")
 
 # ---- HTTP layer: explicit user mutations get a scoped write token.
