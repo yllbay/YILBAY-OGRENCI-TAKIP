@@ -3,7 +3,7 @@ from pathlib import Path
 p=Path("cloudflare/package-runtime/index.js")
 src=p.read_text(encoding="utf-8")
 MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3"
-OLD_MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3"
+OLD_MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2"
 changed=False
 
 if OLD_MARK in src:
@@ -11,7 +11,7 @@ if OLD_MARK in src:
     pos=src.find(OLD_MARK)
     cpos=src.find(old_cond,pos)
     if cpos<0:
-        raise SystemExit("V1 R2 probe marker found but route shape changed")
+        raise SystemExit("V2 R2 probe marker found but route shape changed")
     src=src[:cpos]+old_cond.replace("if (","if (false && ",1)+src[cpos+len(old_cond):]
     src=src.replace(OLD_MARK,"GENESIS_R2_QUESTION_POOL_READONLY_PROBE_RETIRED_V2",1)
     changed=True
