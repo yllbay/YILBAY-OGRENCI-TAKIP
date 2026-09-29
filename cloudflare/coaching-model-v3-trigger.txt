@@ -1,1 +1,1 @@
-question-studio-local-root-traceback-2026-09-29
+question-studio-finalize-schema-safe-immutable-lock-2026-09-29
