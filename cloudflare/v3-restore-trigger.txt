@@ -1,1 +1,1 @@
-2026-09-29 trace stable V3 recovery before immutable Question Studio lock
+restore-stable-v3-before-final-r2-mount-deploy-2026-09-29
