@@ -72,20 +72,25 @@ _QS_DENY_ACTIONS={
 if MARK not in app:
     # Add the context variable to the existing db import.
     import_anchor='from db import init_db, connect, log_event, audit, ROOT, DATA, DB, SCHEMA_VERSION, format_folder_name, CURRENT_DB, CURRENT_INSTITUTION_ID'
-    if import_anchor in app:
-        app=app.replace(import_anchor,import_anchor+', QUESTION_STUDIO_USER_WRITE',1)
-    else:
-        # Some production images may already have a wider/narrower import. Add a separate safe import.
-        app='from db import QUESTION_STUDIO_USER_WRITE\n'+app
+    if import_anchor not in app:
+        raise SystemExit("db import anchor changed; refusing unsafe hard-lock patch")
+    app=app.replace(import_anchor,import_anchor+', QUESTION_STUDIO_USER_WRITE',1)
 
-    # Find the FastAPI construction line without assuming exact whitespace/arguments.
+    # Find the complete FastAPI construction expression. Never inject into the middle
+    # of a multiline constructor: if structure is unexpected, fail the build.
     lines=app.splitlines()
-    idx=None
+    start=None
+    end=None
+    balance=0
     for i,line in enumerate(lines):
-        if "FastAPI(" in line and "=" in line and not line.lstrip().startswith("#"):
-            idx=i
-            break
-    if idx is None:
+        if start is None and "FastAPI(" in line and "=" in line and not line.lstrip().startswith("#"):
+            start=i
+        if start is not None:
+            balance += line.count("(")-line.count(")")
+            if balance<=0:
+                end=i
+                break
+    if start is None or end is None:
         raise SystemExit("FastAPI app construction anchor changed; refusing unsafe hard-lock patch")
 
     middleware=r'''
@@ -137,7 +142,7 @@ def genesis_question_studio_fingerprint():
     # Read-only. Used by CI to prove deploy/restart did not alter folders/questions/exams.
     return _genesis_qs_fingerprint_payload()
 '''
-    lines.insert(idx+1,middleware)
+    lines.insert(end+1,middleware)
     app="\n".join(lines)+"\n"
     app_path.write_text(app,encoding="utf-8")
 
