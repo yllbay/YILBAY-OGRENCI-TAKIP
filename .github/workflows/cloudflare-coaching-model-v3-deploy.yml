@@ -196,6 +196,8 @@ jobs:
             -e R2_BUCKET_NAME=local-diagnostic \
             -e R2_ACCESS_KEY_ID=local-diagnostic \
             -e R2_SECRET_ACCESS_KEY=local-diagnostic \
+            -e AWS_ACCESS_KEY_ID=local-diagnostic \
+            -e AWS_SECRET_ACCESS_KEY=local-diagnostic \
             "$NEW_IMAGE")"
           trap 'docker logs "$CID" || true; docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           sleep 5
