@@ -14,6 +14,12 @@ if "GENESIS_QUESTION_STUDIO_DB_PERSIST_V3_BOOTSTRAP" not in src:
 
 # Startup/restart/deploy may restore the authoritative R2 DB, but must never
 # create or rewrite the primary snapshot merely because the container started.
+# Disposable tests explicitly opt out of all R2 access.
+src=src.replace(
+    'if not DB.exists():\n    restore_primary_db(DB)',
+    'if os.environ.get("GENESIS_SKIP_R2_SNAPSHOT")!="1" and not DB.exists():\n    restore_primary_db(DB)',
+    1,
+)
 src=src.replace("\n_bootstrap_primary_snapshot()\n","\n# V4: startup snapshot creation disabled; restore remains read-only.\n",1)
 
 old='''    elif os.environ.get("GENESIS_SKIP_R2_SNAPSHOT")!="1" and target.resolve()==DB.resolve() and not r2_head("DATA/genesis.db"):
