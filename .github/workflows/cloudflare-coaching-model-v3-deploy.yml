@@ -190,7 +190,13 @@ jobs:
       - name: Local full-app root diagnostic
         run: |
           set -euo pipefail
-          CID="$(docker run -d -e GENESIS_SKIP_R2_SNAPSHOT=1 "$NEW_IMAGE")"
+          CID="$(docker run -d \
+            -e GENESIS_SKIP_R2_SNAPSHOT=1 \
+            -e R2_ACCOUNT_ID=local-diagnostic \
+            -e R2_BUCKET_NAME=local-diagnostic \
+            -e R2_ACCESS_KEY_ID=local-diagnostic \
+            -e R2_SECRET_ACCESS_KEY=local-diagnostic \
+            "$NEW_IMAGE")"
           trap 'docker logs "$CID" || true; docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
           sleep 5
           docker ps -a --filter "id=$CID"
