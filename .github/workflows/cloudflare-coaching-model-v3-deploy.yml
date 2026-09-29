@@ -134,7 +134,9 @@ jobs:
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v5_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v6_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_delete_upgrade.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/runtime_root_trace_install.py
           python3 -m py_compile "$ROOT/backend/r2_object_store.py" "$ROOT/backend/db.py" "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
+          grep -q 'GENESIS_RUNTIME_ROOT_TRACE_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V3_BOOTSTRAP' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V4_NO_STARTUP_WRITE' "$ROOT/backend/db.py"
@@ -514,7 +516,8 @@ jobs:
           URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
           OK=0
           for i in $(seq 1 20); do
-            ROOT="$(curl -sS -L --connect-timeout 5 --max-time 15 -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/root.html -w '%{http_code}' "$URL/" || true)"
+            ROOT="$(curl -sS -L --connect-timeout 5 --max-time 15 -H 'X-Genesis-Runtime-Diagnostic: root-v1' -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/root.html -w '%{http_code}' "$URL/" || true)"
+            if [ "$ROOT" = "590" ]; then echo "ROOT_RUNTIME_TRACE=$(cat /tmp/genesis-v3/root.html)"; exit 69; fi
             if [ "$ROOT" = "200" ]; then OK=1; break; fi
             sleep 4
           done
@@ -603,6 +606,8 @@ jobs:
           p=Path('cloudflare/package-runtime/wrangler.jsonc')
           cfg=json.loads(p.read_text(encoding='utf-8'))
           cfg['containers'][0]['image']=os.environ['PREVIOUS_IMAGE']
+          current=int(cfg['containers'][0].get('rollout_active_grace_period') or 0)
+          cfg['containers'][0]['rollout_active_grace_period']=1 if current!=1 else 2
           p.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           PY
           (cd cloudflare/package-runtime && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate)
