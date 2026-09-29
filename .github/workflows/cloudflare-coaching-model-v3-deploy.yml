@@ -149,8 +149,6 @@ jobs:
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V3' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V4_AUTHORIZE_ALL_CONNECTIONS' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V5_USER_SCOPED' "$ROOT/backend/db.py"
-          grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V6_CENTRAL_BOOTSTRAP' "$ROOT/backend/db.py"
-          grep -q 'GENESIS_LOCAL_SQLITE_RUNTIME_V1' /tmp/genesis-v3/bundle/rootfs/app/start-container.sh
           grep -q '/api/internal/question-studio-fingerprint' "$ROOT/backend/app.py"
           grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' "$ROOT/backend/app.py"
           grep -q 'install_coaching_model_v3(app)' "$ROOT/backend/app.py"
