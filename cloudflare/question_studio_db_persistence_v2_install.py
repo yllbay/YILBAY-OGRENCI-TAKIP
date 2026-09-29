@@ -6,6 +6,30 @@ path=root/"backend"/"db.py"
 src=path.read_text(encoding="utf-8")
 mark="GENESIS_QUESTION_STUDIO_DB_PERSIST_V2"
 if mark in src:
+    # Upgrade already-patched production images from the legacy S3-env-gated
+    # implementation to the mounted-R2 implementation in place.
+    changed=False
+    legacy_restore='if os.environ.get("R2_ACCOUNT_ID") and not DB.exists():\n    restore_primary_db(DB)'
+    mounted_restore='if not DB.exists():\n    restore_primary_db(DB)'
+    if legacy_restore in src:
+        src=src.replace(legacy_restore,mounted_restore,1)
+        changed=True
+    legacy_persist='''def _persist_primary_snapshot(target:Path):
+    if not os.environ.get("R2_ACCOUNT_ID"):
+        return False
+    if target.resolve()!=DB.resolve() or not target.exists():
+        return False
+'''
+    mounted_persist='''def _persist_primary_snapshot(target:Path):
+    if target.resolve()!=DB.resolve() or not target.exists():
+        return False
+'''
+    if legacy_persist in src:
+        src=src.replace(legacy_persist,mounted_persist,1)
+        changed=True
+    if changed:
+        path.write_text(src,encoding="utf-8")
+        print("GENESIS_QUESTION_STUDIO_DB_PERSIST_V2 upgraded to mounted R2")
     raise SystemExit(0)
 
 src=src.replace(
