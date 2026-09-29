@@ -110,25 +110,6 @@ jobs:
           test -f "$ROOT/app/APP/backend/curriculum_step1.py"
           test -f "$ROOT/app/start-container.sh"
 
-      - name: Diagnose live storage runtime
-        run: |
-          set -euo pipefail
-          ROOT=/tmp/genesis-v3/bundle/rootfs
-          echo "=== /app/start-container.sh ==="
-          sed -n '1,260p' "$ROOT/app/start-container.sh"
-          echo "=== storage-related binaries ==="
-          for b in tigrisfs s3fs rclone mount fusermount fusermount3; do
-            if [ -e "$ROOT/usr/bin/$b" ] || [ -e "$ROOT/usr/local/bin/$b" ] || [ -e "$ROOT/bin/$b" ]; then echo "FOUND_BINARY=$b"; fi
-          done
-          echo "=== storage strings in startup ==="
-          grep -En 'R2|r2|FUSE|fuse|tigris|s3fs|rclone|mount|DATA' "$ROOT/app/start-container.sh" || true
-          echo "=== db persistence section ==="
-          grep -n -A55 -B12 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/app/APP/backend/db.py" || true
-          echo "=== r2 object store ==="
-          sed -n '1,220p' "$ROOT/app/APP/backend/r2_object_store.py" || true
-          echo "::error::Intentional diagnostic stop before patch/build/deploy"
-          exit 42
-
       - name: Patch and compile canonical V3 model
         run: |
           set -euo pipefail
@@ -138,6 +119,7 @@ jobs:
           cp cloudflare/r2_object_store.py "$ROOT/backend/r2_object_store.py"
           cp cloudflare/coaching_model_v3.py "$ROOT/backend/coaching_model_v3.py"
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v2_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v3_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_bbox_fix_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_r2_images_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_shells_install.py
@@ -146,6 +128,7 @@ jobs:
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_delete_upgrade.py
           python3 -m py_compile "$ROOT/backend/r2_object_store.py" "$ROOT/backend/db.py" "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/backend/db.py"
+          grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V3_BOOTSTRAP' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_BBOX_SAVEFIX_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_R2_IMAGES_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_SHELLS_V1' "$ROOT/backend/app.py"
@@ -232,7 +215,7 @@ jobs:
           finally:
               db.CURRENT_DB.reset(tok)
           PY
-          docker run --rm --entrypoint python -v /tmp/genesis-v3/model_test.py:/tmp/model_test.py:ro "$NEW_IMAGE" /tmp/model_test.py
+          docker run --rm -e GENESIS_SKIP_R2_SNAPSHOT=1 --entrypoint python -v /tmp/genesis-v3/model_test.py:/tmp/model_test.py:ro "$NEW_IMAGE" /tmp/model_test.py
 
       - name: Disposable question-pool deletion durability test
         run: |
@@ -275,7 +258,7 @@ jobs:
           assert not tomb.exists(), 'tombstone must clear only after R2 and Drive deletion finish'
           print('QUESTION_POOL_GUARD_DISPOSABLE_OK')
           PY
-          docker run --rm --entrypoint python -v /tmp/genesis-v3/question_pool_guard_test.py:/tmp/question_pool_guard_test.py:ro "$NEW_IMAGE" /tmp/question_pool_guard_test.py
+          docker run --rm -e GENESIS_SKIP_R2_SNAPSHOT=1 --entrypoint python -v /tmp/genesis-v3/question_pool_guard_test.py:/tmp/question_pool_guard_test.py:ro "$NEW_IMAGE" /tmp/question_pool_guard_test.py
 
       - name: Configure Wrangler to use the pushed registry image
         run: |
@@ -407,3 +390,17 @@ jobs:
           p.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           PY
           (cd cloudflare/package-runtime && npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate)
+          ROLLBACK_OK=0
+          for i in $(seq 1 60); do
+            npx --yes wrangler@4 containers info "$CF_CONTAINER_APP_ID" > /tmp/genesis-v3/container-rollback.json
+            IMG="$(jq -r '.configuration.image // empty' /tmp/genesis-v3/container-rollback.json)"
+            F="$(jq -r '.health.instances.failed // 0' /tmp/genesis-v3/container-rollback.json)"
+            E="$(jq -r '.health.errors|length' /tmp/genesis-v3/container-rollback.json)"
+            if [ "$IMG" = "$PREVIOUS_IMAGE" ] && [ "$F" -eq 0 ] && [ "$E" -eq 0 ]; then
+              ROLLBACK_OK=1
+              echo "Rollback verified: $PREVIOUS_IMAGE"
+              break
+            fi
+            sleep 5
+          done
+          test "$ROLLBACK_OK" = "1" || { cat /tmp/genesis-v3/container-rollback.json; exit 51; }
