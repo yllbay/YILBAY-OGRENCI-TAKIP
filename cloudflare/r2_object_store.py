@@ -37,10 +37,12 @@ def _bucket():
 
 
 def _mount_root():
-    p=Path(os.environ.get("GENESIS_R2_MOUNT","/mnt/r2"))
-    if not p.exists() or not p.is_dir():
-        raise RuntimeError(f"R2 mount is unavailable: {p}")
-    return p
+    explicit=os.environ.get("GENESIS_R2_MOUNT")
+    candidates=[Path(explicit)] if explicit else [Path("/app/DATA"),Path("/mnt/r2")]
+    for p in candidates:
+        if p.exists() and p.is_dir():
+            return p
+    raise RuntimeError("R2 mount is unavailable: "+", ".join(str(p) for p in candidates))
 
 
 def _mount_path(key):
