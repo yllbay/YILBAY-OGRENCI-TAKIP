@@ -1,65 +1,89 @@
 from __future__ import annotations
-import os, shutil
+import os, sys
 from pathlib import Path
 
-def _root():
-    return Path(os.environ.get("GENESIS_R2_MOUNT","/mnt/r2"))
+sys.path.insert(0,str(Path(__file__).resolve().parent/"_vendor"))
+import boto3
 
-def _path(key):
-    clean=str(key or "").replace("\\","/").lstrip("/")
-    if ".." in Path(clean).parts:
-        raise ValueError("invalid R2 key")
-    return _root()/clean
+
+def _client():
+    endpoint=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        region_name="auto",
+        config=None,
+    )
+
+
+def _bucket():
+    return os.environ["R2_BUCKET_NAME"]
+
 
 def put_file(key,path,content_type="application/octet-stream"):
-    src=Path(path); dst=_path(key)
-    dst.parent.mkdir(parents=True,exist_ok=True)
-    tmp=dst.with_name(dst.name+".uploading")
-    shutil.copyfile(src,tmp)
-    os.replace(tmp,dst)
+    _client().upload_file(
+        str(path),
+        _bucket(),
+        key,
+        ExtraArgs={"ContentType":content_type},
+    )
     return True
+
 
 def get_file(key,path):
-    src=_path(key)
-    if not src.exists():
-        return False
-    dst=Path(path); dst.parent.mkdir(parents=True,exist_ok=True)
-    shutil.copyfile(src,dst)
-    return True
+    p=Path(path)
+    p.parent.mkdir(parents=True,exist_ok=True)
+    try:
+        _client().download_file(_bucket(),key,str(p))
+        return True
+    except Exception as exc:
+        code=getattr(exc,"response",{}).get("Error",{}).get("Code")
+        if code in {"404","NoSuchKey","NotFound"}:
+            return False
+        raise
+
 
 def head(key):
-    p=_path(key)
-    if not p.exists():
-        return None
-    st=p.stat()
-    return {"size":int(st.st_size),"etag":None}
+    try:
+        r=_client().head_object(Bucket=_bucket(),Key=key)
+        return {"size":int(r.get("ContentLength") or 0),"etag":r.get("ETag")}
+    except Exception as exc:
+        code=getattr(exc,"response",{}).get("Error",{}).get("Code")
+        if code in {"404","NoSuchKey","NotFound"}:
+            return None
+        raise
+
 
 def delete(key):
-    p=_path(key)
-    try:p.unlink()
-    except FileNotFoundError:pass
+    _client().delete_object(Bucket=_bucket(),Key=key)
     return True
 
+
 def delete_prefix(prefix):
-    root=_path(prefix)
+    c=_client()
     deleted=[]
-    if root.is_file():
-        root.unlink(); return [str(prefix)]
-    if not root.exists():
-        return deleted
-    for p in sorted(root.rglob("*"),reverse=True):
-        if p.is_file():
-            deleted.append(str(p.relative_to(_root())).replace("\\","/"))
-            p.unlink()
-        elif p.is_dir():
-            try:p.rmdir()
-            except OSError:pass
-    try:root.rmdir()
-    except OSError:pass
+    token=None
+    while True:
+        kw={"Bucket":_bucket(),"Prefix":prefix,"MaxKeys":1000}
+        if token:
+            kw["ContinuationToken"]=token
+        r=c.list_objects_v2(**kw)
+        keys=[o["Key"] for o in r.get("Contents",[])]
+        if keys:
+            c.delete_objects(
+                Bucket=_bucket(),
+                Delete={"Objects":[{"Key":k} for k in keys],"Quiet":True},
+            )
+            deleted.extend(keys)
+        if not r.get("IsTruncated"):
+            break
+        token=r.get("NextContinuationToken")
     return deleted
+
 
 def restore_primary_db(path):
     return get_file("DATA/genesis.db",path)
+
 
 def persist_primary_db(path):
     return put_file("DATA/genesis.db",path,"application/vnd.sqlite3")
