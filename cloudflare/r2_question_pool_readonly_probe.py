@@ -2,8 +2,8 @@ from pathlib import Path
 
 p=Path("cloudflare/package-runtime/index.js")
 src=p.read_text(encoding="utf-8")
-MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2"
-OLD_MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V1"
+MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3"
+OLD_MARK="GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3"
 changed=False
 
 if OLD_MARK in src:
@@ -13,15 +13,15 @@ if OLD_MARK in src:
     if cpos<0:
         raise SystemExit("V1 R2 probe marker found but route shape changed")
     src=src[:cpos]+old_cond.replace("if (","if (false && ",1)+src[cpos+len(old_cond):]
-    src=src.replace(OLD_MARK,"GENESIS_R2_QUESTION_POOL_READONLY_PROBE_RETIRED_V1",1)
+    src=src.replace(OLD_MARK,"GENESIS_R2_QUESTION_POOL_READONLY_PROBE_RETIRED_V2",1)
     changed=True
 
 if MARK in src:
     if changed:
         p.write_text(src,encoding="utf-8")
-        print("R2 readonly probe V1 retired; existing V2 preserved")
+        print("R2 readonly probe V2 retired; existing V3 preserved")
     else:
-        print("R2 readonly probe V2 already present")
+        print("R2 readonly probe V3 already present")
     raise SystemExit(0)
 
 needle='''      const upstream = await container.fetch(forwarded);
@@ -29,13 +29,14 @@ needle='''      const upstream = await container.fetch(forwarded);
 if needle not in src:
     raise SystemExit("Worker upstream anchor missing")
 
-probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2
+probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3
       // Temporary read-only diagnostics. Never put/delete/write R2 objects here.
       {
         const probeUrl = new URL(request.url);
         if (request.method === "GET" && probeUrl.pathname === "/api/internal/r2-question-pool-readonly") {
           const prefixCounts = {};
           const sampleKeys = [];
+          const protectedAssets = [];
           let cursor = undefined;
           let total = 0;
           let bucketTotal = 0;
@@ -46,6 +47,17 @@ probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2
             for (const obj of page.objects || []) {
               total++;
               const k = obj.key || "";
+              if (
+                k.startsWith("DATA/DisplayImages/") ||
+                k.startsWith("DATA/RawCrops/") ||
+                k.startsWith("DATA/Sources/")
+              ) {
+                protectedAssets.push({
+                  key:k,
+                  size:Number(obj.size || 0),
+                  etag:String(obj.etag || "")
+                });
+              }
               const group =
                 k.startsWith("DATA/DisplayImages/") ? "DisplayImages" :
                 k.startsWith("DATA/RawCrops/") ? "RawCrops" :
@@ -70,11 +82,21 @@ probe=r'''      // GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2
             rootCursor = rootPage.truncated ? rootPage.cursor : undefined;
           } while (rootCursor && bucketTotal < 200000);
 
+          protectedAssets.sort((a,b)=>a.key.localeCompare(b.key));
+          const assetBytes = new TextEncoder().encode(JSON.stringify(protectedAssets));
+          const assetDigest = await crypto.subtle.digest("SHA-256", assetBytes);
+          const assetSha256 = Array.from(new Uint8Array(assetDigest))
+            .map(b=>b.toString(16).padStart(2,"0")).join("");
+
           const dbHead = await env.GENESIS_DATA.head("DATA/genesis.db");
           const rootDbHead = await env.GENESIS_DATA.head("genesis.db");
           const response = {
-            marker:"GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V2",
+            marker:"GENESIS_R2_QUESTION_POOL_READONLY_PROBE_V3",
             read_only:true,
+            question_assets_fingerprint:{
+              sha256:assetSha256,
+              count:protectedAssets.length
+            },
             total_objects_under_DATA:total,
             prefix_counts:prefixCounts,
             bucket_total_objects:bucketTotal,
@@ -108,6 +130,7 @@ p.write_text(src,encoding="utf-8")
 out=p.read_text(encoding="utf-8")
 assert MARK in out
 assert 'env.GENESIS_DATA.list' in out
+assert 'question_assets_fingerprint' in out
 assert 'env.GENESIS_DATA.head("DATA/genesis.db")' in out
 assert '.put(' not in probe and '.delete(' not in probe
 print("GENESIS R2 question-pool read-only probe: OK")
