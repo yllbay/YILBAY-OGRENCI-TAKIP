@@ -187,6 +187,29 @@ jobs:
           test "$PUSH_OK" = "1" || { cat /tmp/genesis-v3/push.txt || true; exit 41; }
           echo "NEW_IMAGE=$NEW_IMAGE" >> "$GITHUB_ENV"
 
+      - name: Local full-app root diagnostic
+        run: |
+          set -euo pipefail
+          CID="$(docker run -d -e GENESIS_SKIP_R2_SNAPSHOT=1 "$NEW_IMAGE")"
+          trap 'docker logs "$CID" || true; docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+          sleep 5
+          docker ps -a --filter "id=$CID"
+          docker logs "$CID" || true
+          docker exec "$CID" python - <<'PY' || true
+          import urllib.request, urllib.error
+          for port in (8765,8766,8080,8000):
+              url=f'http://127.0.0.1:{port}/'
+              try:
+                  with urllib.request.urlopen(url,timeout=5) as r:
+                      print('ROOT_DIAG',port,r.status,r.read(300).decode('utf-8','replace'))
+              except Exception as e:
+                  print('ROOT_DIAG_ERROR',port,repr(e))
+                  if hasattr(e,'read'):
+                      try: print(e.read(1000).decode('utf-8','replace'))
+                      except Exception: pass
+          PY
+          docker logs "$CID" || true
+          exit 66
       - name: Disposable V3 data-model integration test
         run: |
           set -euo pipefail
