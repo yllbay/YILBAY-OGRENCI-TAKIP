@@ -47,6 +47,10 @@ jobs:
                   continue
               _,payload=part.split(sep,1)
               text=payload.decode('utf-8','ignore')
+              if 'GenesisContainer' in text and 'GENESIS_CONTAINER' in text:
+                  print('WORKER_HAS_ENVVARS=', 'envVars' in text)
+                  for key in ('R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_ACCOUNT_ID','R2_BUCKET_NAME','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY'):
+                      print('WORKER_HAS_'+key+'=', key in text)
               if 'class GenesisContainer' in text:
                   start=text.find('class GenesisContainer')
                   end=text.find('export default',start)
