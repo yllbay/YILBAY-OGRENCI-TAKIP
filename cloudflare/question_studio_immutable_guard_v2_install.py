@@ -29,15 +29,18 @@ old_func='''def _question_studio_protected_table(name):
 '''
 new_func='''def _question_studio_protected_table(name):
     n=str(name or "").lower()
-    return any(token in n for token in (
-        "question",
-        "topic",
-        "exam",
-        "test",
-        "folder",
-        "crop",
-        "source",
-    ))
+    if n.startswith("coach") or n.startswith("coaching_"):
+        return False
+    return (
+        n in {
+            "questions","topics","exams","tests","test_classes",
+            "source_documents","raw_crops","prepared_crops","question_crops",
+        }
+        or n.startswith("question_")
+        or n.startswith("exam_")
+        or n.startswith("test_")
+        or n.startswith("topic_")
+    )
 '''
 if old_func in db:
     db=db.replace(old_func,new_func,1)
@@ -76,7 +79,8 @@ app_path.write_text(app,encoding="utf-8")
 out_db=db_path.read_text(encoding="utf-8")
 out_app=app_path.read_text(encoding="utf-8")
 assert MARK in out_db and MARK in out_app
-assert '"folder"' in out_db and '"crop"' in out_db and '"source"' in out_db
+assert '"questions"' in out_db and '"test_classes"' in out_db and '"source_documents"' in out_db
+assert 'n.startswith("coach")' in out_db
 for fn in (
     "purge_stale_prepared_on_startup",
     "purge_finalized_working_files_on_startup",
