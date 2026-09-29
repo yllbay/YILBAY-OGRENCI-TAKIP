@@ -18,7 +18,7 @@ src=src.replace(
 
 src=src.replace(
     'if os.environ.get("R2_ACCOUNT_ID") and not DB.exists():\n    restore_primary_db(DB)',
-    'if not DB.exists():\n    restore_primary_db(DB)',
+    'if os.environ.get("GENESIS_SKIP_R2_SNAPSHOT")!="1" and not DB.exists():\n    restore_primary_db(DB)',
     1,
 )
 
@@ -64,7 +64,9 @@ src=src.replace(anchor,bootstrap,1)
 old_tail='''    if changed:
         _persist_primary_snapshot(target)
 '''
-new_tail='''    if changed or (target.resolve()==DB.resolve() and not r2_head("DATA/genesis.db")):
+new_tail='''    if changed:
+        _persist_primary_snapshot(target)
+    elif os.environ.get("GENESIS_SKIP_R2_SNAPSHOT")!="1" and target.resolve()==DB.resolve() and not r2_head("DATA/genesis.db"):
         _persist_primary_snapshot(target)
 '''
 if old_tail not in src:
