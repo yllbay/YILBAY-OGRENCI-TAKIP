@@ -154,25 +154,28 @@ jobs:
           grep -q '/api/coaching/v3/students/{sid}/homework/auto' "$ROOT/backend/coaching_model_v3.py"
           grep -q 'coach3_homework_assignments' "$ROOT/backend/coaching_model_v3.py"
 
-      - name: Diagnose legacy Question Studio writes
+      - name: Diagnose root and DB initialization
         run: |
           set -euo pipefail
           ROOT=/tmp/genesis-v3/bundle/rootfs/app/APP
           python3 - <<'PY'
           from pathlib import Path
-          for fn in ('backend/app.py','backend/db.py'):
-              p=Path('/tmp/genesis-v3/bundle/rootfs/app/APP')/fn
-              lines=p.read_text(encoding='utf-8').splitlines()
-              print('===',fn,'===')
-              needles=('insert into topics','update topics','delete from topics','insert into exams','update exams','delete from exams','insert into tests','update tests','delete from tests','insert into test_classes','update test_classes','delete from test_classes','insert into questions','update questions','delete from questions')
+          def around(path, needles, radius=30):
+              lines=Path(path).read_text(encoding='utf-8').splitlines()
+              printed=set()
               for i,line in enumerate(lines):
-                  if any(k in line.lower() for k in needles):
-                      lo=max(0,i-4); hi=min(len(lines),i+5)
+                  if any(n in line for n in needles):
+                      lo=max(0,i-radius); hi=min(len(lines),i+radius+1)
+                      key=(lo,hi)
+                      if key in printed: continue
+                      printed.add(key)
+                      print('===',path, 'around line', i+1,'===')
                       for j in range(lo,hi): print(str(j+1)+': '+lines[j])
-                      print('---')
+          around('/tmp/genesis-v3/bundle/rootfs/app/APP/backend/app.py', ['@app.get("/")','def home','def index','init_db()'], 35)
+          around('/tmp/genesis-v3/bundle/rootfs/app/APP/backend/db.py', ['def init_db','executescript(','def connect'], 80)
+          around('cloudflare/package-runtime/index.js', ['GENESIS_HOME_DASHBOARD_EDGE_V1','pathname === "/"','pathname === \'/\''], 35)
           raise SystemExit(66)
           PY
-
       - name: Build Cloudflare-safe app-layer image
         run: |
           set -euo pipefail
