@@ -131,6 +131,7 @@ jobs:
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_immutable_guard_v2_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_immutable_guard_v3_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_immutable_guard_v4_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v5_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_delete_upgrade.py
           python3 -m py_compile "$ROOT/backend/r2_object_store.py" "$ROOT/backend/db.py" "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/backend/db.py"
@@ -145,6 +146,7 @@ jobs:
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V2' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V3' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_IMMUTABLE_GUARD_V4_AUTHORIZE_ALL_CONNECTIONS' "$ROOT/backend/db.py"
+          grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V5_USER_SCOPED' "$ROOT/backend/db.py"
           grep -q '/api/internal/question-studio-fingerprint' "$ROOT/backend/app.py"
           grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' "$ROOT/backend/app.py"
           grep -q 'install_coaching_model_v3(app)' "$ROOT/backend/app.py"
@@ -154,28 +156,6 @@ jobs:
           grep -q '/api/coaching/v3/students/{sid}/homework/auto' "$ROOT/backend/coaching_model_v3.py"
           grep -q 'coach3_homework_assignments' "$ROOT/backend/coaching_model_v3.py"
 
-      - name: Diagnose root and DB initialization
-        run: |
-          set -euo pipefail
-          ROOT=/tmp/genesis-v3/bundle/rootfs/app/APP
-          python3 - <<'PY'
-          from pathlib import Path
-          def around(path, needles, radius=30):
-              lines=Path(path).read_text(encoding='utf-8').splitlines()
-              printed=set()
-              for i,line in enumerate(lines):
-                  if any(n in line for n in needles):
-                      lo=max(0,i-radius); hi=min(len(lines),i+radius+1)
-                      key=(lo,hi)
-                      if key in printed: continue
-                      printed.add(key)
-                      print('===',path, 'around line', i+1,'===')
-                      for j in range(lo,hi): print(str(j+1)+': '+lines[j])
-          around('/tmp/genesis-v3/bundle/rootfs/app/APP/backend/app.py', ['@app.get("/")','def home','def index','init_db()'], 35)
-          around('/tmp/genesis-v3/bundle/rootfs/app/APP/backend/db.py', ['def init_db','executescript(','def connect'], 80)
-          around('cloudflare/package-runtime/index.js', ['GENESIS_HOME_DASHBOARD_EDGE_V1','pathname === "/"','pathname === \'/\''], 35)
-          raise SystemExit(66)
-          PY
       - name: Build Cloudflare-safe app-layer image
         run: |
           set -euo pipefail
