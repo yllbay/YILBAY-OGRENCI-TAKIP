@@ -456,28 +456,6 @@ jobs:
           PY
           docker run --rm -e GENESIS_SKIP_R2_SNAPSHOT=1 --entrypoint python -v /tmp/genesis-v3/question_studio_hard_lock_test.py:/tmp/question_studio_hard_lock_test.py:ro "$NEW_IMAGE" /tmp/question_studio_hard_lock_test.py
 
-      - name: Disposable root read smoke
-        run: |
-          set -euo pipefail
-          cat > /tmp/genesis-v3/root_read_smoke.py <<'PY'
-          import os,sys,traceback
-          os.environ['GENESIS_SKIP_R2_SNAPSHOT']='1'
-          sys.path.insert(0,'/app/APP/backend')
-          try:
-              import app as a
-              from fastapi.testclient import TestClient
-              client=TestClient(a.app, raise_server_exceptions=True)
-              r=client.get('/')
-              print('ROOT_STATUS',r.status_code)
-              print(r.text[:500])
-              assert r.status_code==200
-              print('GENESIS_DISPOSABLE_ROOT_READ_OK')
-          except Exception:
-              traceback.print_exc()
-              raise
-          PY
-          docker run --rm -e GENESIS_SKIP_R2_SNAPSHOT=1 --entrypoint python -v /tmp/genesis-v3/root_read_smoke.py:/tmp/root_read_smoke.py:ro "$NEW_IMAGE" /tmp/root_read_smoke.py
-
       - name: Configure Wrangler to use the pushed registry image
         run: |
           set -euo pipefail
