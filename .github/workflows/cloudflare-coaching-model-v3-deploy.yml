@@ -328,10 +328,16 @@ jobs:
           CREATE TABLE questions(id INTEGER PRIMARY KEY, body TEXT);
           CREATE TABLE topics(id INTEGER PRIMARY KEY, name TEXT);
           CREATE TABLE exams(id INTEGER PRIMARY KEY, name TEXT);
+          CREATE TABLE test_folders(id INTEGER PRIMARY KEY, name TEXT);
+          CREATE TABLE raw_crops(id INTEGER PRIMARY KEY, name TEXT);
+          CREATE TABLE source_documents(id INTEGER PRIMARY KEY, name TEXT);
           CREATE TABLE coaching_students(id INTEGER PRIMARY KEY, name TEXT);
           INSERT INTO questions(id,body) VALUES(1,'protected');
           INSERT INTO topics(id,name) VALUES(1,'protected-topic');
           INSERT INTO exams(id,name) VALUES(1,'protected-exam');
+          INSERT INTO test_folders(id,name) VALUES(1,'protected-folder');
+          INSERT INTO raw_crops(id,name) VALUES(1,'protected-crop');
+          INSERT INTO source_documents(id,name) VALUES(1,'protected-source');
           """)
           raw.commit()
           raw.close()
@@ -343,13 +349,16 @@ jobs:
                   "UPDATE questions SET body='mutated' WHERE id=1",
                   "DELETE FROM topics WHERE id=1",
                   "INSERT INTO exams(id,name) VALUES(2,'mutated-exam')",
+                  "DELETE FROM test_folders WHERE id=1",
+                  "UPDATE raw_crops SET name='mutated-crop' WHERE id=1",
+                  "DELETE FROM source_documents WHERE id=1",
               ):
                   try:
                       with db.connect() as con:
                           con.execute(sql)
                   except sqlite3.DatabaseError:
                       blocked+=1
-              assert blocked==3, f'expected 3 protected writes blocked, got {blocked}'
+              assert blocked==6, f'expected 6 protected writes blocked, got {blocked}'
 
               with db.connect() as con:
                   con.execute("INSERT INTO coaching_students(id,name) VALUES(1,'allowed-background')")
