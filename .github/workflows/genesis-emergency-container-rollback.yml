@@ -17,7 +17,7 @@ permissions:
 env:
   CF_API_BASE: https://api.cloudflare.com/client/v4
   CF_CONTAINER_APP_ID: a03b84d1-3560-43de-8d60-55bbca682961
-  KNOWN_GOOD_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:0e607006eb87456b2305bd6e10df6141e7e805129880d103107e888e3649c82e
+  KNOWN_GOOD_IMAGE: registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer:question-studio-repair-fb2828c68f93
 
 jobs:
   rollback:
