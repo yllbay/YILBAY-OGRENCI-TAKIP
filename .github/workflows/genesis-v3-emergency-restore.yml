@@ -73,6 +73,9 @@ jobs:
           p=Path('cloudflare/v3-restore-runtime/wrangler.jsonc')
           cfg=json.loads(p.read_text(encoding='utf-8'))
           cfg['containers'][0]['image']=os.environ['STABLE_V3_IMAGE']
+          # Force an effective container configuration change so Cloudflare
+          # cannot classify this recovery deploy as "no changes".
+          cfg['containers'][0]['rollout_active_grace_period']=1
           p.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           PY
           grep -Fq "$STABLE_V3_IMAGE" cloudflare/v3-restore-runtime/wrangler.jsonc
