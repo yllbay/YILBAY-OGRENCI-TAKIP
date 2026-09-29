@@ -315,6 +315,8 @@ jobs:
           p=Path('cloudflare/package-runtime/wrangler.jsonc')
           cfg=json.loads(p.read_text(encoding='utf-8'))
           cfg['containers'][0]['image']=os.environ['PREVIOUS_IMAGE']
+          current=int(cfg['containers'][0].get('rollout_active_grace_period') or 0)
+          cfg['containers'][0]['rollout_active_grace_period']=1 if current!=1 else 2
           p.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           PY
           grep -q 'GENESIS_QUESTION_STUDIO_INTEGRITY_PROBE_V4' cloudflare/package-runtime/index.js
