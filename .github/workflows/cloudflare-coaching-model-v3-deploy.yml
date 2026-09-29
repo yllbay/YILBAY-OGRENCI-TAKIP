@@ -122,16 +122,18 @@ jobs:
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_db_persistence_v3_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_bbox_fix_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_r2_images_install.py
-          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_shells_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/coaching_model_v3_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_pool_guard_install.py
+          GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_hard_lock_install.py
           GENESIS_APP_ROOT="$ROOT" python3 cloudflare/question_studio_delete_upgrade.py
           python3 -m py_compile "$ROOT/backend/r2_object_store.py" "$ROOT/backend/db.py" "$ROOT/backend/coaching_model_v3.py" "$ROOT/backend/app.py" "$ROOT/backend/coaching_v2.py" "$ROOT/backend/curriculum_step1.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V2' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_DB_PERSIST_V3_BOOTSTRAP' "$ROOT/backend/db.py"
           grep -q 'GENESIS_QUESTION_STUDIO_BBOX_SAVEFIX_V1' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_STUDIO_R2_IMAGES_V1' "$ROOT/backend/app.py"
-          grep -q 'GENESIS_QUESTION_STUDIO_SHELLS_V1' "$ROOT/backend/app.py"
+          grep -q 'GENESIS_QUESTION_STUDIO_HARD_LOCK_V1' "$ROOT/backend/app.py"
+          grep -q 'GENESIS_QUESTION_STUDIO_HARD_LOCK_V1' "$ROOT/backend/db.py"
+          grep -q '/api/internal/question-studio-fingerprint' "$ROOT/backend/app.py"
           grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' "$ROOT/backend/app.py"
           grep -q 'install_coaching_model_v3(app)' "$ROOT/backend/app.py"
           grep -q 'GENESIS_QUESTION_POOL_GUARD_V1' "$ROOT/backend/app.py"
@@ -152,6 +154,7 @@ jobs:
           docker cp "$CID:/app/APP/backend/coaching_model_v3.py" /tmp/genesis-v3/flat-model.py
           grep -q 'GENESIS_COACHING_MODEL_V3_INSTALL' /tmp/genesis-v3/flat-app.py
           grep -q 'GENESIS_QUESTION_POOL_GUARD_V1' /tmp/genesis-v3/flat-app.py
+          grep -q 'GENESIS_QUESTION_STUDIO_HARD_LOCK_V1' /tmp/genesis-v3/flat-app.py
           grep -q 'GENESIS_STARTUP_STORAGE_MAINTENANCE' /tmp/genesis-v3/flat-app.py
           grep -q 'VERSION = "0.16.0"' /tmp/genesis-v3/flat-model.py
           docker rm -f "$CID" >/dev/null
@@ -260,6 +263,31 @@ jobs:
           PY
           docker run --rm -e GENESIS_SKIP_R2_SNAPSHOT=1 --entrypoint python -v /tmp/genesis-v3/question_pool_guard_test.py:/tmp/question_pool_guard_test.py:ro "$NEW_IMAGE" /tmp/question_pool_guard_test.py
 
+      - name: Capture production Question Studio baseline
+        run: |
+          set -euo pipefail
+          URL="https://genesis-web-0152.yilbayonurcelik.workers.dev"
+          mkdir -p /tmp/genesis-v3
+          TOPICS_CODE="$(curl -sS --connect-timeout 5 --max-time 15 -o /tmp/genesis-v3/qs-topics-before.json -w '%{http_code}' "$URL/api/topics" || true)"
+          TESTS_CODE="$(curl -sS --connect-timeout 5 --max-time 15 -o /tmp/genesis-v3/qs-tests-before.json -w '%{http_code}' "$URL/api/test-tree" || true)"
+          test "$TOPICS_CODE" = "200"
+          test "$TESTS_CODE" = "200"
+          jq -S . /tmp/genesis-v3/qs-topics-before.json > /tmp/genesis-v3/qs-topics-before.canon
+          jq -S . /tmp/genesis-v3/qs-tests-before.json > /tmp/genesis-v3/qs-tests-before.canon
+          sha256sum /tmp/genesis-v3/qs-topics-before.canon | awk '{print $1}' > /tmp/genesis-v3/qs-topics-before.sha
+          sha256sum /tmp/genesis-v3/qs-tests-before.canon | awk '{print $1}' > /tmp/genesis-v3/qs-tests-before.sha
+
+          FP_CODE="$(curl -sS --connect-timeout 5 --max-time 15 -o /tmp/genesis-v3/qs-fingerprint-before.json -w '%{http_code}' "$URL/api/internal/question-studio-fingerprint" || true)"
+          if [ "$FP_CODE" = "200" ]; then
+            jq -e '.marker=="GENESIS_QUESTION_STUDIO_HARD_LOCK_V1" and (.sha256|type=="string")' /tmp/genesis-v3/qs-fingerprint-before.json >/dev/null
+            jq -r '.sha256' /tmp/genesis-v3/qs-fingerprint-before.json > /tmp/genesis-v3/qs-fingerprint-before.sha
+            echo "QS_STRICT_BASELINE=1" >> "$GITHUB_ENV"
+            echo "Question Studio strict baseline captured."
+          else
+            echo "QS_STRICT_BASELINE=0" >> "$GITHUB_ENV"
+            echo "::warning::First hard-lock rollout: strict DB fingerprint endpoint not yet present; topics/test-tree fallback baseline captured."
+          fi
+
       - name: Configure Wrangler to use the pushed registry image
         run: |
           set -euo pipefail
@@ -358,7 +386,22 @@ jobs:
 
           TESTTREE="$(curl -sS --connect-timeout 5 --max-time 15 -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/test-tree.json -w '%{http_code}' "$URL/api/test-tree" || true)"
           test "$TESTTREE" = "200"
-          jq -e 'type=="array" and length>=1' /tmp/genesis-v3/test-tree.json >/dev/null
+          jq -e 'type=="array"' /tmp/genesis-v3/test-tree.json >/dev/null
+
+          # Hard-lock integrity gate: deploy/restart/migration must not mutate
+          # Question Studio folders, questions, exams, or relationship tables.
+          jq -S . /tmp/genesis-v3/topics.json > /tmp/genesis-v3/qs-topics-after.canon
+          jq -S . /tmp/genesis-v3/test-tree.json > /tmp/genesis-v3/qs-tests-after.canon
+          test "$(sha256sum /tmp/genesis-v3/qs-topics-after.canon | awk '{print $1}')" = "$(cat /tmp/genesis-v3/qs-topics-before.sha)"
+          test "$(sha256sum /tmp/genesis-v3/qs-tests-after.canon | awk '{print $1}')" = "$(cat /tmp/genesis-v3/qs-tests-before.sha)"
+
+          QSF="$(curl -sS --connect-timeout 5 --max-time 15 -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/qs-fingerprint-after.json -w '%{http_code}' "$URL/api/internal/question-studio-fingerprint" || true)"
+          test "$QSF" = "200"
+          jq -e '.marker=="GENESIS_QUESTION_STUDIO_HARD_LOCK_V1" and (.sha256|type=="string")' /tmp/genesis-v3/qs-fingerprint-after.json >/dev/null
+          if [ "${QS_STRICT_BASELINE:-0}" = "1" ]; then
+            test "$(jq -r '.sha256' /tmp/genesis-v3/qs-fingerprint-after.json)" = "$(cat /tmp/genesis-v3/qs-fingerprint-before.sha)"
+          fi
+          echo "GENESIS_QUESTION_STUDIO_HARD_LOCK_INTEGRITY_OK"
 
           R2P="$(curl -sS --connect-timeout 5 --max-time 15 -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/r2.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
           test "$R2P" = "200"
