@@ -1,1 +1,1 @@
-2026-09-29 audit container R2 env forwarding
+2026-09-29 audit sanitized container env structure
