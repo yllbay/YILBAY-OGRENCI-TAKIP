@@ -362,6 +362,7 @@ jobs:
 
           R2P="$(curl -sS --connect-timeout 5 --max-time 15 -c /tmp/genesis-v3/cookies -b /tmp/genesis-v3/cookies -o /tmp/genesis-v3/r2.json -w '%{http_code}' "$URL/api/internal/r2-question-pool-readonly" || true)"
           test "$R2P" = "200"
+          echo "R2_PROBE=$(cat /tmp/genesis-v3/r2.json)"
           jq -e '.genesis_db.exists==true and (.genesis_db.size|tonumber)>0' /tmp/genesis-v3/r2.json >/dev/null
           echo "QUESTION_STUDIO_R2=$(jq -c '{genesis_db,prefix_counts,total_objects_under_DATA}' /tmp/genesis-v3/r2.json)"
 
