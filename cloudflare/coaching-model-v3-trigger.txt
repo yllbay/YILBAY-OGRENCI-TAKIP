@@ -1,1 +1,1 @@
-question-studio-hard-lock-v1-baseline-retry-2026-09-29
+question-studio-immutable-v2-central-r2-production-2026-09-29
