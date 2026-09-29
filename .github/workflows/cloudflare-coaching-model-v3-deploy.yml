@@ -81,6 +81,7 @@ jobs:
           PY
           python3 cloudflare/container_startup_port_retry.py cloudflare/package-runtime/index.js
           grep -q 'GENESIS_CONTAINER_STARTING_PORT_RETRY_V1' cloudflare/package-runtime/index.js
+          grep -q 'GENESIS_WAIT_FOR_PORT_STARTING_RETRY_V1' cloudflare/package-runtime/index.js
           python3 cloudflare/question_studio_integrity_probe_v4.py
           node --check cloudflare/package-runtime/index.js
           grep -q 'GENESIS_HOME_DASHBOARD_EDGE_V1' cloudflare/package-runtime/index.js
