@@ -7,11 +7,20 @@ import boto3
 
 
 def _client():
-    endpoint=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+    account_id=os.environ["R2_ACCOUNT_ID"]
+    access_key=os.environ.get("R2_ACCESS_KEY_ID") or os.environ.get("AWS_ACCESS_KEY_ID")
+    secret_key=os.environ.get("R2_SECRET_ACCESS_KEY") or os.environ.get("AWS_SECRET_ACCESS_KEY")
+    session_token=os.environ.get("R2_SESSION_TOKEN") or os.environ.get("AWS_SESSION_TOKEN")
+    if not access_key or not secret_key:
+        raise RuntimeError("R2 S3 credentials are not available inside the container")
+    endpoint=f"https://{account_id}.r2.cloudflarestorage.com"
     return boto3.client(
         "s3",
         endpoint_url=endpoint,
         region_name="auto",
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        aws_session_token=session_token,
         config=None,
     )
 
