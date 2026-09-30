@@ -66,6 +66,7 @@ with sync_playwright() as playwright:
         for action in ('update', 'delete', 'toroot'):
             expect(first.locator(f'[data-act="{action}"]')).to_be_enabled()
         first.screenshot(path=str(OUT / 'pool-ui-desktop.png'), full_page=True)
+        first.locator('#rightPane').click(position={'x':30,'y':500})  # Dismiss the existing context menu.
         # Delete the UI-created empty folder; the second profile must converge too.
         first.locator('[data-topic]').filter(has_text='ARAYUZ KABUL').click(button='right')
         first.once('dialog',lambda dialog:dialog.accept())
