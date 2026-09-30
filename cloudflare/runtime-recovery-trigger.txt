@@ -1,1 +1,1 @@
-Inspect deployed runtime and preserve source before repair, 2026-09-30.
+Deploy local SQLite and R2 persistence recovery, 2026-09-30.

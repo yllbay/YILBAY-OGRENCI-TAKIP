@@ -1,0 +1,9 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY runtime_storage.py /app/APP/backend/runtime_storage.py
+COPY runtime_recovery_install.py /tmp/runtime_recovery_install.py
+RUN python -m pip install --no-cache-dir --target /app/APP/backend/_vendor "boto3>=1.34,<2" \
+    && python /tmp/runtime_recovery_install.py \
+    && rm -rf /app/DATA && mkdir -p /app/DATA \
+    && python -m py_compile /app/APP/backend/app.py /app/APP/backend/runtime_storage.py
+CMD ["/app/start-container.sh"]

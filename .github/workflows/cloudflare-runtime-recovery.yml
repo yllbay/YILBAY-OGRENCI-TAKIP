@@ -15,7 +15,7 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -38,6 +38,9 @@ jobs:
           REG_PASS="$(jq -r '.result.password' /tmp/recovery/registry.json)"
           echo "::add-mask::$REG_USER"
           echo "::add-mask::$REG_PASS"
+          echo "RECOVERY_BASE_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "REG_USER=$REG_USER" >> "$GITHUB_ENV"
+          echo "REG_PASS=$REG_PASS" >> "$GITHUB_ENV"
           sudo apt-get update -qq
           sudo apt-get install -y -qq skopeo umoci
           skopeo inspect --config --creds "$REG_USER:$REG_PASS" "docker://$IMAGE" > /tmp/recovery/snapshot/image-config.json
@@ -47,6 +50,70 @@ jobs:
           cd /tmp/recovery/bundle/rootfs/app
           tar -cJf /tmp/recovery/snapshot/app-source.tar.xz --exclude='__pycache__' --exclude='_vendor' --exclude='DATA' --exclude='*.db*' APP
           echo 'PRODUCTION_SOURCE_SNAPSHOT_OK'
+      - name: Build and check recovered application
+        if: contains(github.event.head_commit.message, '[recover]')
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT"
+          curl -fsS -X POST "$API/containers/registries/registry.cloudflare.com/credentials" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' --data '{"expiration_minutes":20,"permissions":["pull","push"]}' -o /tmp/recovery/build-registry.json
+          REG_USER="$(jq -r '.result.username' /tmp/recovery/build-registry.json)"
+          REG_PASS="$(jq -r '.result.password' /tmp/recovery/build-registry.json)"
+          echo "::add-mask::$REG_USER"
+          echo "::add-mask::$REG_PASS"
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com --username "$REG_USER" --password-stdin
+          IMAGE="registry.cloudflare.com/$ACCOUNT/genesis-web-0152-genesiscontainer:runtime-recovery-${GITHUB_SHA::12}"
+          echo "RECOVERY_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          docker build --build-arg "BASE_IMAGE=$RECOVERY_BASE_IMAGE" -f cloudflare/Dockerfile.runtime-recovery -t "$IMAGE" cloudflare
+          docker run -d --name genesis-recovery-canary -e GENESIS_STORAGE_MODE=local -p 127.0.0.1:18000:8000 "$IMAGE"
+          for attempt in $(seq 1 45); do
+            if curl -fsS --max-time 2 http://127.0.0.1:18000/_health -o /tmp/recovery/snapshot/canary-health.json; then break; fi
+            sleep 1
+          done
+          jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1"' /tmp/recovery/snapshot/canary-health.json
+          curl -fsS --max-time 10 -c /tmp/recovery/cookies http://127.0.0.1:18000/ -o /tmp/recovery/canary-root.html
+          curl -fsS --max-time 10 -b /tmp/recovery/cookies http://127.0.0.1:18000/api/topics -o /tmp/recovery/canary-topics.json
+          jq -e 'type=="array"' /tmp/recovery/canary-topics.json
+          curl -fsS --max-time 10 -b /tmp/recovery/cookies http://127.0.0.1:18000/api/test-tree -o /tmp/recovery/canary-tests.json
+          jq -e 'type=="array"' /tmp/recovery/canary-tests.json
+          docker exec genesis-recovery-canary python -c 'import sqlite3; from pathlib import Path; p=Path("/app/DATA/genesis.db"); assert p.is_file() and not p.parent.is_symlink(); c=sqlite3.connect(p); assert c.execute("PRAGMA quick_check").fetchone()[0]=="ok"; print("LOCAL_SQLITE_INTEGRITY_OK")'
+          docker logs genesis-recovery-canary > /tmp/recovery/snapshot/canary.log 2>&1
+          docker stop genesis-recovery-canary
+          docker push "$IMAGE"
+      - name: Prepare preserved Worker and deploy recovery
+        if: contains(github.event.head_commit.message, '[recover]')
+        run: |
+          set -euo pipefail
+          python3 cloudflare/runtime_recovery_prepare.py
+          node --check /tmp/recovery/runtime/index.js
+          cd /tmp/recovery/runtime
+          npx --yes wrangler@4 deploy --dry-run --outdir /tmp/recovery/worker-build --keep-vars --containers-rollout=none
+          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
+          echo 'RECOVERY_DEPLOYED=1' >> "$GITHUB_ENV"
+      - name: Verify production and persistence
+        if: contains(github.event.head_commit.message, '[recover]')
+        run: |
+          set -euo pipefail
+          URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
+          for attempt in $(seq 1 36); do
+            curl -sS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/production-health.json || true
+            if jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1" and .restored and .last_sync!=null and .last_error==null' /tmp/recovery/snapshot/production-health.json >/dev/null 2>&1; then break; fi
+            sleep 3
+          done
+          jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1" and .restored and .last_sync!=null and .last_error==null' /tmp/recovery/snapshot/production-health.json
+          curl -fsS --max-time 15 -c /tmp/recovery/live-cookies "$URL/" -o /tmp/recovery/snapshot/production-root.html
+          grep -q GENESIS_HOME_DASHBOARD_EDGE_V1 /tmp/recovery/snapshot/production-root.html
+          for route in api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v2/students; do
+            curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/$route" -o "/tmp/recovery/snapshot/$(echo "$route" | tr / -).json"
+          done
+          curl -fsS --max-time 15 "$URL/api/internal/question-studio-integrity-v4" -o /tmp/recovery/snapshot/r2-after.json
+          jq -e '.genesis_db.exists and .genesis_db.size>0' /tmp/recovery/snapshot/r2-after.json
+          npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/container-after.json
+          echo 'GENESIS_RUNTIME_RECOVERY_VERIFIED'
+      - name: Capture failed runtime diagnostics
+        if: failure() && env.RECOVERY_DEPLOYED == '1'
+        run: |
+          timeout 35s npx --yes wrangler@4 tail genesis-web-0152 --format json > /tmp/recovery/snapshot/runtime-tail.jsonl 2>&1 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
