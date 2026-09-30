@@ -1,3 +1,29 @@
+# Güncel üretim — kullanıcıya ait soru havuzu
+
+**1 Ekim 2026: v115 başarıyla yayınlandı.** Son kullanıcı talimatı mevcut
+klasör/sınav/soruların kullanıcı tarafından silinmesine ve düzenlenmesine
+izin verir; otomatik, başlangıç, temizlik, geliştirme ve yayın yazmaları
+engellenmeye devam eder. Önceki mutlak kilit kaldırılmıştır.
+
+- [Korumalı yayın 36783274326](https://github.com/yllbay/YILBAY-OGRENCI-TAKIP/actions/runs/36783274326): success.
+- [Geçici arayüz kabulü 36782971033](https://github.com/yllbay/YILBAY-OGRENCI-TAKIP/actions/runs/36782971033): success.
+- Image: `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:520be26036aede569368ed985a114e4220b022baf7bf7a8679579e0fd4d822d6`.
+- Worker: `c742c1dd-e3f4-4256-a2bd-331ff29a7126`; politika `GENESIS_QUESTION_POOL_USER_OWNED_V2`.
+- Önce/sonra: topics=2, questions=5, finalized crops=5, sources=1.
+- DB SHA-256: `175073c407d5d5b691c2a95f211cfe2ff170d8798dea4cf1d31d098b6eedd7b8`.
+- R2 varlık SHA-256: `6882b92182ac93435ab1b0146f9f62f5229c0a3ab6d4fc439b1f030c6a1cc66d`; 14 nesne, ETag eşit.
+- R2 geri okuma, iki oturum ve canlı arayüz passed; last_error=null, pending=false.
+- Üretimde kabul verisi oluşturulmadı/silinmedi; rollback gerekmedi.
+- Geçici ortamda gerçek kullanıcı silmeleri ve diğer profilde yenileme,
+  SQL otomatik yazma engeli ve R2/restart kalıcılığı geçti.
+- Ayrıntılı yerel kanıt: `outputs/user-pool-permissions-20261001`.
+
+Aşağıdaki v114/boş havuz sonuçları **önceki yayın tarihine aittir**, güncel
+veri envanteri değildir. Sonraki yayında mevcut canlı image ve veriler
+başlangıç alınır. Veritabanı eski kopyayla geri alınmaz.
+
+---
+
 # Doğrulanmış canlı sürüm — 1 Ekim 2026
 
 Production: https://genesis-web-0152.yilbayonurcelik.workers.dev/
