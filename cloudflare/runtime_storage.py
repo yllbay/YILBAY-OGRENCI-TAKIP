@@ -27,6 +27,9 @@ _pool_revision = None
 _pool_rows = {}
 _pool_pending = False
 _locked_assets = {}
+_journal_seq = 0
+_asset_deletions = set()
+_user_requests = 0
 OPERATIONS_KEY = '_runtime/operations.db'
 _status = {'mode': 'local-r2', 'restored': False, 'last_sync': None, 'last_error': None,
            'boot_id': uuid.uuid4().hex}
@@ -60,7 +63,7 @@ def _signature(path):
 
 
 def bootstrap():
-    global _client, _bucket, _pool_etag, _pool_revision, _pool_rows, _locked_assets
+    global _client, _bucket, _pool_etag, _pool_revision, _pool_rows, _locked_assets, _journal_seq, _asset_deletions
     ROOT.mkdir(parents=True, exist_ok=True)
     if ROOT.is_symlink():
         raise RuntimeError('SQLite DATA must be on a local filesystem')
@@ -113,8 +116,19 @@ def bootstrap():
         if not key.endswith('-wal'):
             _known[key] = _digest(path)
 
+    # Read the authoritative user deletion intents before restoring any assets.
+    restore(primary)
+    con = sqlite3.connect(ROOT / 'genesis.db')
+    try:
+        _asset_deletions = pool_policy.deleted_assets(con) - _referenced_assets(con)
+    finally:
+        con.close()
+    for obj in objects:
+        if obj['Key'] in _asset_deletions:
+            _known[obj['Key']] = obj['ETag']
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        list(executor.map(restore, objects))
+        list(executor.map(restore, [obj for obj in objects if obj['Key'] != primary['Key']
+                                   and obj['Key'] not in _asset_deletions]))
     for db in ROOT.rglob('*.db'):
         # Merge any restored WAL into a self-contained, validated database.
         source = sqlite3.connect(db, timeout=10)
@@ -136,6 +150,7 @@ def bootstrap():
     try:
         _pool_revision = pool_policy.fingerprint(con)['sha256']
         _pool_rows = pool_policy.immutable_rows(con)
+        _journal_seq = pool_policy.journal_seq(con)
         keys = _referenced_assets(con)
     finally:
         con.close()
@@ -148,6 +163,7 @@ def bootstrap():
 def _referenced_assets(con):
     keys = set()
     for table, columns in [('questions', ('raw_crop_path', 'display_image_path')),
+                            ('crop_sessions', ('raw_crop_path', 'display_image_path')),
                             ('source_documents', ('stored_path',))]:
         try:
             rows = con.execute(f"select {','.join(columns)} from {table}")
@@ -185,7 +201,7 @@ def _restore_operations():
                 raise RuntimeError('Operational database failed integrity check')
             target.execute('PRAGMA foreign_keys=OFF')
             for table, sql in source.execute("select name,sql from sqlite_master where type='table'"):
-                if table.startswith('sqlite_') or pool_policy.protected_table(table):
+                if table.startswith('sqlite_') or pool_policy.protected_table(table) or table in pool_policy.JOURNAL_TABLES:
                     continue
                 q = '"' + table.replace('"', '""') + '"'
                 if not target.execute('select 1 from sqlite_master where name=?', (table,)).fetchone():
@@ -208,7 +224,9 @@ def _restore_operations():
 
 
 def _upload_database(path, key, pool_write=False):
-    global _pool_etag, _pool_revision, _pool_rows, _pool_pending, _locked_assets
+    global _pool_etag, _pool_revision, _pool_rows, _pool_pending, _locked_assets, _journal_seq, _asset_deletions
+    if path.name == 'genesis.db' and _user_requests and not pool_write:
+        return
     fd, name = tempfile.mkstemp(prefix='genesis-r2-', suffix='.db')
     os.close(fd)
     temp = Path(name)
@@ -222,10 +240,12 @@ def _upload_database(path, key, pool_write=False):
         try:
             source.backup(destination, pages=256, progress=progress, sleep=0.02)
             if path.name == 'genesis.db':
-                pool_policy.assert_preserved(_pool_rows, destination)
+                pool_policy.assert_preserved(_pool_rows, destination, after_seq=_journal_seq)
                 revision = pool_policy.fingerprint(destination)['sha256']
                 rows = pool_policy.immutable_rows(destination)
                 assets = _referenced_assets(destination)
+                seq = pool_policy.journal_seq(destination)
+                deletions = pool_policy.deleted_assets(destination) - assets
         finally:
             destination.close()
             source.close()
@@ -235,8 +255,9 @@ def _upload_database(path, key, pool_write=False):
                 _client.upload_file(str(temp), _bucket, OPERATIONS_KEY,
                                     ExtraArgs={'ContentType': 'application/vnd.sqlite3'})
                 _known[OPERATIONS_KEY] = digest
-            if revision != _pool_revision:
-                _pool_pending = _pool_pending or pool_write
+            if revision != _pool_revision or seq > _journal_seq:
+                # A committed SQLite audit entry is proof of an earlier explicit user request.
+                _pool_pending = _pool_pending or (seq > _journal_seq)
                 if not _pool_pending:
                     # Session/startup/coaching tasks cannot publish question content.
                     return
@@ -258,8 +279,10 @@ def _upload_database(path, key, pool_write=False):
                 _pool_etag = result['ETag']
                 _pool_revision = revision
                 _pool_rows = rows
+                _journal_seq = seq
+                _asset_deletions = deletions
                 _known[key] = digest
-                _locked_assets.update({asset: _known[asset] for asset in assets if asset in _known})
+                _locked_assets = {asset: _known[asset] for asset in assets if asset in _known}
                 _pool_pending = False
                 # Immutable, content-addressed recovery history; never replace older snapshots.
                 history = f'_snapshots/question-pool/{revision}.db'
@@ -307,7 +330,22 @@ def _refresh_primary_etag(key):
 
 
 def sync_once(pool_write=False):
+    global _pool_revision
     if _client is None:
+        # Disposable local mode uses the same committed user tombstones and revision
+        # contract, without touching any remote credentials or production objects.
+        if os.getenv('GENESIS_STORAGE_MODE') == 'local' and (ROOT / 'genesis.db').is_file():
+            with _lock:
+                con = sqlite3.connect(ROOT / 'genesis.db')
+                try:
+                    keys = pool_policy.deleted_assets(con) - _referenced_assets(con)
+                    _pool_revision = pool_policy.fingerprint(con)['sha256']
+                finally:
+                    con.close()
+                for key in keys:
+                    if key.startswith(('DATA/RawCrops/', 'DATA/DisplayImages/', 'DATA/Sources/')):
+                        _safe_path(key).unlink(missing_ok=True)
+                _status.update(last_sync=int(time.time()), last_error=None)
         return
     with _lock:
         for key in _locked_assets:
@@ -320,12 +358,17 @@ def sync_once(pool_write=False):
                         stream.write(chunk)
                 response['Body'].close()
         seen = set()
-        for path in sorted(ROOT.rglob('*')):
+        # Upload new assets first; publish their DB references only after assets are durable.
+        for path in sorted(ROOT.rglob('*'), key=lambda p: (p.suffix == '.db', str(p))):
             if not path.is_file() or path.is_symlink():
                 continue
             if path.name.endswith(('-wal', '-shm', '.restoring', '.recovered', '.uploading')):
                 continue
             key = 'DATA/' + path.relative_to(ROOT).as_posix()
+            if path.name == 'genesis.db' and _user_requests and not pool_write:
+                continue
+            if key in _asset_deletions:
+                continue
             seen.add(key)
             signature = _signature(path)
             if _stats.get(key) == signature and not (path.name == 'genesis.db' and (pool_write or _pool_pending)):
@@ -347,7 +390,16 @@ def sync_once(pool_write=False):
                 except FileNotFoundError:
                     seen.discard(key)
             _stats[key] = signature
-        # Local cleanup is never interpreted as permission to delete durable user data.
+        # Only durable, explicit user tombstones authorize physical deletion. This retry
+        # is safe after a restart; an arbitrary missing local file never creates an intent.
+        for key in _asset_deletions:
+            if not key.startswith(('DATA/RawCrops/', 'DATA/DisplayImages/', 'DATA/Sources/')):
+                raise RuntimeError('Invalid user asset deletion path')
+            _safe_path(key).unlink(missing_ok=True)
+            if key in _known:
+                _client.delete_object(Bucket=_bucket, Key=key)
+                _known.pop(key, None)
+                _stats.pop(key, None)
         _status.update(last_sync=int(time.time()), last_error=None)
 
 
@@ -374,6 +426,21 @@ def changed():
     _wake.set()
 
 
+def user_request_started():
+    global _user_requests
+    _user_requests += 1
+
+
+def user_request_finished():
+    global _user_requests
+    _user_requests -= 1
+    changed()
+
+
+def persistence_failed(error):
+    _status['last_error'] = type(error).__name__
+
+
 def stop():
     _stop.set()
     _wake.set()
@@ -390,7 +457,7 @@ def status():
 def pool_status():
     return {'revision': _pool_revision, 'pending': _pool_pending,
             'durable': _status['last_error'] is None, 'policy': pool_policy.MARKER,
-            'existing_content_locked': True}
+            'existing_content_locked': False, 'user_action_required': True}
 
 
 if __name__ == '__main__':

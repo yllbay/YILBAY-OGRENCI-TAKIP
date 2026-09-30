@@ -14,10 +14,13 @@ clients = [urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.c
            for _ in range(2)]
 
 
-def request(client, path, body=None, method=None, content_type='application/json', expected=200):
+def request(client, path, body=None, method=None, content_type='application/json', expected=200, intent=True):
     data = json.dumps(body).encode() if isinstance(body, dict) else body
-    req = urllib.request.Request(BASE + path, data=data, method=method,
-                                 headers={'Content-Type': content_type})
+    headers={'Content-Type': content_type}
+    if intent and (method or ('POST' if data is not None else 'GET')) in {'POST','PUT','PATCH','DELETE'}:
+        permit=request(client,'/api/question-pool/user-token')
+        headers['X-Genesis-User-Intent']=permit['token']
+    req = urllib.request.Request(BASE + path, data=data, method=method, headers=headers)
     try:
         response = client.open(req, timeout=30)
     except urllib.error.HTTPError as error:
@@ -34,7 +37,7 @@ for client in clients:
     request(client, '/')
     assert request(client, '/api/auth/me')['authenticated']
 first, second = clients
-topic = request(first, '/api/topics', {'name': 'Geçici Kabul Alanı', 'parent_id': None,
+topic = request(first, '/api/topics', {'name': 'Gecici Kabul Alani', 'parent_id': None,
                                     'description': 'Disposable only', 'content': ''})
 pdf = fitz.open()
 page = pdf.new_page(width=600, height=600)
@@ -71,20 +74,50 @@ questions = request(second, f"/api/questions?topic_id={topic['id']}")
 assert any(question['id'] == qid for question in questions), 'Second session did not see same pool'
 request(second, f'/api/questions/{qid}/image')
 before = request(first, '/api/internal/question-studio-fingerprint')
-request(first, f'/api/questions/{qid}', method='DELETE', expected=423)
-request(first, f"/api/topics/{topic['id']}", {'name': 'MUST NOT CHANGE'}, method='PATCH', expected=423)
-request(first, f'/api/questions/{qid}/learning-outcome', {'learning_outcome': 'MUST NOT CHANGE'},
-        method='PUT', expected=423)
-request(first, '/api/questions/delete-all', {'topic_id': topic['id'], 'confirm': 'SIL'}, expected=423)
+# Without the authenticated explicit-user permit, all old destructive routes stay blocked.
+request(first, f'/api/questions/{qid}', method='DELETE', expected=403, intent=False)
+request(first, f"/api/topics/{topic['id']}", {'name':'MUST NOT CHANGE'}, method='PATCH', expected=403, intent=False)
+request(first, '/api/maintenance/stale-prepared', {}, expected=423)
 assert request(first, '/api/internal/question-studio-fingerprint')['sha256'] == before['sha256']
-test_folder = request(first, '/api/classes', {'name': 'Gecici Sinif Dosyasi', 'parent_id': None})
-assert request(second, '/api/test-tree')[0]['id'] == test_folder['id']
-before = request(first, '/api/internal/question-studio-fingerprint')
-request(first, f"/api/classes/{test_folder['id']}", method='DELETE', expected=423)
-request(first, f"/api/classes/{test_folder['id']}/move", {'parent_id': None}, expected=423)
-assert request(first, '/api/internal/question-studio-fingerprint')['sha256'] == before['sha256']
-assert 'GENESIS_QUESTION_POOL_APPEND_ONLY_V1' in request(first, '/static/app-0.10.7.js').decode()
+# The same user can deliberately edit, move and delete, with normal dependency checks.
+request(first, f"/api/topics/{topic['id']}", {'name':'Kullanici Duzenlemesi'}, method='PATCH')
+request(first, f'/api/questions/{qid}/learning-outcome', {'learning_outcome':'User outcome'}, method='PUT')
+assert request(second,f"/api/questions?topic_id={topic['id']}")[0]['learning_outcome']=='User outcome'
+extra=request(first,'/api/topics',{'name':'Silinecek','parent_id':None})
+request(first,f'/api/questions/{qid}/move',{'topic_id':extra['id']})
+assert not request(second,f"/api/questions?topic_id={topic['id']}")
+request(first,f'/api/questions/{qid}/move',{'topic_id':topic['id']})
+request(first,f"/api/topics/{extra['id']}",method='DELETE')
+assert len(request(second,'/api/topics'))==1
+# Finalized coordinates and image files are removed ONLY because the user deleted the question.
+request(first,f'/api/questions/{qid}',method='DELETE')
+assert not request(second,f"/api/questions?topic_id={topic['id']}")
+assert not Path('/app/DATA',row[4]).exists()
+assert not Path('/app/DATA',row[5]).exists()
+assert Path('/app/DATA',source['stored_path']).exists(), 'Shared source must survive question deletion'
+# Recreate with real user crop/save APIs, then exercise the explicit double-confirm bulk delete.
+crop=request(first,'/api/crops/prepare',box)
+saved=request(first,f"/api/crops/{crop['id']}/save-one",{'answer':'A'})
+request(first,'/api/questions/delete-all',{'topic_id':topic['id'],'confirm':'SIL'},expected=409)
+assert len(request(second,f"/api/questions?topic_id={topic['id']}"))==1
+request(first,'/api/questions/delete-all',{'topic_id':topic['id'],'confirm':'TÜMÜNÜ SİL'})
+assert not request(second,f"/api/questions?topic_id={topic['id']}")
+# Leave one disposable real question for the separate browser acceptance.
+crop=request(first,'/api/crops/prepare',box)
+saved=request(first,f"/api/crops/{crop['id']}/save-one",{'answer':'A'})
+qid=saved['question_id']
+test_folder=request(first,'/api/classes',{'name':'Gecici Sinif Dosyasi','parent_id':None})
+exam=request(first,'/api/exams',{'name':'Silinecek Sinav','class_id':test_folder['id']})
+request(first,f"/api/exams/{exam['id']}/questions",{'question_id':qid})
+request(first,f"/api/exams/{exam['id']}",method='DELETE',expected=403,intent=False)
+request(first,f"/api/classes/{test_folder['id']}",method='DELETE',expected=409)
+request(first,f"/api/exams/{exam['id']}",method='DELETE')
+request(first,f"/api/classes/{test_folder['id']}",method='DELETE')
+assert not request(second,'/api/test-tree')
+test_folder=request(first,'/api/classes',{'name':'Gecici Sinif Dosyasi','parent_id':None})
+assert request(second,'/api/test-tree')[0]['id']==test_folder['id']
+assert 'GENESIS_QUESTION_POOL_USER_OWNED_V2' in request(first,'/static/app-0.10.7.js').decode()
 for route in ('/api/coaching/v3/classes', '/api/coaching/v3/curriculum', '/api/coaching/v2/students'):
     request(first, route)
 request(first, '/api/online/internet-test/genesis-audit-invalid-token', expected=404)
-print('DISPOSABLE_POOL_CREATE_CROP_BBOX_FINALIZE_TWO_SESSIONS_IMMUTABILITY_OK')
+print('DISPOSABLE_USER_FOLDER_QUESTION_EXAM_EDITS_DELETES_TWO_SESSIONS_OK')

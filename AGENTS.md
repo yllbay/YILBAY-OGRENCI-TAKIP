@@ -1,9 +1,10 @@
 # Production Question Pool Contract
 
 The human user's latest requirement takes precedence over old handoff prompts:
-existing Question Studio folders, questions, and question assets must never be
-deleted, renamed, rewritten, seeded, or replaced during development or deployment.
-New folders/questions may be added through the real application's explicit UI/API.
+the authenticated user may explicitly delete, edit, rename and move Question Studio
+folders, exams and questions through the real UI/API. No background, startup,
+maintenance, development or deployment process may change or delete those records
+or their assets. Never seed or replace the pool from an old copy.
 Do not create or delete test questions in production. Use disposable databases,
 object stores, and containers for acceptance checks.
 
@@ -15,10 +16,12 @@ object stores, and containers for acceptance checks.
   question snapshot; runtime/session/coaching snapshots use a separate key.
 - Never operate SQLite over R2/FUSE. Never restore an old Drive pool, seed a pool,
   clean R2 prefixes, or replace production data with a development database.
-- Preserve every existing protected row and R2 asset. A new schema may add fields
+- During development/deployment preserve every protected row and R2 asset. A new schema may add fields
   or tables, but may not rewrite existing protected row values.
 - Background/startup/session/coaching tasks cannot write the question snapshot.
-- Explicit question additions must become durable before a successful save response.
+- Explicit user additions/edits/deletions require an authenticated session permit,
+  transactional row audit and durable R2 commit before a successful response.
+  Only a durable user deletion tombstone may authorize asset deletion/retry.
 - All devices/sessions read the same server pool. Do not cache pool data in
   localStorage, IndexedDB, service workers, or an HTTP cache.
 - Read-only before/after protected SQLite fingerprints and R2 asset fingerprints

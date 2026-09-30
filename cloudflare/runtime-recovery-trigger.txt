@@ -5,3 +5,5 @@ Keep coaching curriculum writes isolated and retire deployment paths that bypass
 Fix splitter drag precedence over premium CSS pane ratios, then rerun disposable browser acceptance.
 Version updated frontend assets for existing devices and verify live edge navigation without modifying the pool.
 Activate only the accepted immutable image digest; compare production DB/assets and verify real edge UI.
+
+Enable deliberate user folder/exam/question edits and deletion with authenticated permits, transactional audit and R2 tombstones. Verify disposable UI and restart; preserve live data during release.

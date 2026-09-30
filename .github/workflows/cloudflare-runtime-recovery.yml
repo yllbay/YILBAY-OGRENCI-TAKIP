@@ -88,6 +88,7 @@ jobs:
           python3 -m pip install --quiet --disable-pip-version-check --target "$ROOT/APP/backend/_vendor" 'boto3>=1.34,<2'
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/runtime_recovery_install.py
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/question_pool_protection_install.py
+          GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/question_pool_user_permissions_install.py
           python3 -m compileall -q "$ROOT/APP/backend"
           node --check "$ROOT/APP/frontend/dist/app-0.10.7.js"
           (cd "$ROOT" && tar -cJf /tmp/recovery/snapshot/accepted-app-source.tar.xz --exclude='__pycache__' --exclude='_vendor' --exclude='DATA' --exclude='*.db*' APP)
@@ -171,10 +172,10 @@ jobs:
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
           for attempt in $(seq 1 36); do
             curl -sS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/production-health.json || true
-            if jq -e '.ok and .pool_policy=="GENESIS_QUESTION_POOL_APPEND_ONLY_V1" and .pool_revision!=null and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json >/dev/null 2>&1; then break; fi
+            if jq -e '.ok and .pool_policy=="GENESIS_QUESTION_POOL_USER_OWNED_V2" and .pool_revision!=null and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json >/dev/null 2>&1; then break; fi
             sleep 3
           done
-          jq -e '.ok and .pool_policy=="GENESIS_QUESTION_POOL_APPEND_ONLY_V1" and .pool_revision!=null and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json
+          jq -e '.ok and .pool_policy=="GENESIS_QUESTION_POOL_USER_OWNED_V2" and .pool_revision!=null and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json
           curl -fsS --max-time 15 -c /tmp/recovery/live-cookies "$URL/" -o /tmp/recovery/snapshot/production-root.html
           grep -q GENESIS_HOME_DASHBOARD_EDGE_V1 /tmp/recovery/snapshot/production-root.html
           curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/coaching" -o /tmp/recovery/snapshot/production-coaching.html

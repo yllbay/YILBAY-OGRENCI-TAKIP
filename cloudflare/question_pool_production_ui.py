@@ -24,7 +24,7 @@ with sync_playwright() as playwright:
         expect(page.locator('#topicPlus')).to_be_visible(timeout=20000)
         page.wait_for_function('typeof genesisPoolRevision!=="undefined"&&genesisPoolRevision!==null')
         script = page.locator('script[src*="app-0.10.7.js"]')
-        assert 'pool-append-only-20261001' in script.get_attribute('src')
+        assert 'pool-user-owned-20261001' in script.get_attribute('src')
         response = context.request.get(BASE + '/api/topics')
         assert response.ok and 'no-store' in response.headers.get('cache-control', '')
         splitter = page.locator('#split1')

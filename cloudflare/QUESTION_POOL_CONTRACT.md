@@ -1,25 +1,35 @@
 # GENESIS soru havuzu — kalıcı veri sözleşmesi
 
-30 Eylül 2026 tarihli son kullanıcı talimatı geçerlidir: kayıtlı soru, konu
-klasörü, test klasörü ve soru varlıkları değiştirilemez veya silinemez.
-Önceki devir belgesindeki üretimde geçici soru oluşturup silme senaryosu bu
-talimatla geçersizdir. Kabul verileri yalnızca geçici ortamda oluşturulur.
+1 Ekim 2026 tarihli son kullanıcı düzeltmesi geçerlidir: **kullanıcı** konu/test
+klasörlerini, sınavları ve soruları açık arayüz/API isteğiyle silebilir,
+düzenleyebilir ve taşıyabilir. Kullanıcının dışında başlangıç, temizlik,
+arka plan, geliştirme ve yayın işlemleri bu kayıtları veya varlıklarını
+silemez/değiştiremez. Önceki mutlak kilit talimatı bu düzeltmeyle değişmiştir.
+Üretimde kabul kaydı oluşturulmaz.
 
 ## Uygulama davranışı
 
-- Yeni klasör, kaynak ve soru eklemek açıktır. Mevcut soru/klasör düzenleme,
-  taşıma ve silme istekleri HTTP 423 ile engellenir.
-- SQLite bağlantı yetkilendirmesi ve veritabanı tetikleyicileri, HTTP katmanı
-  dışındaki eski otomatik işlemlerin de kayıtlı içeriği değiştirmesini engeller.
-- Tamamlanan kesimin koordinatları, RAW görseli, gösterim görseli ve kaynak
-  dosyası korunur. Otomatik başlangıç ve dosya temizliği kaldırılmıştır.
-- Soru kaydının başarılı yanıtı, ilgili dosyalar ve güvenli DB snapshot'ı R2'ye
-  aktarılınca gönderilir. Aktarım tamamlanmazsa başarı yanıtı verilmez.
-- Yerel dosyanın kaybolması R2 nesnesini silmez. Korumalı dosya R2'den geri okunur.
-- Soru havuzu tarayıcıya ait bir DB veya yerel önbellek üzerinden sunulmaz.
-  API yanıtları `no-store` kullanır; sunucu revizyonu beş saniyede bir ve
-  pencereye dönüldüğünde kontrol edilir. Açık kesim/düzenleme formu kesilmeden,
-  kapatıldıktan sonraki kontrolde güncel havuz gösterilir.
+- Silme, düzenleme ve taşıma düğmeleri açıktır; silme onayı korunur. Dolu
+  klasör ve kullanılan soru için mevcut bağımlılık kontrolleri uygulanır.
+- Havuz yazma isteği mevcut oturuma bağlı kullanıcı izin belirtecini taşır.
+  Oturumsuz, belirteçsiz ve çapraz site yazmalar engellenir. Otomatik temizlik
+  uç noktası kapalı kalır. Belirteç oturum anahtarı veya havuz verisi içermez.
+- SQL yetkilendirmesi/tetikleyiciler HTTP dışındaki otomatik yazmaları
+  engeller. Kullanıcı değişiminin önce/sonra satırı **aynı SQLite işlemi**
+  içinde eklemeli denetim kaydına yazılır; rollback kaydı da geri alır.
+- Snapshot kontrolü mevcut merkezi verilerden yeni snapshot'a bütün
+  değişimleri bu kayıt zinciriyle karşılaştırır. Kayıtsız değişim yayınlanamaz.
+- Kullanıcı soru silince bağlı kesim ve görsel silme niyeti kaydedilir.
+  Merkezi DB aktarılmadan görsel silinmez. Paylaşılan kaynak ve hâlâ kullanılan
+  görsel korunur. Geçici yerel dosya kaybı silme izni sayılmaz.
+- Başarılı yanıt ilgili DB/dosya R2 işlemleri tamamlanınca verilir. Aktarım
+  hatası başarıya çevrilmez. Başlangıç yalnızca güncel merkezi DB'yi okur;
+  kaydedilmiş kullanıcı silme niyetlerini tamamlar. Silinen sorular ve eski
+  Drive havuzu geri yüklenmez. Snapshot geçmişi otomatik yüklenmez.
+- Tüm cihazlar aynı sunucu havuzunu okur. Yanıtlar `no-store`; revizyon beş
+  saniyede bir ve pencereye dönüldüğünde kontrol edilir. Açık düzenleme formu
+  kesilmeden, kapatıldıktan sonra güncel havuz gösterilir. Frontend sürümü
+  eski tarayıcı önbelleklerinin kilitli düğmeleri göstermesini önler.
 
 ## Depolama
 
@@ -45,7 +55,7 @@ Salt okunur envanter ve uygulamanın diğer paket yayınları etkilenmez.
 
 1. Exact canlı Worker ve image alınır; mevcut DB ve R2 varlıkları salt okunur
    olarak karşılaştırma için kaydedilir.
-2. `[pool-candidate]` ile geçici SQLite/R2, gerçek kaynak-kesim-kayıt API akışı
+2. `[pool-candidate]` ile geçici SQLite/R2, kullanıcı düzenleme/silme, otomatik yazma engeli, R2 yeniden başlangıç ve gerçek kaynak-kesim-kayıt API akışı
    ve iki bağımsız Chromium profili kontrol edilir. Üretim havuzuna test
    kaydı eklenmez. Yerel UI kontrolünde yalnızca revizyon taşıma yanıtı
    gerçek geçici DB fingerprint'iyle benzetilir; R2/restart akışı ayrıca

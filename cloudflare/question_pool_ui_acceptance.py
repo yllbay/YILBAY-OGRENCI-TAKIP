@@ -51,8 +51,8 @@ with sync_playwright() as playwright:
         assert first.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
         first.locator('[data-topic]').click()
         expect(first.locator('[data-question]')).to_have_count(1)
-        assert first.locator('[data-question]').get_attribute('draggable') == 'false'
-        expect(first.locator('[data-qdelete]')).to_have_count(0)
+        assert first.locator('[data-question]').get_attribute('draggable') == 'true'
+        expect(first.locator('[data-qdelete]')).to_have_count(1)
         first.wait_for_function('document.querySelector("[data-question] img")?.complete&&document.querySelector("[data-question] img").naturalWidth>0')
 
         # UI-created folder becomes visible in another independent profile without reload.
@@ -64,10 +64,27 @@ with sync_playwright() as playwright:
         expect(second.locator('[data-topic]')).to_have_count(2, timeout=20000)
         first.locator('[data-topic]').first.click(button='right')
         for action in ('update', 'delete', 'toroot'):
-            expect(first.locator(f'[data-act="{action}"]')).to_be_disabled()
+            expect(first.locator(f'[data-act="{action}"]')).to_be_enabled()
         first.screenshot(path=str(OUT / 'pool-ui-desktop.png'), full_page=True)
+        # Delete the UI-created empty folder; the second profile must converge too.
+        first.locator('[data-topic]').filter(has_text='ARAYUZ KABUL').click(button='right')
+        first.once('dialog',lambda dialog:dialog.accept())
+        first.locator('[data-act="delete"]').click()
+        expect(first.locator('[data-topic]')).to_have_count(1,timeout=20000)
+        expect(second.locator('[data-topic]')).to_have_count(1,timeout=20000)
+        for page in (first,second):
+            page.locator('[data-topic]').click()
+            expect(page.locator('[data-question]')).to_have_count(1)
+        first.once('dialog',lambda dialog:dialog.accept())
+        first.locator('[data-qdelete]').click()
+        expect(first.locator('[data-question]')).to_have_count(0,timeout=20000)
+        expect(second.locator('[data-question]')).to_have_count(0,timeout=20000)
         first.locator('[data-class]').first.click(button='right')
-        expect(first.locator('[data-exam-act="deleteclass"]')).to_be_disabled()
+        expect(first.locator('[data-exam-act="deleteclass"]')).to_be_enabled()
+        first.once('dialog',lambda dialog:dialog.accept())
+        first.locator('[data-exam-act="deleteclass"]').click()
+        expect(first.locator('[data-class]')).to_have_count(0,timeout=20000)
+        expect(second.locator('[data-class]')).to_have_count(0,timeout=20000)
         first.set_viewport_size({'width': 800, 'height': 900})
         first.reload(wait_until='domcontentloaded')
         expect(first.locator('#workspace')).to_be_visible()
@@ -78,10 +95,10 @@ with sync_playwright() as playwright:
         (OUT / 'pool-ui-acceptance.json').write_text(json.dumps({
             'ok': True, 'splitter_width': box['width'], 'splitter_drag_delta': new_width-old_width,
             'second_profile_refreshed': True, 'no_horizontal_workspace_scroll': True,
-            'existing_mutations_disabled': True, 'page_errors': errors,
+            'user_deletes_enabled': True, 'second_profile_observed_deletes': True, 'page_errors': errors,
             'revision_transport': 'mocked-local-only; fingerprint from real disposable DB'
         }, indent=2))
-        print('DISPOSABLE_BROWSER_SPLITTER_IMMUTABILITY_TWO_PROFILES_REFRESH_OK')
+        print('DISPOSABLE_BROWSER_USER_DELETES_SPLITTER_TWO_PROFILES_REFRESH_OK')
     finally:
         for index, page in enumerate(pages):
             page.screenshot(path=str(OUT / f'pool-ui-final-{index}.png'), full_page=True)
