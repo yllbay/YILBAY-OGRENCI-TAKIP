@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   inspect:
@@ -67,6 +67,44 @@ jobs:
           con.close()
           print('READ_ONLY_AUTHORITATIVE_POOL_BASELINE_OK')
           PY
+      - name: Save exact dated runtime checkpoint without deployment
+        if: contains(github.event.head_commit.message, '[pool-checkpoint]')
+        env:
+          GENESIS_RESTORE_KEY: ${{ secrets.GENESIS_RESTORE_20261001_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
+          curl -fsS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/checkpoint-health.json
+          jq -e '.ok and .restored and .last_error==null and .pool_policy=="GENESIS_QUESTION_POOL_USER_OWNED_V2" and .pool_pending==false' /tmp/recovery/snapshot/checkpoint-health.json
+          python3 cloudflare/restore_point.py capture
+          python3 cloudflare/question_pool_audit_access.py download /tmp/recovery/pool-checkpoint-after.db
+          curl -fsS --max-time 15 "$URL/api/internal/question-studio-integrity-v4" -o /tmp/recovery/snapshot/checkpoint-assets-after.json
+          PYTHONPATH=cloudflare python3 - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          from question_pool_policy import fingerprint
+          p=Path('/tmp/recovery/snapshot')
+          with sqlite3.connect('/tmp/recovery/pool-checkpoint-after.db') as db:
+              assert fingerprint(db)['sha256']==json.loads((p/'pool-fingerprint-before.json').read_text())['sha256'], 'Pool changed during checkpoint'
+          before=json.loads((p/'pool-assets-before.json').read_text())
+          after=json.loads((p/'checkpoint-assets-after.json').read_text())
+          assert before['question_assets_fingerprint']==after['question_assets_fingerprint'], 'R2 assets changed during checkpoint'
+          (p/'checkpoint-release-notes.md').write_text('GENESIS 01.10.2026: exact v115 runtime + Worker. Encrypted complete OCI image and source archive. Restore preserves the CURRENT question database and R2 assets; no data rollback.\n')
+          print('CHECKPOINT_PROTECTED_DATA_UNCHANGED_NO_DEPLOYMENT')
+          PY
+          gh release create genesis-restore-2026-10-01 \
+            /tmp/recovery/snapshot/genesis-restore-2026-10-01.tar.enc \
+            /tmp/recovery/snapshot/restore-point.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+            --title 'GENESIS geri yükleme noktası — 01.10.2026 (v115)' \
+            --notes-file /tmp/recovery/snapshot/checkpoint-release-notes.md
+      - name: Load checksum-verified saved runtime checkpoint
+        if: contains(github.event.head_commit.message, '[pool-restore]')
+        env:
+          GENESIS_RESTORE_KEY: ${{ secrets.GENESIS_RESTORE_20261001_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 cloudflare/restore_point.py load
       - name: Build and check recovered application
         if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-candidate]')
         run: |
@@ -126,7 +164,7 @@ jobs:
           docker push "$IMAGE"
           printf '%s\n' "$IMAGE" > /tmp/recovery/snapshot/verified-candidate-image.txt
       - name: Check browser UI on the verified image with disposable data
-        if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-candidate]') || contains(github.event.head_commit.message, '[recover]')
+        if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-candidate]') || contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-restore]')
         run: |
           set -euo pipefail
           IMAGE="${RECOVERY_IMAGE:-$(cat cloudflare/runtime-activation-image.txt)}"
@@ -144,7 +182,7 @@ jobs:
           python3 -m playwright install --with-deps chromium
           python3 cloudflare/question_pool_ui_acceptance.py
       - name: Prepare preserved Worker and deploy recovery
-        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]')
+        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-restore]')
         run: |
           set -euo pipefail
           if [ -z "${RECOVERY_IMAGE:-}" ]; then
@@ -166,7 +204,7 @@ jobs:
           echo 'RECOVERY_DEPLOYED=1' >> "$GITHUB_ENV"
           npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
       - name: Verify production and persistence
-        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]')
+        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-restore]')
         run: |
           set -euo pipefail
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
@@ -230,6 +268,7 @@ jobs:
         run: |
           set -euo pipefail
           export RECOVERY_IMAGE="$RECOVERY_BASE_IMAGE"
+          unset RECOVERY_WORKER_PACKAGE
           python3 cloudflare/runtime_recovery_prepare.py
           cd /tmp/recovery/runtime
           npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate

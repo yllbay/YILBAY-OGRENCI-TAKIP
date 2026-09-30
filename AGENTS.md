@@ -32,3 +32,9 @@ object stores, and containers for acceptance checks.
 
 Use `.github/workflows/cloudflare-runtime-recovery.yml` for protected releases.
 Legacy release scripts must preserve this policy and pass the same integrity gate.
+
+The dated code restore point `genesis-restore-2026-10-01` retains exact v115
+image/Worker in an encrypted permanent GitHub Release. Follow
+`cloudflare/restore-points/README.md` and `restore_checkpoint.py`; restoration
+must run through the protected workflow and preserve the CURRENT pool.
+Never load the checkpoint date's database or remove the release/key/archive.

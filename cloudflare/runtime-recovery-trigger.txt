@@ -10,3 +10,4 @@ Enable deliberate user folder/exam/question edits and deletion with authenticate
 Verify draft finalization before protecting saved images; exercise exam deletion in the real UI.
 Check corrected context-menu sequence on the exact built user-permissions image; no production activation.
 Activate the exact user-owned pool image verified by run 36782971033. Preserve current live protected rows and R2 assets; never roll back the database.
+Save 2026-10-01 exact live v115 image and Worker as encrypted permanent checkpoint; do not deploy or replace current data.

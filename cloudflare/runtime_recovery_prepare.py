@@ -2,26 +2,18 @@ from pathlib import Path
 import json
 import os
 import subprocess
+from restore_point import worker_module
 
 snapshot = Path('/tmp/recovery/snapshot')
 runtime = Path('/tmp/recovery/runtime')
 runtime.mkdir(parents=True, exist_ok=True)
-raw = (snapshot/'worker.bin').read_bytes()
-boundary = raw.splitlines()[0].strip()
-modules = []
-for part in raw.split(boundary)[1:]:
-    part = part.strip(b'\r\n-')
-    sep = b'\r\n\r\n' if b'\r\n\r\n' in part else b'\n\n'
-    if sep not in part:
-        continue
-    payload = part.split(sep, 1)[1].rstrip(b'\r\n')
-    if b'GenesisContainer' in payload:
-        modules.append(payload)
-assert len(modules) == 1
-(runtime/'index.js').write_bytes(modules[0])
-if b'GENESIS_LOCAL_SQLITE_R2_V1' not in modules[0]:
+saved_package = os.environ.get('RECOVERY_WORKER_PACKAGE')
+source = Path(saved_package) if saved_package else snapshot
+module = worker_module((source/'worker.bin').read_bytes())
+(runtime/'index.js').write_bytes(module)
+if not saved_package and b'GENESIS_LOCAL_SQLITE_R2_V1' not in module:
     subprocess.run(['python3', 'cloudflare/runtime_recovery_worker.py', str(runtime/'index.js')], check=True)
-settings = json.loads((snapshot/'settings.json').read_text())['result']
+settings = json.loads((source/'settings.json').read_text(encoding='utf-8'))['result']
 before = json.loads((snapshot/'container.json').read_text())
 cfg = {
     'name': 'genesis-web-0152', 'main': 'index.js', 'no_bundle': True, 'keep_vars': True,
@@ -36,4 +28,4 @@ cfg = {
     'observability': {'enabled': True},
 }
 (runtime/'wrangler.jsonc').write_text(json.dumps(cfg, indent=2)+'\n')
-print('Prepared recovery wrapper; preserved live application and edge overlays')
+print('Prepared exact saved Worker' if saved_package else 'Prepared recovery wrapper; preserved live application and edge overlays')

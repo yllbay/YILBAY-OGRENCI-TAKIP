@@ -70,6 +70,14 @@ Bu korumalar uygulama ve yayın süreçlerinin yanlışlıkla veri değiştirmes
 engeller. Hesap sahibinin Cloudflare'de doğrudan nesne silmesi veya koddan
 korumaları bilerek kaldırması için mutlak bir engel değildir.
 
+## Tarihli program geri yükleme noktası
+
+`genesis-restore-2026-10-01`: tam v115 image ve exact Worker şifreli kalıcı
+pakette saklanır. `cloudflare/restore-points/README.md` geri yükleme yoludur.
+`[pool-checkpoint]` yalnızca kayıt alır; `[pool-restore]` aynı korumalı yayın
+kapılarından geçer. Her geri yükleme, işlem anındaki **güncel** DB/R2 parmak
+izlerini korur. Tarihli kanıt DB'si geri yüklenmez; anahtar/arşiv silinmez.
+
 ## Devir belgesindeki güncellenmiş bulgular
 
 Eski `c4dea10...` image ve container lifecycle hata açıklaması güncel değildir.
