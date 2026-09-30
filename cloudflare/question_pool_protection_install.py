@@ -242,6 +242,14 @@ document.addEventListener('visibilitychange',genesisRefreshCentralPool);
 genesisRefreshCentralPool();
 '''
 frontend.write_text(js, encoding='utf-8')
+# Existing devices must receive the new protection/refresh code after deployment.
+index_path = root / 'APP/frontend/dist/index.html'
+index = index_path.read_text(encoding='utf-8')
+index = index.replace('/static/app-0.10.7.js?v=20260923-home-1',
+                      '/static/app-0.10.7.js?v=pool-append-only-20261001')
+index = index.replace('/static/genesis-premium-0.11.7.css?v=0117',
+                      '/static/genesis-premium-0.11.7.css?v=pool-append-only-20261001')
+index_path.write_text(index, encoding='utf-8')
 css_path = root / 'APP/frontend/dist/genesis-premium-0.11.7.css'
 with css_path.open('a', encoding='utf-8') as stream:
     stream.write('''

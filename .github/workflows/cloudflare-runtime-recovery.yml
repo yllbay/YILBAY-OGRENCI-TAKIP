@@ -124,7 +124,7 @@ jobs:
           docker push "$IMAGE"
           printf '%s\n' "$IMAGE" > /tmp/recovery/snapshot/verified-candidate-image.txt
       - name: Check browser UI on the verified image with disposable data
-        if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-candidate]')
+        if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-candidate]') || contains(github.event.head_commit.message, '[recover]')
         run: |
           set -euo pipefail
           IMAGE="${RECOVERY_IMAGE:-$(cat cloudflare/runtime-activation-image.txt)}"
@@ -220,6 +220,7 @@ jobs:
           jq -r '.sha256' /tmp/recovery/snapshot/pool-second-session.json > /tmp/recovery/second-hash
           jq -r '.sha256' /tmp/recovery/snapshot/api-internal-question-studio-fingerprint.json > /tmp/recovery/first-hash
           cmp /tmp/recovery/first-hash /tmp/recovery/second-hash
+          python3 cloudflare/question_pool_production_ui.py
           npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/container-after.json
           echo 'GENESIS_RUNTIME_RECOVERY_VERIFIED'
       - name: Automatic rollback after failed production gate
