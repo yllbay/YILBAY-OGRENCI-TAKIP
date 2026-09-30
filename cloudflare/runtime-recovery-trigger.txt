@@ -2,3 +2,4 @@ Build append-only Question Studio protection and verify it on disposable data; p
 Use a short-lived authenticated read-only R2 binding for the fingerprint baseline; no extra account permissions required.
 Validate the verified image in Chromium using disposable data and two independent profiles before activation.
 Keep coaching curriculum writes isolated and retire deployment paths that bypass the pool integrity gate.
+Fix splitter drag precedence over premium CSS pane ratios, then rerun disposable browser acceptance.

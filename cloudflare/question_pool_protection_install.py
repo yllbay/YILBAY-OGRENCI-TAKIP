@@ -208,6 +208,14 @@ for action in ('deleteclass', 'toroot'):
     js = js.replace(f'<button data-exam-act="{action}"',
                     f'<button disabled title="Kayıtlı klasör korunuyor" data-exam-act="{action}"')
 js = js.replace('data-boutcome="${q.id}"', 'disabled title="Kayıtlı soru korunuyor" data-boutcome="${q.id}"')
+# Premium CSS defines pane width/flex with !important; ordinary inline styles
+# never moved the splitter. User drag must take precedence over initial ratios.
+old_split = '''    l.style.width=nl+"px";l.style.flex="none";
+    r.style.width=nr+"px";r.style.flex="none";'''
+new_split = '''    l.style.setProperty("width",nl+"px","important");l.style.setProperty("flex","none","important");
+    r.style.setProperty("width",nr+"px","important");r.style.setProperty("flex","none","important");'''
+assert old_split in js
+js = js.replace(old_split, new_split, 1)
 js += '''
 
 // GENESIS_QUESTION_POOL_APPEND_ONLY_V1: server revision, never a browser-owned pool.

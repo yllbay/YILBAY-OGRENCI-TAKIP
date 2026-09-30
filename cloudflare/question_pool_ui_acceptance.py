@@ -53,7 +53,7 @@ with sync_playwright() as playwright:
         expect(first.locator('[data-question]')).to_have_count(1)
         assert first.locator('[data-question]').get_attribute('draggable') == 'false'
         expect(first.locator('[data-qdelete]')).to_have_count(0)
-        assert first.locator('[data-question] img').first.evaluate('(e)=>e.complete&&e.naturalWidth>0')
+        first.wait_for_function('document.querySelector("[data-question] img")?.complete&&document.querySelector("[data-question] img").naturalWidth>0')
 
         # UI-created folder becomes visible in another independent profile without reload.
         first.locator('#topicPlus').click()
