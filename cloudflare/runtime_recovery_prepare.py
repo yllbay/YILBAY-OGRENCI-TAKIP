@@ -19,7 +19,8 @@ for part in raw.split(boundary)[1:]:
         modules.append(payload)
 assert len(modules) == 1
 (runtime/'index.js').write_bytes(modules[0])
-subprocess.run(['python3', 'cloudflare/runtime_recovery_worker.py', str(runtime/'index.js')], check=True)
+if b'GENESIS_LOCAL_SQLITE_R2_V1' not in modules[0]:
+    subprocess.run(['python3', 'cloudflare/runtime_recovery_worker.py', str(runtime/'index.js')], check=True)
 settings = json.loads((snapshot/'settings.json').read_text())['result']
 before = json.loads((snapshot/'container.json').read_text())
 cfg = {

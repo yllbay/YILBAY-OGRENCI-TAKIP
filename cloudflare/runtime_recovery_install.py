@@ -1,12 +1,15 @@
 from pathlib import Path
 import os
 import re
+import sys
 
 root = Path(os.getenv('GENESIS_CONTAINER_ROOT', '/app'))
 backend = root / 'APP/backend'
 app_path = backend / 'app.py'
 src = app_path.read_text(encoding='utf-8')
-assert 'GENESIS_LOCAL_SQLITE_R2_V1' not in src
+if 'GENESIS_LOCAL_SQLITE_R2_V1' in src:
+    print('Local SQLite runtime hooks already installed')
+    sys.exit(0)
 src = src.replace('import fitz', 'from starlette.concurrency import run_in_threadpool\nimport runtime_storage\nimport fitz', 1)
 src = src.replace('    path=request.url.path\n', '''    path=request.url.path
     # Health probes must never acquire SQLite locks or create sessions.

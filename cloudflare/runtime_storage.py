@@ -9,6 +9,7 @@ import sqlite3
 import tempfile
 import threading
 import time
+import uuid
 
 ROOT = Path(os.environ.get('GENESIS_DATA_DIR', '/app/DATA'))
 MARKER = 'GENESIS_LOCAL_SQLITE_R2_V1'
@@ -20,7 +21,8 @@ _lock = threading.Lock()
 _stop = threading.Event()
 _wake = threading.Event()
 _thread = None
-_status = {'mode': 'local-r2', 'restored': False, 'last_sync': None, 'last_error': None}
+_status = {'mode': 'local-r2', 'restored': False, 'last_sync': None, 'last_error': None,
+           'boot_id': uuid.uuid4().hex}
 
 
 def _safe_path(key):

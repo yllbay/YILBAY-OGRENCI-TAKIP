@@ -102,6 +102,13 @@ jobs:
         if: contains(github.event.head_commit.message, '[recover]')
         run: |
           set -euo pipefail
+          URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
+          curl -fsS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/health-before-restart.json || true
+          if jq -e '.runtime=="GENESIS_LOCAL_SQLITE_R2_V1"' /tmp/recovery/snapshot/health-before-restart.json >/dev/null 2>&1; then
+            for route in api/topics api/test-tree api/coaching/v3/classes api/coaching/v2/students; do
+              curl -fsS --max-time 15 "$URL/$route" -o "/tmp/recovery/snapshot/before-$(echo "$route" | tr / -).json"
+            done
+          fi
           python3 cloudflare/runtime_recovery_prepare.py
           node --check /tmp/recovery/runtime/index.js
           cd /tmp/recovery/runtime
@@ -124,6 +131,22 @@ jobs:
           for route in api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v2/students; do
             curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/$route" -o "/tmp/recovery/snapshot/$(echo "$route" | tr / -).json"
           done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          snapshot=Path('/tmp/recovery/snapshot')
+          for before in snapshot.glob('before-api-*.json'):
+              after=snapshot/before.name.removeprefix('before-')
+              assert json.loads(before.read_text())==json.loads(after.read_text()), before.name
+          health=json.loads((snapshot/'production-health.json').read_text())
+          assert health.get('boot_id'), 'New container boot identifier missing'
+          before=snapshot/'health-before-restart.json'
+          if before.is_file():
+              try: old=json.loads(before.read_text())
+              except ValueError: old={}
+              assert old.get('boot_id')!=health['boot_id'], 'Container did not restart'
+          print('R2_RESTORE_AFTER_CONTAINER_REPLACEMENT_OK')
+          PY
           curl -fsS --max-time 15 "$URL/api/internal/question-studio-integrity-v4" -o /tmp/recovery/snapshot/r2-after.json
           jq -e '.genesis_db.exists and .genesis_db.size>0' /tmp/recovery/snapshot/r2-after.json
           npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/container-after.json

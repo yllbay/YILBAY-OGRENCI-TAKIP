@@ -1,1 +1,1 @@
-Deploy local SQLite and R2 persistence with flattened image, 2026-09-30 revision 2.
+Verify R2 recovery across a new container boot, 2026-09-30 revision 3.
