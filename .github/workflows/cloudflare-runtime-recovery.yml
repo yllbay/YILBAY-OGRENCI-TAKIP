@@ -122,10 +122,10 @@ jobs:
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
           for attempt in $(seq 1 36); do
             curl -sS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/production-health.json || true
-            if jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1" and .restored and .last_sync!=null and .last_error==null' /tmp/recovery/snapshot/production-health.json >/dev/null 2>&1; then break; fi
+            if jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1" and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json >/dev/null 2>&1; then break; fi
             sleep 3
           done
-          jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1" and .restored and .last_sync!=null and .last_error==null' /tmp/recovery/snapshot/production-health.json
+          jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1" and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json
           curl -fsS --max-time 15 -c /tmp/recovery/live-cookies "$URL/" -o /tmp/recovery/snapshot/production-root.html
           grep -q GENESIS_HOME_DASHBOARD_EDGE_V1 /tmp/recovery/snapshot/production-root.html
           for route in api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v2/students; do

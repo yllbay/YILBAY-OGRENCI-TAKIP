@@ -1,1 +1,1 @@
-Verify R2 recovery across a new container boot, 2026-09-30 revision 3.
+Verify restored records only after the new container boot is ready, 2026-09-30 revision 4.
