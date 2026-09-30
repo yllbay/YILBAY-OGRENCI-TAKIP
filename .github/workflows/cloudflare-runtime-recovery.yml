@@ -15,7 +15,7 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -50,8 +50,24 @@ jobs:
           cd /tmp/recovery/bundle/rootfs/app
           tar -cJf /tmp/recovery/snapshot/app-source.tar.xz --exclude='__pycache__' --exclude='_vendor' --exclude='DATA' --exclude='*.db*' APP
           echo 'PRODUCTION_SOURCE_SNAPSHOT_OK'
+      - name: Read-only Question Studio baseline
+        run: |
+          set -euo pipefail
+          URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
+          curl -fsS --max-time 15 "$URL/api/internal/question-studio-integrity-v4" -o /tmp/recovery/snapshot/pool-assets-before.json
+          npx --yes wrangler@4 r2 object get genesis-web-0152-data/DATA/genesis.db --remote --file /tmp/recovery/pool-before.db
+          PYTHONPATH=cloudflare python3 - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          from question_pool_policy import fingerprint
+          con=sqlite3.connect('/tmp/recovery/pool-before.db')
+          assert con.execute('PRAGMA quick_check').fetchone()[0]=='ok'
+          Path('/tmp/recovery/snapshot/pool-fingerprint-before.json').write_text(json.dumps(fingerprint(con)))
+          con.close()
+          print('READ_ONLY_AUTHORITATIVE_POOL_BASELINE_OK')
+          PY
       - name: Build and check recovered application
-        if: contains(github.event.head_commit.message, '[recover]')
+        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-candidate]')
         run: |
           set -euo pipefail
           ACCOUNT="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
@@ -66,8 +82,13 @@ jobs:
           echo "RECOVERY_IMAGE=$IMAGE" >> "$GITHUB_ENV"
           ROOT=/tmp/recovery/bundle/rootfs/app
           cp cloudflare/runtime_storage.py "$ROOT/APP/backend/runtime_storage.py"
+          cp cloudflare/question_pool_policy.py "$ROOT/APP/backend/question_pool_policy.py"
+          python3 cloudflare/question_pool_storage_acceptance.py
           python3 -m pip install --quiet --disable-pip-version-check --target "$ROOT/APP/backend/_vendor" 'boto3>=1.34,<2'
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/runtime_recovery_install.py
+          GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/question_pool_protection_install.py
+          python3 -m compileall -q "$ROOT/APP/backend"
+          node --check "$ROOT/APP/frontend/dist/app-0.10.7.js"
           python3 - <<'PY'
           from pathlib import Path
           import shutil
@@ -95,16 +116,18 @@ jobs:
           curl -fsS --max-time 10 -b /tmp/recovery/cookies http://127.0.0.1:18000/api/test-tree -o /tmp/recovery/canary-tests.json
           jq -e 'type=="array"' /tmp/recovery/canary-tests.json
           docker exec genesis-recovery-canary python -c 'import sqlite3; from pathlib import Path; p=Path("/app/DATA/genesis.db"); assert p.is_file() and not p.parent.is_symlink(); c=sqlite3.connect(p); assert c.execute("PRAGMA quick_check").fetchone()[0]=="ok"; print("LOCAL_SQLITE_INTEGRITY_OK")'
+          docker cp cloudflare/question_pool_acceptance.py genesis-recovery-canary:/tmp/question_pool_acceptance.py
+          docker exec genesis-recovery-canary python /tmp/question_pool_acceptance.py
           docker logs genesis-recovery-canary > /tmp/recovery/snapshot/canary.log 2>&1
           docker stop genesis-recovery-canary
           docker push "$IMAGE"
+          printf '%s\n' "$IMAGE" > /tmp/recovery/snapshot/verified-candidate-image.txt
       - name: Prepare preserved Worker and deploy recovery
-        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[activate]')
+        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]')
         run: |
           set -euo pipefail
           if [ -z "${RECOVERY_IMAGE:-}" ]; then
-            ACCOUNT="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
-            RECOVERY_IMAGE="registry.cloudflare.com/$ACCOUNT/genesis-web-0152-genesiscontainer:runtime-recovery-437814558861"
+            RECOVERY_IMAGE="$(cat cloudflare/runtime-activation-image.txt)"
             export RECOVERY_IMAGE
           fi
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
@@ -119,22 +142,24 @@ jobs:
           node --check /tmp/recovery/runtime/index.js
           cd /tmp/recovery/runtime
           npx --yes wrangler@4 deploy --dry-run --outdir /tmp/recovery/worker-build --keep-vars --containers-rollout=none
-          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
           echo 'RECOVERY_DEPLOYED=1' >> "$GITHUB_ENV"
+          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
       - name: Verify production and persistence
-        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[activate]')
+        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]')
         run: |
           set -euo pipefail
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
           for attempt in $(seq 1 36); do
             curl -sS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/production-health.json || true
-            if jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1" and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json >/dev/null 2>&1; then break; fi
+            if jq -e '.ok and .pool_policy=="GENESIS_QUESTION_POOL_APPEND_ONLY_V1" and .pool_revision!=null and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json >/dev/null 2>&1; then break; fi
             sleep 3
           done
-          jq -e '.ok and .runtime=="GENESIS_LOCAL_SQLITE_R2_V1" and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json
+          jq -e '.ok and .pool_policy=="GENESIS_QUESTION_POOL_APPEND_ONLY_V1" and .pool_revision!=null and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json
           curl -fsS --max-time 15 -c /tmp/recovery/live-cookies "$URL/" -o /tmp/recovery/snapshot/production-root.html
           grep -q GENESIS_HOME_DASHBOARD_EDGE_V1 /tmp/recovery/snapshot/production-root.html
-          for route in api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v2/students; do
+          curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/coaching" -o /tmp/recovery/snapshot/production-coaching.html
+          grep -q GENESIS_COACHING_DASHBOARD_EDGE_V4 /tmp/recovery/snapshot/production-coaching.html
+          for route in api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v3/curriculum api/coaching/v2/students api/internal/question-studio-fingerprint api/question-pool/revision; do
             curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/$route" -o "/tmp/recovery/snapshot/$(echo "$route" | tr / -).json"
           done
           python3 - <<'PY'
@@ -155,8 +180,46 @@ jobs:
           PY
           curl -fsS --max-time 15 "$URL/api/internal/question-studio-integrity-v4" -o /tmp/recovery/snapshot/r2-after.json
           jq -e '.genesis_db.exists and .genesis_db.size>0' /tmp/recovery/snapshot/r2-after.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/recovery/snapshot')
+          before=json.loads((p/'pool-fingerprint-before.json').read_text())
+          after=json.loads((p/'api-internal-question-studio-fingerprint.json').read_text())
+          assert before['sha256']==after['sha256'], 'Protected SQLite content changed'
+          old=json.loads((p/'pool-assets-before.json').read_text())
+          new=json.loads((p/'r2-after.json').read_text())
+          assert old['question_assets_fingerprint']==new['question_assets_fingerprint'], 'Protected R2 assets changed'
+          auth=json.loads((p/'api-auth-me.json').read_text())
+          assert auth['authenticated'] and auth['role']=='ADMIN'
+          print('PROTECTED_SQLITE_AND_R2_FINGERPRINTS_UNCHANGED')
+          PY
+          CODE=$(curl -sS --max-time 15 -b /tmp/recovery/live-cookies "$URL/api/online/internet-test/genesis-audit-invalid-token" -o /tmp/recovery/invalid.json -w '%{http_code}')
+          test "$CODE" = 404
+          curl -fsS --max-time 15 -c /tmp/recovery/second-cookies "$URL/" -o /tmp/recovery/second-root.html
+          curl -fsS --max-time 15 -b /tmp/recovery/second-cookies "$URL/api/internal/question-studio-fingerprint" -o /tmp/recovery/snapshot/pool-second-session.json
+          jq -r '.sha256' /tmp/recovery/snapshot/pool-second-session.json > /tmp/recovery/second-hash
+          jq -r '.sha256' /tmp/recovery/snapshot/api-internal-question-studio-fingerprint.json > /tmp/recovery/first-hash
+          cmp /tmp/recovery/first-hash /tmp/recovery/second-hash
           npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/container-after.json
           echo 'GENESIS_RUNTIME_RECOVERY_VERIFIED'
+      - name: Automatic rollback after failed production gate
+        if: failure() && env.RECOVERY_DEPLOYED == '1'
+        run: |
+          set -euo pipefail
+          export RECOVERY_IMAGE="$RECOVERY_BASE_IMAGE"
+          python3 cloudflare/runtime_recovery_prepare.py
+          cd /tmp/recovery/runtime
+          npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
+          URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
+          for attempt in $(seq 1 40); do
+            if curl -fsS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/rollback-health.json; then break; fi
+            sleep 3
+          done
+          curl -fsS --max-time 15 "$URL/" -o /tmp/recovery/snapshot/rollback-root.html
+          npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/rollback-container.json
+          jq -e --arg previous "$RECOVERY_BASE_IMAGE" '.configuration.image==$previous and (.health.errors|length)==0 and .health.instances.failed==0' /tmp/recovery/snapshot/rollback-container.json
+          echo 'PREVIOUS_WORKING_IMAGE_AND_WORKER_ROLLBACK_VERIFIED'
       - name: Capture failed runtime diagnostics
         if: failure() && env.RECOVERY_DEPLOYED == '1'
         run: |

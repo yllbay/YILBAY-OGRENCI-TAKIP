@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import uuid
+import question_pool_policy as pool_policy
 
 ROOT = Path(os.environ.get('GENESIS_DATA_DIR', '/app/DATA'))
 MARKER = 'GENESIS_LOCAL_SQLITE_R2_V1'
@@ -21,6 +22,12 @@ _lock = threading.Lock()
 _stop = threading.Event()
 _wake = threading.Event()
 _thread = None
+_pool_etag = None
+_pool_revision = None
+_pool_rows = {}
+_pool_pending = False
+_locked_assets = {}
+OPERATIONS_KEY = '_runtime/operations.db'
 _status = {'mode': 'local-r2', 'restored': False, 'last_sync': None, 'last_error': None,
            'boot_id': uuid.uuid4().hex}
 
@@ -53,7 +60,7 @@ def _signature(path):
 
 
 def bootstrap():
-    global _client, _bucket
+    global _client, _bucket, _pool_etag, _pool_revision, _pool_rows, _locked_assets
     ROOT.mkdir(parents=True, exist_ok=True)
     if ROOT.is_symlink():
         raise RuntimeError('SQLite DATA must be on a local filesystem')
@@ -75,6 +82,10 @@ def bootstrap():
     objects = []
     for page in _client.get_paginator('list_objects_v2').paginate(Bucket=_bucket, Prefix='DATA/'):
         objects.extend(page.get('Contents', []))
+    primary = next((obj for obj in objects if obj['Key'] == 'DATA/genesis.db'), None)
+    if primary is None or not primary.get('Size'):
+        raise RuntimeError('Authoritative question database missing; refusing empty pool')
+    _pool_etag = primary['ETag']
 
     def restore(obj):
         key = obj['Key']
@@ -121,11 +132,83 @@ def bootstrap():
         for suffix in ('-wal', '-shm'):
             Path(str(db) + suffix).unlink(missing_ok=True)
         os.replace(temp, db)
+    con = sqlite3.connect(ROOT / 'genesis.db')
+    try:
+        _pool_revision = pool_policy.fingerprint(con)['sha256']
+        _pool_rows = pool_policy.immutable_rows(con)
+        keys = _referenced_assets(con)
+    finally:
+        con.close()
+    _locked_assets = {key: digest for key, digest in _known.items() if key in keys}
+    _restore_operations()
     _status['restored'] = True
     print(MARKER, 'restored', len(objects), 'R2 objects', flush=True)
 
 
-def _upload_database(path, key):
+def _referenced_assets(con):
+    keys = set()
+    for table, columns in [('questions', ('raw_crop_path', 'display_image_path')),
+                            ('source_documents', ('stored_path',))]:
+        try:
+            rows = con.execute(f"select {','.join(columns)} from {table}")
+            for row in rows:
+                for value in row:
+                    value = str(value or '')
+                    if value and not Path(value).is_absolute():
+                        keys.add('DATA/' + value.replace('\\', '/'))
+        except sqlite3.OperationalError:
+            pass
+    return keys
+
+
+def _restore_operations():
+    """Restore sessions/coaching separately; never import their Question Studio rows."""
+    try:
+        response = _client.get_object(Bucket=_bucket, Key=OPERATIONS_KEY)
+    except Exception as error:
+        code = getattr(error, 'response', {}).get('Error', {}).get('Code')
+        if code in {'404', 'NoSuchKey', 'NotFound'}:
+            return
+        raise
+    fd, name = tempfile.mkstemp(prefix='genesis-operations-', suffix='.db')
+    os.close(fd)
+    temp = Path(name)
+    try:
+        with temp.open('wb') as stream:
+            for chunk in response['Body'].iter_chunks(1024 * 1024):
+                stream.write(chunk)
+        response['Body'].close()
+        source = sqlite3.connect(temp)
+        target = sqlite3.connect(ROOT / 'genesis.db')
+        try:
+            if source.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
+                raise RuntimeError('Operational database failed integrity check')
+            target.execute('PRAGMA foreign_keys=OFF')
+            for table, sql in source.execute("select name,sql from sqlite_master where type='table'"):
+                if table.startswith('sqlite_') or pool_policy.protected_table(table):
+                    continue
+                q = '"' + table.replace('"', '""') + '"'
+                if not target.execute('select 1 from sqlite_master where name=?', (table,)).fetchone():
+                    target.execute(sql)
+                source_columns = [r[1] for r in source.execute(f'pragma table_info({q})')]
+                target_columns = {r[1] for r in target.execute(f'pragma table_info({q})')}
+                columns = [name for name in source_columns if name in target_columns]
+                cols = ','.join('"' + name.replace('"', '""') + '"' for name in columns)
+                target.execute(f'DELETE FROM {q}')
+                target.executemany(f'INSERT INTO {q}({cols}) VALUES({",".join("?" for _ in columns)})',
+                                   source.execute(f'SELECT {cols} FROM {q}'))
+            pool_policy.assert_preserved(_pool_rows, target)
+            assert pool_policy.fingerprint(target)['sha256'] == _pool_revision
+            target.commit()
+        finally:
+            source.close()
+            target.close()
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def _upload_database(path, key, pool_write=False):
+    global _pool_etag, _pool_revision, _pool_rows, _pool_pending, _locked_assets
     fd, name = tempfile.mkstemp(prefix='genesis-r2-', suffix='.db')
     os.close(fd)
     temp = Path(name)
@@ -138,10 +221,57 @@ def _upload_database(path, key):
         destination = sqlite3.connect(temp)
         try:
             source.backup(destination, pages=256, progress=progress, sleep=0.02)
+            if path.name == 'genesis.db':
+                pool_policy.assert_preserved(_pool_rows, destination)
+                revision = pool_policy.fingerprint(destination)['sha256']
+                rows = pool_policy.immutable_rows(destination)
+                assets = _referenced_assets(destination)
         finally:
             destination.close()
             source.close()
         digest = _digest(temp)
+        if path.name == 'genesis.db':
+            if _known.get(OPERATIONS_KEY) != digest:
+                _client.upload_file(str(temp), _bucket, OPERATIONS_KEY,
+                                    ExtraArgs={'ContentType': 'application/vnd.sqlite3'})
+                _known[OPERATIONS_KEY] = digest
+            if revision != _pool_revision:
+                _pool_pending = _pool_pending or pool_write
+                if not _pool_pending:
+                    # Session/startup/coaching tasks cannot publish question content.
+                    return
+                for attempt in range(2):
+                    try:
+                        with temp.open('rb') as stream:
+                            result = _client.put_object(Bucket=_bucket, Key=key, Body=stream,
+                                ContentType='application/vnd.sqlite3', IfMatch=_pool_etag,
+                                Metadata={'pool-revision': revision, 'policy': pool_policy.MARKER})
+                        break
+                    except Exception as error:
+                        code = getattr(error, 'response', {}).get('Error', {}).get('Code')
+                        if code in {'412', 'PreconditionFailed', 'ConditionalRequestConflict'}:
+                            if attempt == 0:
+                                _refresh_primary_etag(key)
+                                continue
+                            raise RuntimeError('CENTRAL_POOL_CONFLICT: stale snapshot refused') from error
+                        raise
+                _pool_etag = result['ETag']
+                _pool_revision = revision
+                _pool_rows = rows
+                _known[key] = digest
+                _locked_assets.update({asset: _known[asset] for asset in assets if asset in _known})
+                _pool_pending = False
+                # Immutable, content-addressed recovery history; never replace older snapshots.
+                history = f'_snapshots/question-pool/{revision}.db'
+                try:
+                    with temp.open('rb') as stream:
+                        _client.put_object(Bucket=_bucket, Key=history, Body=stream,
+                                           ContentType='application/vnd.sqlite3', IfNoneMatch='*')
+                except Exception as error:
+                    code = getattr(error, 'response', {}).get('Error', {}).get('Code')
+                    if code not in {'412', 'PreconditionFailed'}:
+                        print(MARKER, 'history_copy_pending', type(error).__name__, flush=True)
+            return
         if _known.get(key) != digest:
             _client.upload_file(str(temp), _bucket, key,
                                 ExtraArgs={'ContentType': 'application/vnd.sqlite3'})
@@ -153,10 +283,42 @@ def _upload_database(path, key):
         temp.unlink(missing_ok=True)
 
 
-def sync_once():
+def _refresh_primary_etag(key):
+    """An old container may write sessions during rollout; accept only identical pool rows."""
+    global _pool_etag
+    response = _client.get_object(Bucket=_bucket, Key=key)
+    fd, name = tempfile.mkstemp(prefix='genesis-central-check-', suffix='.db')
+    os.close(fd)
+    temp = Path(name)
+    try:
+        with temp.open('wb') as stream:
+            for chunk in response['Body'].iter_chunks(1024 * 1024):
+                stream.write(chunk)
+        response['Body'].close()
+        con = sqlite3.connect(temp)
+        try:
+            if pool_policy.fingerprint(con)['sha256'] != _pool_revision:
+                raise RuntimeError('CENTRAL_POOL_CONFLICT: another question revision exists')
+        finally:
+            con.close()
+        _pool_etag = response['ETag']
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def sync_once(pool_write=False):
     if _client is None:
         return
     with _lock:
+        for key in _locked_assets:
+            path = _safe_path(key)
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                response = _client.get_object(Bucket=_bucket, Key=key)
+                with path.open('wb') as stream:
+                    for chunk in response['Body'].iter_chunks(1024 * 1024):
+                        stream.write(chunk)
+                response['Body'].close()
         seen = set()
         for path in sorted(ROOT.rglob('*')):
             if not path.is_file() or path.is_symlink():
@@ -166,23 +328,26 @@ def sync_once():
             key = 'DATA/' + path.relative_to(ROOT).as_posix()
             seen.add(key)
             signature = _signature(path)
-            if _stats.get(key) == signature:
+            if _stats.get(key) == signature and not (path.name == 'genesis.db' and (pool_write or _pool_pending)):
                 continue
             if path.suffix == '.db':
-                _upload_database(path, key)
+                _upload_database(path, key, pool_write=pool_write)
             else:
                 try:
                     digest = _digest(path)
                     if _known.get(key) != digest:
-                        _client.upload_file(str(path), _bucket, key)
+                        if key in _locked_assets:
+                            raise RuntimeError('QUESTION_POOL_IMMUTABLE: protected asset rewrite refused')
+                        if key.startswith(('DATA/DisplayImages/', 'DATA/RawCrops/', 'DATA/Sources/')) and key not in _known:
+                            with path.open('rb') as stream:
+                                _client.put_object(Bucket=_bucket, Key=key, Body=stream, IfNoneMatch='*')
+                        else:
+                            _client.upload_file(str(path), _bucket, key)
                         _known[key] = digest
                 except FileNotFoundError:
                     seen.discard(key)
             _stats[key] = signature
-        for key in set(_known) - seen:
-            _client.delete_object(Bucket=_bucket, Key=key)
-            del _known[key]
-            _stats.pop(key, None)
+        # Local cleanup is never interpreted as permission to delete durable user data.
         _status.update(last_sync=int(time.time()), last_error=None)
 
 
@@ -218,7 +383,14 @@ def stop():
 
 
 def status():
-    return dict(_status)
+    return {**_status, 'pool_policy': pool_policy.MARKER, 'pool_revision': _pool_revision,
+            'pool_pending': _pool_pending}
+
+
+def pool_status():
+    return {'revision': _pool_revision, 'pending': _pool_pending,
+            'durable': _status['last_error'] is None, 'policy': pool_policy.MARKER,
+            'existing_content_locked': True}
 
 
 if __name__ == '__main__':

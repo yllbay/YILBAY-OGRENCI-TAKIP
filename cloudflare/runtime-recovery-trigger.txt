@@ -1,1 +1,1 @@
-Activate verified runtime-recovery-437814558861 and compare authenticated records after restart.
+Build append-only Question Studio protection and verify it on disposable data; production remains untouched until acceptance passes.
