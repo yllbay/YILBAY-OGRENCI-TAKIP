@@ -123,6 +123,24 @@ jobs:
           docker stop genesis-recovery-canary
           docker push "$IMAGE"
           printf '%s\n' "$IMAGE" > /tmp/recovery/snapshot/verified-candidate-image.txt
+      - name: Check browser UI on the verified image with disposable data
+        if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]')
+        run: |
+          set -euo pipefail
+          IMAGE="$(cat cloudflare/runtime-activation-image.txt)"
+          printf '%s' "$REG_PASS" | docker login registry.cloudflare.com --username "$REG_USER" --password-stdin
+          docker pull "$IMAGE"
+          docker run -d --name genesis-pool-ui -e GENESIS_STORAGE_MODE=local -p 127.0.0.1:18000:8000 "$IMAGE"
+          trap 'docker logs genesis-pool-ui > /tmp/recovery/snapshot/pool-ui-container.log 2>&1; docker stop genesis-pool-ui' EXIT
+          for attempt in $(seq 1 45); do
+            if curl -fsS --max-time 2 http://127.0.0.1:18000/_health >/dev/null; then break; fi
+            sleep 1
+          done
+          docker cp cloudflare/question_pool_acceptance.py genesis-pool-ui:/tmp/question_pool_acceptance.py
+          docker exec genesis-pool-ui python /tmp/question_pool_acceptance.py
+          python3 -m pip install --quiet --disable-pip-version-check playwright
+          python3 -m playwright install --with-deps chromium
+          python3 cloudflare/question_pool_ui_acceptance.py
       - name: Prepare preserved Worker and deploy recovery
         if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]')
         run: |
