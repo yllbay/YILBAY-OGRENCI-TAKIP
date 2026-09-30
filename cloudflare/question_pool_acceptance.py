@@ -77,6 +77,12 @@ request(first, f'/api/questions/{qid}/learning-outcome', {'learning_outcome': 'M
         method='PUT', expected=423)
 request(first, '/api/questions/delete-all', {'topic_id': topic['id'], 'confirm': 'SIL'}, expected=423)
 assert request(first, '/api/internal/question-studio-fingerprint')['sha256'] == before['sha256']
+test_folder = request(first, '/api/classes', {'name': 'Gecici Sinif Dosyasi', 'parent_id': None})
+assert request(second, '/api/test-tree')[0]['id'] == test_folder['id']
+before = request(first, '/api/internal/question-studio-fingerprint')
+request(first, f"/api/classes/{test_folder['id']}", method='DELETE', expected=423)
+request(first, f"/api/classes/{test_folder['id']}/move", {'parent_id': None}, expected=423)
+assert request(first, '/api/internal/question-studio-fingerprint')['sha256'] == before['sha256']
 assert 'GENESIS_QUESTION_POOL_APPEND_ONLY_V1' in request(first, '/static/app-0.10.7.js').decode()
 for route in ('/api/coaching/v3/classes', '/api/coaching/v3/curriculum', '/api/coaching/v2/students'):
     request(first, route)

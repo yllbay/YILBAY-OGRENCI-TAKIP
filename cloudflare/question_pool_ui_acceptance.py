@@ -66,6 +66,8 @@ with sync_playwright() as playwright:
         for action in ('update', 'delete', 'toroot'):
             expect(first.locator(f'[data-act="{action}"]')).to_be_disabled()
         first.screenshot(path=str(OUT / 'pool-ui-desktop.png'), full_page=True)
+        first.locator('[data-class]').first.click(button='right')
+        expect(first.locator('[data-exam-act="deleteclass"]')).to_be_disabled()
         first.set_viewport_size({'width': 800, 'height': 900})
         first.reload(wait_until='domcontentloaded')
         expect(first.locator('#workspace')).to_be_visible()

@@ -4,3 +4,4 @@ Validate the verified image in Chromium using disposable data and two independen
 Keep coaching curriculum writes isolated and retire deployment paths that bypass the pool integrity gate.
 Fix splitter drag precedence over premium CSS pane ratios, then rerun disposable browser acceptance.
 Version updated frontend assets for existing devices and verify live edge navigation without modifying the pool.
+Activate only the accepted immutable image digest; compare production DB/assets and verify real edge UI.
