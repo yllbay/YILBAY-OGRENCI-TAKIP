@@ -90,6 +90,7 @@ jobs:
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/question_pool_protection_install.py
           python3 -m compileall -q "$ROOT/APP/backend"
           node --check "$ROOT/APP/frontend/dist/app-0.10.7.js"
+          (cd "$ROOT" && tar -cJf /tmp/recovery/snapshot/accepted-app-source.tar.xz --exclude='__pycache__' --exclude='_vendor' --exclude='DATA' --exclude='*.db*' APP)
           python3 - <<'PY'
           from pathlib import Path
           import shutil
