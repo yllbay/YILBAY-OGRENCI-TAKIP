@@ -1,1 +1,1 @@
-Deploy local SQLite and R2 persistence recovery, 2026-09-30.
+Deploy local SQLite and R2 persistence with flattened image, 2026-09-30 revision 2.

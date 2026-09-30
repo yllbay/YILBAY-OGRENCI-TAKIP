@@ -64,7 +64,25 @@ jobs:
           printf '%s' "$REG_PASS" | docker login registry.cloudflare.com --username "$REG_USER" --password-stdin
           IMAGE="registry.cloudflare.com/$ACCOUNT/genesis-web-0152-genesiscontainer:runtime-recovery-${GITHUB_SHA::12}"
           echo "RECOVERY_IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          docker build --build-arg "BASE_IMAGE=$RECOVERY_BASE_IMAGE" -f cloudflare/Dockerfile.runtime-recovery -t "$IMAGE" cloudflare
+          ROOT=/tmp/recovery/bundle/rootfs/app
+          cp cloudflare/runtime_storage.py "$ROOT/APP/backend/runtime_storage.py"
+          python3 -m pip install --quiet --disable-pip-version-check --target "$ROOT/APP/backend/_vendor" 'boto3>=1.34,<2'
+          GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/runtime_recovery_install.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          root=Path('/tmp/recovery/bundle/rootfs/app')
+          data=root/'DATA'
+          if data.is_symlink():
+              data.unlink()
+          elif data.exists():
+              assert data.resolve().is_relative_to(root.resolve())
+              shutil.rmtree(data)
+          data.mkdir()
+          PY
+          ln -s /tmp/recovery /tmp/genesis-v3
+          ln -s oci /tmp/recovery/current-oci
+          NEW_IMAGE="$IMAGE" python3 cloudflare/rebuild_v3_image.py
           docker run -d --name genesis-recovery-canary -e GENESIS_STORAGE_MODE=local -p 127.0.0.1:18000:8000 "$IMAGE"
           for attempt in $(seq 1 45); do
             if curl -fsS --max-time 2 http://127.0.0.1:18000/_health -o /tmp/recovery/snapshot/canary-health.json; then break; fi

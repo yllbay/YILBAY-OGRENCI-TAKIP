@@ -104,12 +104,18 @@ def bootstrap():
         list(executor.map(restore, objects))
     for db in ROOT.rglob('*.db'):
         # Merge any restored WAL into a self-contained, validated database.
-        with sqlite3.connect(db, timeout=10) as source:
+        source = sqlite3.connect(db, timeout=10)
+        try:
             if source.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                 raise RuntimeError('Stored database failed SQLite integrity check')
             temp = db.with_name(db.name + '.recovered')
-            with sqlite3.connect(temp) as destination:
+            destination = sqlite3.connect(temp)
+            try:
                 source.backup(destination)
+            finally:
+                destination.close()
+        finally:
+            source.close()
         for suffix in ('-wal', '-shm'):
             Path(str(db) + suffix).unlink(missing_ok=True)
         os.replace(temp, db)
@@ -126,8 +132,13 @@ def _upload_database(path, key):
         def progress(status, remaining, total):
             if time.monotonic() > deadline:
                 raise TimeoutError('SQLite snapshot exceeded its time limit')
-        with sqlite3.connect(path, timeout=5) as source, sqlite3.connect(temp) as destination:
+        source = sqlite3.connect(path, timeout=5)
+        destination = sqlite3.connect(temp)
+        try:
             source.backup(destination, pages=256, progress=progress, sleep=0.02)
+        finally:
+            destination.close()
+            source.close()
         digest = _digest(temp)
         if _known.get(key) != digest:
             _client.upload_file(str(temp), _bucket, key,
