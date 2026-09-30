@@ -1,1 +1,1 @@
-Verify restored records only after the new container boot is ready, 2026-09-30 revision 4.
+Activate verified runtime-recovery-437814558861 and compare authenticated records after restart.
