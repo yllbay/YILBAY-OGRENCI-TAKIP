@@ -1,0 +1,55 @@
+name: GENESIS Runtime Recovery
+
+on:
+  push:
+    branches: [cloudflare-release]
+    paths: [cloudflare/runtime-recovery-trigger.txt]
+
+concurrency:
+  group: genesis-web-0152-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Snapshot deployed source
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/recovery/snapshot
+          ACCOUNT="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          curl -fsS "$API/workers/scripts/genesis-web-0152/content/v2" -H "$AUTH" -o /tmp/recovery/snapshot/worker.bin
+          curl -fsS "$API/workers/scripts/genesis-web-0152/settings" -H "$AUTH" -o /tmp/recovery/snapshot/settings.json
+          curl -fsS "$API/workers/scripts/genesis-web-0152/deployments" -H "$AUTH" -o /tmp/recovery/snapshot/deployments.json
+          npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/container.json
+          IMAGE="$(jq -r '.configuration.image' /tmp/recovery/snapshot/container.json)"
+          curl -fsS -X POST "$API/containers/registries/registry.cloudflare.com/credentials" -H "$AUTH" -H 'Content-Type: application/json' --data '{"expiration_minutes":20,"permissions":["pull"]}' -o /tmp/recovery/registry.json
+          REG_USER="$(jq -r '.result.username' /tmp/recovery/registry.json)"
+          REG_PASS="$(jq -r '.result.password' /tmp/recovery/registry.json)"
+          echo "::add-mask::$REG_USER"
+          echo "::add-mask::$REG_PASS"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo umoci
+          skopeo inspect --config --creds "$REG_USER:$REG_PASS" "docker://$IMAGE" > /tmp/recovery/snapshot/image-config.json
+          skopeo copy --src-creds "$REG_USER:$REG_PASS" "docker://$IMAGE" oci:/tmp/recovery/oci:live
+          umoci unpack --rootless --image /tmp/recovery/oci:live /tmp/recovery/bundle
+          cp /tmp/recovery/bundle/rootfs/app/start-container.sh /tmp/recovery/snapshot/
+          cd /tmp/recovery/bundle/rootfs/app
+          tar -cJf /tmp/recovery/snapshot/app-source.tar.xz --exclude='__pycache__' --exclude='_vendor' --exclude='DATA' --exclude='*.db*' APP
+          echo 'PRODUCTION_SOURCE_SNAPSHOT_OK'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-recovery-source
+          path: /tmp/recovery/snapshot
+          retention-days: 3
