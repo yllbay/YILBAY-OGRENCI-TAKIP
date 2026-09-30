@@ -1,0 +1,33 @@
+name: GENESIS Runtime Observe
+on:
+  push:
+    branches: [cloudflare-release]
+    paths: [cloudflare/runtime-observe-trigger.txt]
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Read runtime logs and deployment
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/observe
+          python3 cloudflare/runtime_observe.py
+          npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/observe/container.json
+          timeout 40s npx --yes wrangler@4 tail genesis-web-0152 --format json > /tmp/observe/tail.jsonl 2>&1 &
+          TAIL_PID=$!
+          curl -sS --max-time 25 https://genesis-web-0152.yilbayonurcelik.workers.dev/_health > /tmp/observe/health.json || true
+          wait "$TAIL_PID" || true
+          python3 cloudflare/runtime_observe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-observe
+          path: /tmp/observe
+          retention-days: 3
