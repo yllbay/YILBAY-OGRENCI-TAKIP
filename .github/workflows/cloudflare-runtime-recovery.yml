@@ -51,11 +51,17 @@ jobs:
           tar -cJf /tmp/recovery/snapshot/app-source.tar.xz --exclude='__pycache__' --exclude='_vendor' --exclude='DATA' --exclude='*.db*' APP
           echo 'PRODUCTION_SOURCE_SNAPSHOT_OK'
       - name: Read-only Question Studio baseline
+        env:
+          RESTORE_REQUEST: ${{ contains(github.event.head_commit.message, '[pool-restore]') }}
         run: |
           set -euo pipefail
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
-          curl -fsS --max-time 15 "$URL/api/internal/question-studio-integrity-v4" -o /tmp/recovery/snapshot/pool-assets-before.json
           python3 cloudflare/question_pool_audit_access.py create
+          if [ "$RESTORE_REQUEST" = "true" ]; then
+            python3 cloudflare/question_pool_audit_access.py download-assets /tmp/recovery/snapshot/pool-assets-before.json
+          else
+            curl -fsS --max-time 15 "$URL/api/internal/question-studio-integrity-v4" -o /tmp/recovery/snapshot/pool-assets-before.json
+          fi
           python3 cloudflare/question_pool_audit_access.py download /tmp/recovery/pool-before.db
           PYTHONPATH=cloudflare python3 - <<'PY'
           import json,sqlite3

@@ -1,5 +1,15 @@
 # Güncel üretim — kullanıcıya ait soru havuzu
 
+**01.10.2026 geri yükleme noktası kaydedildi:**
+[`genesis-restore-2026-10-01`](https://github.com/yllbay/YILBAY-OGRENCI-TAKIP/releases/tag/genesis-restore-2026-10-01).
+Exact v115 image/Worker ve tam bağımlılık katmanları şifreli 280.064.032 baytlık
+pakette saklandı. [Kayıt işi 36784793384](https://github.com/yllbay/YILBAY-OGRENCI-TAKIP/actions/runs/36784793384)
+başarılı; üretim kodu yeniden yayınlanmadı, DB/R2 parmak izleri değişmedi.
+Manifest: `cloudflare/restore-points/2026-10-01.json`.
+Geri yükleme: `python cloudflare/restore_checkpoint.py 2026-10-01 --apply`;
+yalnızca korumalı akış, **güncel** soru havuzu korunur. Ayrıntılar
+`cloudflare/restore-points/README.md`. Tarihli DB rollback yapılmaz.
+
 **1 Ekim 2026: v115 başarıyla yayınlandı.** Son kullanıcı talimatı mevcut
 klasör/sınav/soruların kullanıcı tarafından silinmesine ve düzenlenmesine
 izin verir; otomatik, başlangıç, temizlik, geliştirme ve yayın yazmaları

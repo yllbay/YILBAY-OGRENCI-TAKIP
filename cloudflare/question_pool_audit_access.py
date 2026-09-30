@@ -30,13 +30,7 @@ if mode == 'create':
     print('::add-mask::' + token, flush=True)
     (ROOT / 'name').write_text(name)
     (ROOT / 'token').write_text(token)
-    source = '''export default {async fetch(request,env){
-      if(request.headers.get('Authorization')!=='Bearer '+env.AUDIT_TOKEN)return new Response('Not found',{status:404});
-      if(new URL(request.url).pathname!=='/db')return new Response('Not found',{status:404});
-      const object=await env.DATA.get('DATA/genesis.db');
-      if(!object)return new Response('Missing authoritative DB',{status:404});
-      return new Response(object.body,{headers:{'Content-Type':'application/vnd.sqlite3','Cache-Control':'no-store'}});
-    }};'''
+    source = Path(__file__).with_name('question_pool_audit_worker.mjs').read_text(encoding='utf-8')
     (ROOT / 'index.mjs').write_text(source)
     metadata = {'main_module': 'index.mjs', 'compatibility_date': '2026-09-10',
                 'bindings': [{'name': 'DATA', 'type': 'r2_bucket', 'bucket_name': 'genesis-web-0152-data'},
@@ -49,11 +43,13 @@ if mode == 'create':
          ('-H', 'Content-Type: application/json', '--data', '{"enabled":true}'))
     subdomain = call('GET', '/workers/subdomain')['subdomain']
     (ROOT / 'url').write_text(f'https://{name}.{subdomain}.workers.dev/db')
-elif mode == 'download':
+elif mode in ('download', 'download-assets'):
     target = Path(sys.argv[2])
     token = (ROOT / 'token').read_text()
     print('::add-mask::' + token, flush=True)
     url = (ROOT / 'url').read_text()
+    if mode == 'download-assets':
+        url = url.removesuffix('/db') + '/assets'
     for attempt in range(20):
         result = subprocess.run(['curl', '-fsS', '--max-time', '15', url,
                                  '-H', 'Authorization: Bearer ' + token, '-o', str(target)],

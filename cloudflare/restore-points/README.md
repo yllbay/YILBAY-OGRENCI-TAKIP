@@ -39,6 +39,8 @@ Actions sonucu ve üretim gate'i tamamlanmalıdır.
 Akış sırayla:
 
 1. O anda çalışan image/Worker ve **güncel** DB/R2 parmak izlerini alır.
+   Geri yüklemede parmak izleri uygulamadan bağımsız, geçici salt okunur R2
+   denetçisiyle alınır; uygulama sayfasının açılması ön koşul değildir.
 2. Commit'teki manifest'e göre şifreli arşiv ve bütün dosya hash'lerini kontrol eder.
 3. Tam kaydedilmiş image ve Worker'ı seçer. Registry kaybında exact OCI kopyasını yükler.
 4. Geçici container/verilerde mevcut kullanıcı arayüzü/API kabulünü çalıştırır.

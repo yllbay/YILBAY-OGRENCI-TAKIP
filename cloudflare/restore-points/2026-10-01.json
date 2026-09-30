@@ -1,0 +1,39 @@
+{
+  "format": "GENESIS_RUNTIME_RESTORE_POINT_V1",
+  "date": "2026-10-01",
+  "tag": "genesis-restore-2026-10-01",
+  "created_at": "2026-09-30T22:19:29.289207+00:00",
+  "image": "registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:520be26036aede569368ed985a114e4220b022baf7bf7a8679579e0fd4d822d6",
+  "container_version": 115,
+  "worker_version": "c742c1dd-e3f4-4256-a2bd-331ff29a7126",
+  "image_source_commit": "1bdfb203ad03b640b33cfb9668f7f89202e5e5da",
+  "verified_release_run": 36783274326,
+  "capture_run": 36784793384,
+  "checkpoint_commit": "234ac07d1e8663fb89d1574a32679f4790d68f4a",
+  "release_url": "https://github.com/yllbay/YILBAY-OGRENCI-TAKIP/releases/tag/genesis-restore-2026-10-01",
+  "archive_asset": "genesis-restore-2026-10-01.tar.enc",
+  "encryption": "AES-256-CBC/PBKDF2-SHA256/200000",
+  "key_secret": "GENESIS_RESTORE_20261001_KEY",
+  "data_policy": "PRESERVE_CURRENT_DB_AND_R2_ASSETS_NO_DATA_ROLLBACK",
+  "baseline_db_sha256": "175073c407d5d5b691c2a95f211cfe2ff170d8798dea4cf1d31d098b6eedd7b8",
+  "baseline_assets": {
+    "sha256": "6882b92182ac93435ab1b0146f9f62f5229c0a3ab6d4fc439b1f030c6a1cc66d",
+    "count": 14
+  },
+  "files_sha256": {
+    "settings.json": "805f4ead9b0f975c6271f9aec659d71a4b1a4958314a2af0fbf6d9e9766a58b8",
+    "pool-assets-before.json": "795116900a06e075ca1ec3b14631198f9684fe5e3bf2b365f81084d5b14b5985",
+    "start-container.sh": "c0ab691bd762c6e847c2066cad197a9f8761378a73407503579672962c26367f",
+    "worker.bin": "9e471dbd45781e2f176f60f9c1373efbe8ee39d86f277e1094e150244c611715",
+    "container.json": "88800ac9089eb9c79b8adacd8ecd5d50911d610cca54197e5c18df18846b9b3d",
+    "deployments.json": "c8ef813483d9019851ea8c9a754f98b27a3892a30c38103c04fdce9dfbaf8ea2",
+    "image-config.json": "26729d148735bf4a54728450aad5c05d76c7e45caf509b322afec2de073b1d2c",
+    "container.oci.tar": "81a8fe2318cf7aee1443c15d76ee93c1cf0d733488f2f954c4d9cad0f70c5742",
+    "checkpoint-health.json": "1510175bd9fb3427b20d54090dc7823b36b625a2643ecc48ec68d55aa287bc80",
+    "app-source.tar.xz": "a84a03131ae7f5dae7512f97b1e4b13a469898631478a615d36867c69881dbd4",
+    "worker-index.js": "3418fcb854ffef1567e425b99093e1d8db1b44bc5cd8e7ed2a6b512b271ed6c8",
+    "pool-fingerprint-before.json": "d607214a4f0a99011ba628762134a743e9b386de20c2ebe3be037b565fdd2e21"
+  },
+  "archive_sha256": "8aa490c394d666a9392803f8653de6c919e3f396aaa97120d760a53c50df8309",
+  "archive_size": 280064032
+}
