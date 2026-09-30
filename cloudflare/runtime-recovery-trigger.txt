@@ -7,3 +7,4 @@ Version updated frontend assets for existing devices and verify live edge naviga
 Activate only the accepted immutable image digest; compare production DB/assets and verify real edge UI.
 
 Enable deliberate user folder/exam/question edits and deletion with authenticated permits, transactional audit and R2 tombstones. Verify disposable UI and restart; preserve live data during release.
+Verify draft finalization before protecting saved images; exercise exam deletion in the real UI.

@@ -120,7 +120,7 @@ def bootstrap():
     restore(primary)
     con = sqlite3.connect(ROOT / 'genesis.db')
     try:
-        _asset_deletions = pool_policy.deleted_assets(con) - _referenced_assets(con)
+        _asset_deletions = pool_policy.deleted_assets(con) - _referenced_assets(con, include_drafts=True)
     finally:
         con.close()
     for obj in objects:
@@ -160,13 +160,14 @@ def bootstrap():
     print(MARKER, 'restored', len(objects), 'R2 objects', flush=True)
 
 
-def _referenced_assets(con):
+def _referenced_assets(con, include_drafts=False):
     keys = set()
     for table, columns in [('questions', ('raw_crop_path', 'display_image_path')),
                             ('crop_sessions', ('raw_crop_path', 'display_image_path')),
                             ('source_documents', ('stored_path',))]:
         try:
-            rows = con.execute(f"select {','.join(columns)} from {table}")
+            condition = " where status='FINALIZED'" if table == 'crop_sessions' and not include_drafts else ''
+            rows = con.execute(f"select {','.join(columns)} from {table}{condition}")
             for row in rows:
                 for value in row:
                     value = str(value or '')
@@ -245,7 +246,7 @@ def _upload_database(path, key, pool_write=False):
                 rows = pool_policy.immutable_rows(destination)
                 assets = _referenced_assets(destination)
                 seq = pool_policy.journal_seq(destination)
-                deletions = pool_policy.deleted_assets(destination) - assets
+                deletions = pool_policy.deleted_assets(destination) - _referenced_assets(destination, include_drafts=True)
         finally:
             destination.close()
             source.close()
@@ -338,7 +339,7 @@ def sync_once(pool_write=False):
             with _lock:
                 con = sqlite3.connect(ROOT / 'genesis.db')
                 try:
-                    keys = pool_policy.deleted_assets(con) - _referenced_assets(con)
+                    keys = pool_policy.deleted_assets(con) - _referenced_assets(con, include_drafts=True)
                     _pool_revision = pool_policy.fingerprint(con)['sha256']
                 finally:
                     con.close()

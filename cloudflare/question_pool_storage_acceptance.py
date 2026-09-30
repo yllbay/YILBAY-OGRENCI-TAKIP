@@ -159,6 +159,39 @@ with tempfile.TemporaryDirectory() as folder:
         con.commit()
         con.close()
         storage.sync_once(pool_write=True)
+    # Prepared display images can be processed by the user's finalize action;
+    # once finalized, their bytes are protected against background rewrites.
+    with user('POST /api/crops/prepare'):
+        (storage.ROOT / 'RawCrops/draft.png').write_bytes(b'DRAFT-RAW')
+        (storage.ROOT / 'DisplayImages/draft.png').write_bytes(b'DRAFT-DISPLAY')
+        con = sqlite3.connect(storage.ROOT / 'genesis.db')
+        con.execute("INSERT INTO crop_sessions VALUES(2,'PREPARED',.25,'RawCrops/draft.png','DisplayImages/draft.png')")
+        con.commit(); con.close()
+        storage.sync_once(pool_write=True)
+    with user('POST /api/crops/2/save-one'):
+        (storage.ROOT / 'DisplayImages/draft.png').write_bytes(b'USER-FINAL-DISPLAY')
+        con = sqlite3.connect(storage.ROOT / 'genesis.db')
+        con.execute("UPDATE crop_sessions SET status='FINALIZED' WHERE id=2")
+        con.execute("INSERT INTO questions VALUES(2,1,'RawCrops/draft.png','DisplayImages/draft.png')")
+        con.commit(); con.close()
+        storage.sync_once(pool_write=True)
+    assert store.objects['DATA/DisplayImages/draft.png'] == b'USER-FINAL-DISPLAY'
+    (storage.ROOT / 'DisplayImages/draft.png').write_bytes(b'UNAUTHORIZED-AUTO-REWRITE')
+    try:
+        storage.sync_once()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError('Saved image rewrite was published')
+    assert store.objects['DATA/DisplayImages/draft.png'] == b'USER-FINAL-DISPLAY'
+    (storage.ROOT / 'DisplayImages/draft.png').write_bytes(b'USER-FINAL-DISPLAY')
+    with user('DELETE /api/questions/2'):
+        con = sqlite3.connect(storage.ROOT / 'genesis.db')
+        con.execute('DELETE FROM questions WHERE id=2')
+        con.execute('DELETE FROM crop_sessions WHERE id=2')
+        con.commit(); con.close()
+        storage.sync_once(pool_write=True)
+    prior_deletes = list(store.deletes)
     # Rollback must not manufacture permission for a future background mutation.
     with user('DELETE /api/topics/2'):
         con = sqlite3.connect(storage.ROOT / 'genesis.db')
@@ -169,7 +202,7 @@ with tempfile.TemporaryDirectory() as folder:
         con.close()
     (storage.ROOT / 'RawCrops/existing.png').unlink()
     storage.sync_once()
-    assert not store.deletes
+    assert store.deletes == prior_deletes
     assert (storage.ROOT / 'RawCrops/existing.png').is_file()
     # Simulate authorized exam deletion including composite-key relation rows.
     with user('DELETE /api/exams/1'):

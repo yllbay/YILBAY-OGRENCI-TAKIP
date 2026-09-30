@@ -19,7 +19,7 @@ def request(client, path, body=None, method=None, content_type='application/json
     headers={'Content-Type': content_type}
     if intent and (method or ('POST' if data is not None else 'GET')) in {'POST','PUT','PATCH','DELETE'}:
         permit=request(client,'/api/question-pool/user-token')
-        headers['X-Genesis-User-Intent']=permit['token']
+        headers['X-Genesis-User-Intent']=intent if isinstance(intent,str) else permit['token']
     req = urllib.request.Request(BASE + path, data=data, method=method, headers=headers)
     try:
         response = client.open(req, timeout=30)
@@ -76,6 +76,8 @@ request(second, f'/api/questions/{qid}/image')
 before = request(first, '/api/internal/question-studio-fingerprint')
 # Without the authenticated explicit-user permit, all old destructive routes stay blocked.
 request(first, f'/api/questions/{qid}', method='DELETE', expected=403, intent=False)
+request(first, f'/api/questions/{qid}', method='DELETE', expected=403,
+        intent=request(second,'/api/question-pool/user-token')['token'])
 request(first, f"/api/topics/{topic['id']}", {'name':'MUST NOT CHANGE'}, method='PATCH', expected=403, intent=False)
 request(first, '/api/maintenance/stale-prepared', {}, expected=423)
 assert request(first, '/api/internal/question-studio-fingerprint')['sha256'] == before['sha256']
