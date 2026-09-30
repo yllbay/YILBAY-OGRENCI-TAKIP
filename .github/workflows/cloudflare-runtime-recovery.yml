@@ -124,10 +124,10 @@ jobs:
           docker push "$IMAGE"
           printf '%s\n' "$IMAGE" > /tmp/recovery/snapshot/verified-candidate-image.txt
       - name: Check browser UI on the verified image with disposable data
-        if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]')
+        if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-candidate]')
         run: |
           set -euo pipefail
-          IMAGE="$(cat cloudflare/runtime-activation-image.txt)"
+          IMAGE="${RECOVERY_IMAGE:-$(cat cloudflare/runtime-activation-image.txt)}"
           printf '%s' "$REG_PASS" | docker login registry.cloudflare.com --username "$REG_USER" --password-stdin
           docker pull "$IMAGE"
           docker run -d --name genesis-pool-ui -e GENESIS_STORAGE_MODE=local -p 127.0.0.1:18000:8000 "$IMAGE"

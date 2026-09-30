@@ -139,7 +139,8 @@ jobs:
           retention-days: 7
 
   deploy:
-    if: ${{ inputs.mode == 'deploy' }}
+    # Read-only inventory remains available; deployment uses runtime-recovery.
+    if: ${{ false }}
     needs: inventory
     runs-on: ubuntu-latest
     steps:

@@ -202,6 +202,11 @@ for action in ('update', 'delete', 'toroot'):
     js = js.replace(f'<button data-act="{action}"',
                     f'<button disabled title="Kayıtlı klasör korunuyor" data-act="{action}"')
 js = js.replace('S.dragArmed=true;el.draggable=true;', 'S.dragArmed=false;el.draggable=false;')
+js = js.replace('S.testDragArmed=true;S.testDrag={type:"class",id:cid};el.draggable=true;',
+                'S.testDragArmed=false;S.testDrag=null;el.draggable=false;')
+for action in ('deleteclass', 'toroot'):
+    js = js.replace(f'<button data-exam-act="{action}"',
+                    f'<button disabled title="Kayıtlı klasör korunuyor" data-exam-act="{action}"')
 js = js.replace('data-boutcome="${q.id}"', 'disabled title="Kayıtlı soru korunuyor" data-boutcome="${q.id}"')
 js += '''
 

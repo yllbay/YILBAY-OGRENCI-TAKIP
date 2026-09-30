@@ -17,19 +17,22 @@ with sync_playwright() as playwright:
     contexts = [browser.new_context(viewport={'width': 1440, 'height': 900}) for _ in range(2)]
     pages = []
     errors = []
-    for context in contexts:
-        def revision(route, context=context):
+    def revision_handler(context):
+        def revision(route):
             response = context.request.get(BASE + '/api/internal/question-studio-fingerprint')
             assert response.ok
             route.fulfill(json={'revision': response.json()['sha256'], 'pending': False,
                                 'durable': True, 'existing_content_locked': True})
-        context.route('**/api/question-pool/revision', revision)
+        return revision
+    for context in contexts:
+        context.route('**/api/question-pool/revision', revision_handler(context))
         page = context.new_page()
         page.on('pageerror', lambda error: errors.append(str(error)))
         pages.append(page)
         page.goto(BASE + '/?workspace=1', wait_until='domcontentloaded')
         expect(page.locator('#topicPlus')).to_be_visible(timeout=20000)
         expect(page.locator('[data-topic]')).to_have_count(1, timeout=10000)
+        page.wait_for_function('typeof genesisPoolRevision!=="undefined"&&genesisPoolRevision!==null')
     first, second = pages
     try:
         # Real splitter hit area, cursor and drag; whole workspace has no scrollbar.

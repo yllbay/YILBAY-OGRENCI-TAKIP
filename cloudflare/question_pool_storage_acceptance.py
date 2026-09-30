@@ -79,6 +79,8 @@ with tempfile.TemporaryDirectory() as folder:
       CREATE TABLE crop_sessions(id INTEGER PRIMARY KEY,status TEXT,x0 REAL);
       CREATE TABLE auth_sessions(id INTEGER PRIMARY KEY,token TEXT);
       CREATE TABLE coaching_students(id INTEGER PRIMARY KEY,name TEXT);
+      CREATE TABLE coaching_curriculum_topics(id INTEGER PRIMARY KEY,name TEXT);
+      CREATE TABLE coach2_course_topics(id INTEGER PRIMARY KEY,name TEXT);
       INSERT INTO topics VALUES(1,'Existing Exact Name');
       INSERT INTO questions VALUES(1,1,'RawCrops/existing.png','DisplayImages/existing.png');
       INSERT INTO source_documents VALUES(1,'Sources/existing.pdf');
@@ -97,6 +99,8 @@ with tempfile.TemporaryDirectory() as folder:
     con.commit()
     con.execute("INSERT INTO auth_sessions VALUES(1,'other-device-session')")
     con.execute("INSERT INTO coaching_students VALUES(1,'Preserved Coaching')")
+    con.execute("INSERT INTO coaching_curriculum_topics VALUES(1,'Preserved Curriculum')")
+    con.execute("INSERT INTO coach2_course_topics VALUES(1,'Preserved Course')")
     con.commit()
     con.close()
     storage.sync_once()
@@ -138,6 +142,8 @@ with tempfile.TemporaryDirectory() as folder:
     assert con.execute('SELECT name FROM topics ORDER BY id').fetchall() == [('Existing Exact Name',), ('New User Folder',)]
     assert con.execute('SELECT token FROM auth_sessions').fetchone()[0] == 'other-device-session'
     assert con.execute('SELECT name FROM coaching_students').fetchone()[0] == 'Preserved Coaching'
+    assert con.execute('SELECT name FROM coaching_curriculum_topics').fetchone()[0] == 'Preserved Curriculum'
+    assert con.execute('SELECT name FROM coach2_course_topics').fetchone()[0] == 'Preserved Course'
     assert con.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
     con.close()
     assert (storage.ROOT / 'RawCrops/existing.png').read_bytes() == store.objects['DATA/RawCrops/existing.png']

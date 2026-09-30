@@ -21,6 +21,8 @@ env:
 
 jobs:
   rollback:
+    # Retired: runtime-recovery rolls back the exact previous image, never the database.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -14,6 +14,9 @@ _original_connect = sqlite3.connect
 
 def protected_table(name):
     name = str(name).lower()
+    # Coaching curriculum topics are operational records, not Question Studio folders.
+    if name.startswith(('coach2_', 'coach3_', 'coaching_')):
+        return False
     return (name in {'source_documents', 'crop_sessions', 'test_classes', 'exams',
                      'exam_questions', 'answer_key_runs', 'answer_key_entries'}
             or 'question' in name or 'topic' in name or name.startswith('test_')

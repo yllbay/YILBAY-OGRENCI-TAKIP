@@ -21,6 +21,8 @@ env:
 
 jobs:
   deploy:
+    # Retired: production updates require the pool fingerprint gate in runtime-recovery.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
