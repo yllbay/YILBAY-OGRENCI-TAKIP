@@ -55,7 +55,8 @@ jobs:
           set -euo pipefail
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
           curl -fsS --max-time 15 "$URL/api/internal/question-studio-integrity-v4" -o /tmp/recovery/snapshot/pool-assets-before.json
-          npx --yes wrangler@4 r2 object get genesis-web-0152-data/DATA/genesis.db --remote --file /tmp/recovery/pool-before.db
+          python3 cloudflare/question_pool_audit_access.py create
+          python3 cloudflare/question_pool_audit_access.py download /tmp/recovery/pool-before.db
           PYTHONPATH=cloudflare python3 - <<'PY'
           import json,sqlite3
           from pathlib import Path
@@ -224,6 +225,9 @@ jobs:
         if: failure() && env.RECOVERY_DEPLOYED == '1'
         run: |
           timeout 35s npx --yes wrangler@4 tail genesis-web-0152 --format json > /tmp/recovery/snapshot/runtime-tail.jsonl 2>&1 || true
+      - name: Remove ephemeral read-only audit Worker
+        if: always()
+        run: python3 cloudflare/question_pool_audit_access.py cleanup
       - uses: actions/upload-artifact@v4
         if: always()
         with:

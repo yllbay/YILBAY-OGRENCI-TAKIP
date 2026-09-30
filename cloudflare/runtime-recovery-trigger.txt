@@ -1,1 +1,2 @@
 Build append-only Question Studio protection and verify it on disposable data; production remains untouched until acceptance passes.
+Use a short-lived authenticated read-only R2 binding for the fingerprint baseline; no extra account permissions required.
