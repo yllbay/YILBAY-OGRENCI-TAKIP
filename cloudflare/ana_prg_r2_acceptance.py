@@ -18,7 +18,7 @@ def cfcall(method,path,*extra):
     r=subprocess.run(['curl','-fsS','--max-time','30','-X',method,
        f'https://api.cloudflare.com/client/v4/accounts/{account}'+path,'-H','Authorization: Bearer '+cf,*extra],capture_output=True,check=True)
     data=json.loads(r.stdout);assert data.get('success'),data.get('errors');return data.get('result')
-source=r'''export default {async fetch(request,env){
+source=r'''export default {async fetch(request,env){try{
   const headers={'Cache-Control':'no-store'};
   if(Date.now()/1000>Number(env.EXPIRES)||request.headers.get('Authorization')!=='Bearer '+env.QA_TOKEN)
     return new Response('Denied',{status:403,headers});
@@ -39,7 +39,7 @@ source=r'''export default {async fetch(request,env){
   }
   if(request.method==='DELETE'){await env.DATA.delete(key);return new Response(null,{status:204,headers});}
   return new Response('Method denied',{status:405,headers});
-}};'''
+}catch(error){return Response.json({code:error.name,message:error.message},{status:500});}}};'''
 (root/'index.mjs').write_text(source)
 metadata={'main_module':'index.mjs','compatibility_date':'2026-09-10','bindings':[
  {'name':'DATA','type':'r2_bucket','bucket_name':'genesis-web-0152-data'},
@@ -66,7 +66,13 @@ try:
         return status,target.read_bytes(),hs.get('etag')
     class ActualR2:
         def get(self,key):
-            status,data,etag=request('GET',key)
+            # A newly enabled workers.dev route may briefly reach a colo whose
+            # internal R2 binding route has not propagated (1104). Retry reads
+            # only; never replay an uncertain write.
+            for attempt in range(20):
+                status,data,etag=request('GET',key)
+                if status!=500 or b'1104' not in data:break
+                time.sleep(1)
             if status==404:return None,None
             assert status==200,(status,data[:100]);return data,etag
         def put(self,key,value,etag=None,create=False,mime='application/octet-stream'):
