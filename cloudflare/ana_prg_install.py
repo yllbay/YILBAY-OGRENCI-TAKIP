@@ -43,6 +43,33 @@ def ana_start_scheduler():
 def ana_stop_scheduler():_ana_stop.set()
 '''
     app_path.write_text(src,encoding='utf-8')
+# GENESIS historically grants a public ADMIN session. Changing its password
+# must additionally verify the current password, including from its own menu.
+src=app_path.read_text(encoding='utf-8')
+if '# ANA_ADMIN_PASSWORD_PROOF_V1' not in src:
+    old='class ChangePasswordRequest(BaseModel):\n    new_password:str=Field(min_length=8,max_length=200)'
+    assert src.count(old)==1
+    src=src.replace(old,old+'\n    current_password:str=Field(default="",max_length=200)',1)
+    old='def change_password(body:ChangePasswordRequest,request:Request):\n    s=request.state.genesis_session\n    if not s:raise HTTPException(401,"Oturum gerekli.")'
+    assert src.count(old)==1
+    proof='''
+    # ANA_ADMIN_PASSWORD_PROOF_V1
+    if s.get("role")=="ADMIN" and not s.get("institution_id"):
+        with connect(DB) as con:admin=con.execute("select * from genesis_admin where id=1").fetchone()
+        if not admin or not verify_password(body.current_password,admin["salt"]+":"+admin["password_hash"]):
+            raise HTTPException(401,"Mevcut yönetici şifresi gerekli.")
+'''
+    src=src.replace(old,old+proof,1)
+    old='con.execute("delete from schema_meta where key=\'admin_recovery_used\'")'
+    assert src.count(old)==1
+    src=src.replace(old,old+'\n            con.execute("delete from auth_sessions where role=\'ADMIN\'")',1)
+    app_path.write_text(src,encoding='utf-8')
+auth_js=dist/'genesis-auth-gate.js'
+auth_body=auth_js.read_text(encoding='utf8')
+if 'name="current_password"' not in auth_body:
+    auth_body=auth_body.replace('<input name="new_password"','<input name="current_password" type="password" autocomplete="current-password" placeholder="Mevcut şifre" required><input name="new_password"',1)
+    auth_body=auth_body.replace("password?'<label>Yeni şifre", "password?'<label>Mevcut şifre<input name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required></label><label>Yeni şifre",1)
+    auth_js.write_text(auth_body,encoding='utf8')
 js=dist/'app-0.10.7.js';body=js.read_text(encoding='utf-8')
 body=body.replace('Koçluk Stüdyosu','ANA PRG · Eğitim Yönetimi').replace('location.href="/coaching"','location.href="/ana-prg"')
 js.write_text(body,encoding='utf-8')

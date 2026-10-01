@@ -18,6 +18,7 @@ restart='--restart' in sys.argv
 if not restart:req('/api/auth/setup-admin',{'username':'ana-canary','password':'disposable-ana-password'})
 auth=req('/api/ana-prg/auth/teacher-login',{'username':'ana-canary','password':'disposable-ana-password'})
 csrf=auth['csrf']
+req('/api/auth/change-password',{'new_password':'must-not-change-password'},expect=401)
 if restart:
     fixture=json.loads(Path('/tmp/ana-canary-fixture.json').read_text())
     assert pool==fixture['pool']

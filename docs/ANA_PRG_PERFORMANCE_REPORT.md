@@ -15,6 +15,13 @@ large-file streaming. Downloads currently buffer up to that same file limit.
 Snapshots serialize the entire ANA database on writes; large institutional loads
 need measurement before scaling this strategy. No latency/SLA claim is made.
 
-Pending: measured SQL/dashboard/snapshot latency, full-image browser rendering,
+Measured locally with 100 synthetic students, 100 homework entries and 10,000
+assignments in a 4,345,856-byte SQLite database (seven repetitions): dashboard
+median 34.62 ms / maximum 43.10 ms; filtered 100-row page median 6.25 ms / maximum
+8.08 ms; local snapshot median 120.17 ms / maximum 168.59 ms. Dashboard totals were
+independently checked against 10,000 assignments and 8,000 submitted statuses.
+These timings use LocalObjects and exclude network/R2 latency.
+
+Pending: full-image browser rendering,
 actual R2 latency and production smoke timing. These are release evidence items,
 not inferred from syntax checks.

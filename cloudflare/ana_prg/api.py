@@ -17,7 +17,7 @@ LIST={'submissions':'submissions','answer-keys':'answer_keys','evaluations':'ai_
       'whatsapp/queue':'whatsapp_queue','files':'files','mock-optics':'mock_optics','mock-results':'mock_results',
       'costs':'costs','weekly-reports':'weekly_reports','programs':'programs','program-slots':'program_slots'}
 
-def install(app,dist,service=None,teacher_verify=None,genesis_session=None):
+def install(app,dist,service=None,teacher_verify=None,genesis_session=None,teacher_password_change=None):
     if service is None:
         local=os.environ.get('GENESIS_STORAGE_MODE')=='local'
         root=os.environ.get('ANA_RUNTIME_ROOT','/app/ANA_RUNTIME')
@@ -35,6 +35,21 @@ def install(app,dist,service=None,teacher_verify=None,genesis_session=None):
     if genesis_session is None:
         from auth import session_from_token
         genesis_session=session_from_token
+    if teacher_password_change is None:
+        def teacher_password_change(current,new):
+            from db import DB,connect
+            from auth import verify_password,_hash_password
+            with connect(DB) as c:
+                row=c.execute('SELECT * FROM genesis_admin WHERE id=1').fetchone()
+                if not row or not verify_password(current,row['salt']+':'+row['password_hash']):return False
+                encoded=_hash_password(new);salt,digest=encoded.split(':',1)
+                c.execute('UPDATE genesis_admin SET salt=?,password_hash=?,must_change_password=0 WHERE id=1',(salt,digest))
+                c.execute('DELETE FROM auth_sessions WHERE role=\'ADMIN\'')
+                c.execute('DELETE FROM schema_meta WHERE key=\'admin_recovery_used\'')
+            # Auth persistence uses the existing separate operations snapshot.
+            import runtime_storage
+            runtime_storage.sync_once()
+            return True
 
     def require(request,student=False):
         session=s.get_session(request.cookies.get('ana_session'))
@@ -118,6 +133,19 @@ def install(app,dist,service=None,teacher_verify=None,genesis_session=None):
             if not hmac.compare_digest(request.headers.get('x-ana-csrf',''),session['csrf']):raise HTTPException(403,'CSRF gerekli.')
             with s.store.transaction(session['role'],'logout') as c:c.execute('DELETE FROM ana_sessions WHERE token_hash=?',(session['token_hash'],))
         response=JSONResponse({'ok':True});response.delete_cookie('ana_session',path=BASE);return response
+
+    @router.post('/auth/change-password')
+    def change_teacher_password(request:Request,body:dict):
+        require(request)
+        current=str(body.get('current_password',''))[:200]
+        new=str(body.get('new_password',''))
+        if len(new)<12 or len(new)>200:raise HTTPException(400,'Yeni şifre 12–200 karakter olmalı.')
+        if not teacher_password_change(current,new):raise HTTPException(401,'Mevcut yönetici şifresi hatalı.')
+        with s.store.transaction('ADMIN','teacher-password-change') as c:
+            c.execute('DELETE FROM ana_sessions WHERE role=\'ADMIN\'')
+        response=JSONResponse({'ok':True,'reauthenticate':True})
+        response.delete_cookie('ana_session',path=BASE);response.delete_cookie('genesis_session',path='/')
+        return response
 
     @router.get('/catalog')
     def catalog(request:Request):

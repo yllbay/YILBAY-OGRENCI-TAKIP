@@ -10,16 +10,16 @@ from PIL import Image
 from ana_prg.storage import Store,SNAPSHOT_KEY
 from ana_prg.service import Service
 account=os.environ['CLOUDFLARE_ACCOUNT_ID'].strip();cf=os.environ['CLOUDFLARE_API_TOKEN']
-root=Path('/tmp/recovery/ana-r2-audit');root.mkdir(parents=True,exist_ok=True)
+root=Path(os.environ.get('ANA_QA_ROOT','/tmp/recovery/ana-r2-audit'));root.mkdir(parents=True,exist_ok=True)
 name='genesis-ana-r2-qa-'+os.environ['GITHUB_RUN_ID'];token=secrets.token_hex(32)
 prefix='ANA_PRG/_qa/'+os.environ['GITHUB_RUN_ID']+'-'+secrets.token_hex(8)+'/'
-print('::add-mask::'+token,flush=True)
+if os.environ.get('GITHUB_ACTIONS')=='true':print('::add-mask::'+token,flush=True)
 def cfcall(method,path,*extra):
     r=subprocess.run(['curl','-fsS','--max-time','30','-X',method,
        f'https://api.cloudflare.com/client/v4/accounts/{account}'+path,'-H','Authorization: Bearer '+cf,*extra],capture_output=True,check=True)
     data=json.loads(r.stdout);assert data.get('success'),data.get('errors');return data.get('result')
 source=r'''export default {async fetch(request,env){try{
-  const headers={'Cache-Control':'no-store'};
+  const headers={'Cache-Control':'no-store','X-ANA-QA':'isolated-r2-v1'};
   if(Date.now()/1000>Number(env.EXPIRES)||request.headers.get('Authorization')!=='Bearer '+env.QA_TOKEN)
     return new Response('Denied',{status:403,headers});
   const logical=new URL(request.url).searchParams.get('key')||'';
@@ -63,19 +63,27 @@ try:
         if etag:args+=['-H','If-Match: '+etag]
         r=subprocess.run(args,capture_output=True,check=True);status=int(r.stdout)
         hs={a.partition(':')[0].lower():a.partition(':')[2].strip() for a in headers.read_text().splitlines() if ':' in a}
-        return status,target.read_bytes(),hs.get('etag')
+        body=target.read_bytes()
+        # A Cloudflare front-door error must not be interpreted as a missing R2
+        # object. Log request identity, never tokens or object contents.
+        if hs.get('x-ana-qa')!='isolated-r2-v1':
+            print('QA_TRANSPORT_RESPONSE',json.dumps({'method':method,'status':status,
+                'cf_ray':hs.get('cf-ray'),'body_sha256':hashlib.sha256(body).hexdigest(),
+                'error':body.decode(errors='replace')[:80] if body.startswith(b'error code:') else 'unexpected response'}),flush=True)
+        return status,body,hs.get('etag')
     class ActualR2:
         def get(self,key):
-            # A newly enabled workers.dev route may briefly reach a colo whose
-            # internal R2 binding route has not propagated (1104). Retry reads
-            # only; never replay an uncertain write.
+            # Retry known Cloudflare transport errors on reads only. Their cause
+            # is external to the QA handler; never replay an uncertain write.
             for attempt in range(20):
                 status,data,etag=request('GET',key)
-                if status!=500 or b'1104' not in data:break
+                if not data.startswith(b'error code:') or not any(e in data for e in (b'1104',b'1042')):break
                 time.sleep(1)
-            if status==404:return None,None
+            if status==404 and not data:return None,None
             assert status==200,(status,data[:100]);return data,etag
         def put(self,key,value,etag=None,create=False,mime='application/octet-stream'):
+            # Include uncertain writes in the scoped cleanup manifest.
+            owned.add(key)
             status,data,next_etag=request('PUT',key,value,etag,create,mime)
             if status==412:raise RuntimeError('ANA_SNAPSHOT_CONFLICT')
             assert status==200,(status,data[:100]);owned.add(key);return next_etag
@@ -102,12 +110,17 @@ try:
     report=dict(ok=True,adapter='actual Cloudflare Worker R2 binding',isolated_prefix=prefix,
        restored=True,counts=before,file_sha256=f['sha256'],conditional_conflict=True,
        protected_namespace_denied=True,source_files_imported=0,objects=[dict(key=prefix+k) for k in sorted(owned)])
-    Path('/tmp/recovery/snapshot/ana-actual-r2-acceptance.json').write_text(json.dumps(report,indent=2))
+    report_path=Path(os.environ.get('ANA_QA_REPORT','/tmp/recovery/snapshot/ana-actual-r2-acceptance.json'))
+    report_path.parent.mkdir(parents=True,exist_ok=True);report_path.write_text(json.dumps(report,indent=2))
     print('ANA_ACTUAL_R2_HASH_CAS_COLD_RESTORE_PROTECTED_NAMESPACE_PASS',flush=True)
 finally:
     if created:
-        for key in owned:
-            assert key.startswith('ANA_PRG/')
-            status,_,_=request('DELETE',key);assert status==204
-        cfcall('DELETE','/workers/scripts/'+name)
+        cleanup_errors=[]
+        try:
+            for key in owned:
+                assert key.startswith('ANA_PRG/')
+                status,_,_=request('DELETE',key)
+                if status!=204:cleanup_errors.append(key)
+        finally:cfcall('DELETE','/workers/scripts/'+name)
+        assert not cleanup_errors,('Scoped QA cleanup needs attention',cleanup_errors)
         print('Ephemeral ANA-only R2 fixtures and expiring QA Worker removed',flush=True)

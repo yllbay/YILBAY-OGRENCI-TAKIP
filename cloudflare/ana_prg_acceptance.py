@@ -35,7 +35,8 @@ class Acceptance(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name);self.objects=LocalObjects(self.root/'r2')
         self.store=Store(self.root/'runtime',self.objects);self.ai=FakeAI();self.wa=FakeWhatsApp();self.s=Service(self.store,self.ai,self.wa)
         self.app=FastAPI();install(self.app,self.root,self.s,lambda u,p:'verified-admin' if (u,p)==('admin','test-password') else None,
-            lambda t:{'role':'ADMIN'} if t in ('verified-admin','automatic-admin') else None)
+            lambda t:{'role':'ADMIN'} if t in ('verified-admin','automatic-admin') else None,
+            lambda current,new:current=='test-password')
         self.teacher=TestClient(self.app);r=self.teacher.post(BASE+'/auth/teacher-login',json={'username':'admin','password':'test-password'})
         self.assertEqual(r.status_code,200);self.teacher.headers['X-ANA-CSRF']=r.json()['csrf']
         self.cls=self.create('classes',dict(name='Test sınıfı'))
@@ -100,6 +101,16 @@ class Acceptance(unittest.TestCase):
         row=self.store.get('students',self.a['id']);self.assertGreater(row['locked_until'],time.time())
         with self.store.transaction('TEST','unlock') as c:self.store.put('students',{**row,'locked_until':0},c)
         self.student()
+
+    def test_password_change_proof_revokes_teacher_preserves_student(self):
+        student=self.student()
+        payload={'current_password':'test-password','new_password':'new-disposable-password'}
+        self.req('/auth/change-password','POST',payload,403,student)
+        self.req('/auth/change-password','POST',{**payload,'current_password':'wrong'},401)
+        self.req('/auth/change-password','POST',{**payload,'new_password':'short'},400)
+        self.req('/auth/change-password','POST',payload)
+        self.req('/students',status=401)
+        self.assertEqual(self.req('/student/me',client=student)['student']['id'],self.a['id'])
 
     def test_weekly_selected_courses_idempotency_and_order(self):
         for order in (3,1,2):self.create('homework',dict(name=f'PDF {order}',source='Kitap',course='TYT_MAT',order=order,test_no=order,questions=5))

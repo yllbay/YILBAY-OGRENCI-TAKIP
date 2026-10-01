@@ -16,3 +16,4 @@ Verify intentional retired coaching 410 responses while retaining every Question
 Add genuine R2 conditional snapshot/file/cold-restore test in an expiring isolated ANA-only QA prefix; honor deferred WhatsApp connection.
 Wait for real QA Worker readiness, verify browser PDF upload/student delivery, and add authorized ANA checkpoint/restart with business fingerprint.
 Handle transient newly-created R2 binding route propagation on reads only; retain strict mutation gates and log exceptions.
+Verify real R2 transport error classification and immutable digest; validate teacher password changes and re-login on disposable data.

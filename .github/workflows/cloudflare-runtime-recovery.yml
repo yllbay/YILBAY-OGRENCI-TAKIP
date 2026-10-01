@@ -186,7 +186,9 @@ jobs:
           docker logs genesis-recovery-canary > /tmp/recovery/snapshot/canary.log 2>&1
           docker stop genesis-recovery-canary
           docker push "$IMAGE"
-          printf '%s\n' "$IMAGE" > /tmp/recovery/snapshot/verified-candidate-image.txt
+          IMMUTABLE_IMAGE=$(docker image inspect "$IMAGE" --format='{{index .RepoDigests 0}}')
+          case "$IMMUTABLE_IMAGE" in registry.cloudflare.com/*@sha256:*) ;; *) exit 1 ;; esac
+          printf '%s\n' "$IMMUTABLE_IMAGE" > /tmp/recovery/snapshot/verified-candidate-image.txt
       - name: Check browser UI on the verified image with disposable data
         if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-candidate]') || contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-restore]')
         run: |

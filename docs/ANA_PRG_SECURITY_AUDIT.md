@@ -5,6 +5,10 @@ Tested on disposable fixtures; production credential-backed checks pending.
 * Every teacher mutation/read checks both a verified ANA administrator session
   and a valid GENESIS ADMIN session. Existing automatic ADMIN access cannot grant
   ANA access. Login is server-verified against the existing administrator hash.
+* Teacher password change requires current-password proof and CSRF, persists
+  in the existing operations snapshot, revokes teacher sessions, and preserves
+  student sessions. The legacy GENESIS password endpoint now also requires
+  current-password proof; an automatic ADMIN cookie cannot change the password.
 * Student code/PIN is module-scoped. PBKDF2 SHA-256 (260,000 rounds), random salt,
   server token hashes, HttpOnly/SameSite cookies, one-hour expiry, five bad PIN
   attempts followed by a 15-minute lock. PIN changes and archiving revoke sessions.
@@ -25,5 +29,6 @@ Tested on disposable fixtures; production credential-backed checks pending.
   outcomes are not automatically retried. WhatsApp requires opt-in and explicit send.
 
 Material constraint: legacy GENESIS public automatic ADMIN behavior predates this
-module. ANA adds verified-login proof and does not change unrelated GENESIS auth.
+module. ANA adds verified-login proof and protects the GENESIS password-change
+endpoint. Other existing GENESIS auth behavior is preserved.
 No automatic certification or claim of a comprehensive penetration test is made.

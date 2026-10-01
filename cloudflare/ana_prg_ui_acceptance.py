@@ -79,10 +79,25 @@ with sync_playwright() as p:
         student.locator('#student-submit-form button[type=submit]').click()
         expect(student.get_by_role('cell',name='Teslim edildi',exact=True)).to_be_visible()
         student.screenshot(path=str(OUT/'ana-student-mobile.png'),full_page=True)
+        # Change and restore only this disposable account via the real form.
+        page.set_viewport_size({'width':1366,'height':768})
+        for current,new in [('disposable-ana-password','changed-disposable-password'),('changed-disposable-password','disposable-ana-password')]:
+            page.goto(BASE+'/ana-prg/settings')
+            expect(page.locator('#password-form')).to_be_visible()
+            page.get_by_label('Mevcut şifre',exact=True).fill(current)
+            page.get_by_label('Yeni şifre',exact=True).fill(new)
+            page.get_by_label('Yeni şifre tekrarı',exact=True).fill(new)
+            page.get_by_role('button',name='Yönetici şifresini değiştir',exact=True).click()
+            expect(page.get_by_role('button',name='Giriş yap →')).to_be_visible()
+            assert context.request.post(BASE+'/api/auth/login-admin',data={'username':'ana-canary','password':current}).status==401
+            page.get_by_label('Kullanıcı adı').fill('ana-canary');page.get_by_label('Şifre',exact=True).fill(new)
+            page.get_by_role('button',name='Giriş yap →').click()
+            expect(page.get_by_role('heading',name='Ayarlar',exact=True)).to_be_visible()
+        assert student_context.request.get(BASE+'/api/ana-prg/student/me').status==200
         assert not errors,errors
         (OUT/'ana-browser-acceptance.json').write_text(json.dumps(dict(ok=True,errors=errors,teacher_crud=True,weekly_generate=True,
              homework_upload=True,student_download_sha256=True,student_submission=True,
-             exam_key_120=True,student_own_program=True,responsive=[1366,1920,390],provider_tests='separate'),indent=2))
+             exam_key_120=True,student_own_program=True,password_change_relogin=True,responsive=[1366,1920,390],provider_tests='separate'),indent=2))
         print('ANA_REAL_BROWSER_TEACHER_PROGRAM_EXAM_KEY_STUDENT_RESPONSIVE_PASS')
     finally:
         page.screenshot(path=str(OUT/'ana-browser-final.png'),full_page=True)
