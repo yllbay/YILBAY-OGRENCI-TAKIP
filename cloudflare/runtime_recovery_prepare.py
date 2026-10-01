@@ -10,6 +10,9 @@ runtime.mkdir(parents=True, exist_ok=True)
 saved_package = os.environ.get('RECOVERY_WORKER_PACKAGE')
 source = Path(saved_package) if saved_package else snapshot
 module = worker_module((source/'worker.bin').read_bytes())
+if os.environ.get('ANA_PRG_RELEASE')=='1':
+    from ana_prg_worker import patch
+    module=patch(module)
 (runtime/'index.js').write_bytes(module)
 if not saved_package and b'GENESIS_LOCAL_SQLITE_R2_V1' not in module:
     subprocess.run(['python3', 'cloudflare/runtime_recovery_worker.py', str(runtime/'index.js')], check=True)

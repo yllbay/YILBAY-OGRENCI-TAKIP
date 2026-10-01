@@ -19,6 +19,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ANA_PRG_RELEASE: ${{ contains(github.event.head_commit.message, '[ana-prg]') && '1' || '0' }}
     steps:
       - uses: actions/checkout@v6
       - name: Snapshot deployed source
@@ -133,6 +134,12 @@ jobs:
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/runtime_recovery_install.py
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/question_pool_protection_install.py
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/question_pool_user_permissions_install.py
+          if [ "$ANA_PRG_RELEASE" = "1" ]; then
+            GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/ana_prg_install.py
+            python3 -m pip install --quiet --disable-pip-version-check fastapi==0.116.1 python-multipart==0.0.20 httpx Pillow PyMuPDF
+            python3 cloudflare/ana_prg_acceptance.py
+            node --check cloudflare/ana_prg/web/ana.js
+          fi
           python3 -m compileall -q "$ROOT/APP/backend"
           node --check "$ROOT/APP/frontend/dist/app-0.10.7.js"
           (cd "$ROOT" && tar -cJf /tmp/recovery/snapshot/accepted-app-source.tar.xz --exclude='__pycache__' --exclude='_vendor' --exclude='DATA' --exclude='*.db*' APP)
@@ -165,6 +172,16 @@ jobs:
           docker exec genesis-recovery-canary python -c 'import sqlite3; from pathlib import Path; p=Path("/app/DATA/genesis.db"); assert p.is_file() and not p.parent.is_symlink(); c=sqlite3.connect(p); assert c.execute("PRAGMA quick_check").fetchone()[0]=="ok"; print("LOCAL_SQLITE_INTEGRITY_OK")'
           docker cp cloudflare/question_pool_acceptance.py genesis-recovery-canary:/tmp/question_pool_acceptance.py
           docker exec genesis-recovery-canary python /tmp/question_pool_acceptance.py
+          if [ "$ANA_PRG_RELEASE" = "1" ]; then
+            docker cp cloudflare/ana_prg_runtime_acceptance.py genesis-recovery-canary:/tmp/ana_prg_runtime_acceptance.py
+            docker exec genesis-recovery-canary python /tmp/ana_prg_runtime_acceptance.py
+            docker restart genesis-recovery-canary
+            for attempt in $(seq 1 45); do
+              if curl -fsS --max-time 2 http://127.0.0.1:18000/_health >/dev/null; then break; fi
+              sleep 1
+            done
+            docker exec genesis-recovery-canary python /tmp/ana_prg_runtime_acceptance.py --restart
+          fi
           docker logs genesis-recovery-canary > /tmp/recovery/snapshot/canary.log 2>&1
           docker stop genesis-recovery-canary
           docker push "$IMAGE"
@@ -187,6 +204,11 @@ jobs:
           python3 -m pip install --quiet --disable-pip-version-check playwright
           python3 -m playwright install --with-deps chromium
           python3 cloudflare/question_pool_ui_acceptance.py
+          if [ "$ANA_PRG_RELEASE" = "1" ]; then
+            docker cp cloudflare/ana_prg_runtime_acceptance.py genesis-pool-ui:/tmp/ana_prg_runtime_acceptance.py
+            docker exec genesis-pool-ui python /tmp/ana_prg_runtime_acceptance.py
+            python3 cloudflare/ana_prg_ui_acceptance.py
+          fi
       - name: Prepare preserved Worker and deploy recovery
         if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-restore]')
         run: |
@@ -199,7 +221,9 @@ jobs:
           curl -fsS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/health-before-restart.json || true
           if jq -e '.runtime=="GENESIS_LOCAL_SQLITE_R2_V1"' /tmp/recovery/snapshot/health-before-restart.json >/dev/null 2>&1; then
             curl -fsS --max-time 15 -c /tmp/recovery/baseline-cookies "$URL/" -o /tmp/recovery/baseline-root.html
-            for route in api/topics api/test-tree api/coaching/v3/classes api/coaching/v2/students; do
+            ROUTES="api/topics api/test-tree api/coaching/v3/classes api/coaching/v2/students"
+            if [ "$ANA_PRG_RELEASE" = "1" ]; then ROUTES="api/topics api/test-tree"; fi
+            for route in $ROUTES; do
               curl -fsS --max-time 15 -b /tmp/recovery/baseline-cookies "$URL/$route" -o "/tmp/recovery/snapshot/before-$(echo "$route" | tr / -).json"
             done
           fi
@@ -222,9 +246,20 @@ jobs:
           jq -e '.ok and .pool_policy=="GENESIS_QUESTION_POOL_USER_OWNED_V2" and .pool_revision!=null and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json
           curl -fsS --max-time 15 -c /tmp/recovery/live-cookies "$URL/" -o /tmp/recovery/snapshot/production-root.html
           grep -q GENESIS_HOME_DASHBOARD_EDGE_V1 /tmp/recovery/snapshot/production-root.html
-          curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/coaching" -o /tmp/recovery/snapshot/production-coaching.html
-          grep -q GENESIS_COACHING_DASHBOARD_EDGE_V4 /tmp/recovery/snapshot/production-coaching.html
-          for route in api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v3/curriculum api/coaching/v2/students api/internal/question-studio-fingerprint api/question-pool/revision; do
+          ROUTES="api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v3/curriculum api/coaching/v2/students api/internal/question-studio-fingerprint api/question-pool/revision"
+          if [ "$ANA_PRG_RELEASE" = "1" ]; then
+            curl -fsS --max-time 15 "$URL/ana-prg" -o /tmp/recovery/snapshot/production-ana.html
+            grep -q '/ana-prg/ana.js' /tmp/recovery/snapshot/production-ana.html
+            CODE=$(curl -sS --max-time 15 "$URL/coaching" -o /tmp/recovery/retired-coaching.json -w '%{http_code}')
+            test "$CODE" = 410
+            CODE=$(curl -sS --max-time 15 "$URL/api/ana-prg/students" -o /tmp/recovery/ana-unauthorized.json -w '%{http_code}')
+            test "$CODE" = 401
+            ROUTES="api/auth/me api/topics api/test-tree api/internal/question-studio-fingerprint api/question-pool/revision"
+          else
+            curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/coaching" -o /tmp/recovery/snapshot/production-coaching.html
+            grep -q GENESIS_COACHING_DASHBOARD_EDGE_V4 /tmp/recovery/snapshot/production-coaching.html
+          fi
+          for route in $ROUTES; do
             curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/$route" -o "/tmp/recovery/snapshot/$(echo "$route" | tr / -).json"
           done
           python3 - <<'PY'
@@ -275,6 +310,7 @@ jobs:
           set -euo pipefail
           export RECOVERY_IMAGE="$RECOVERY_BASE_IMAGE"
           unset RECOVERY_WORKER_PACKAGE
+          export ANA_PRG_RELEASE=0
           python3 cloudflare/runtime_recovery_prepare.py
           cd /tmp/recovery/runtime
           npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate

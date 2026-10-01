@@ -11,3 +11,4 @@ Verify draft finalization before protecting saved images; exercise exam deletion
 Check corrected context-menu sequence on the exact built user-permissions image; no production activation.
 Activate the exact user-owned pool image verified by run 36782971033. Preserve current live protected rows and R2 assets; never roll back the database.
 Save 2026-10-01 exact live v115 image and Worker as encrypted permanent checkpoint; do not deploy or replace current data.
+Native ANA PRG candidate only: no legacy student/PDF import; preserve live Question Studio and run full-image browser/restart acceptance before activation.

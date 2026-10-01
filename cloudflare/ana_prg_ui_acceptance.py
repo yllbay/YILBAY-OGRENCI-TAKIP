@@ -1,0 +1,71 @@
+"""Repository E2E regression suite: disposable full image, real Chromium/UI/API."""
+import json,os
+from pathlib import Path
+from playwright.sync_api import sync_playwright,expect
+BASE='http://127.0.0.1:18000'
+OUT=Path('/tmp/recovery/snapshot');OUT.mkdir(parents=True,exist_ok=True)
+with sync_playwright() as p:
+    browser=p.chromium.launch(headless=True)
+    context=browser.new_context(viewport={'width':1366,'height':768})
+    page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+    try:
+        page.goto(BASE+'/ana-prg')
+        page.get_by_label('Kullanıcı adı').fill('ana-canary');page.get_by_label('Şifre',exact=True).fill('disposable-ana-password')
+        page.get_by_role('button',name='Giriş yap →').click()
+        expect(page.get_by_role('heading',name='Eğitim yönetimine genel bakış')).to_be_visible()
+        page.get_by_role('link',name='♧ Sınıflar & Öğrenciler').click()
+        page.get_by_role('button',name='Sınıf ekle',exact=True).click()
+        page.locator('#editor-form input[name=name]').fill('Gerçek Tarayıcı Sınıfı')
+        page.locator('#editor-form button[type=submit]').click()
+        expect(page.get_by_role('cell',name='Gerçek Tarayıcı Sınıfı',exact=True)).to_be_visible()
+        page.get_by_role('button',name='Öğrenci ekle',exact=True).click()
+        page.locator('#editor-form input[name=name]').fill('Gerçek Tarayıcı Öğrenci')
+        page.locator('#editor-form input[name=code]').fill('BROWSER_TEST')
+        page.locator('#editor-form input[name=pin]').fill('2468')
+        page.locator('#editor-form select[name=class_id]').select_option(label='Gerçek Tarayıcı Sınıfı')
+        page.get_by_role('checkbox',name='TYT Matematik',exact=True).check()
+        page.locator('#editor-form button[type=submit]').click()
+        expect(page.get_by_role('cell',name='Gerçek Tarayıcı Öğrenci',exact=True)).to_be_visible()
+        page.get_by_role('link',name='▤ Ödev Havuzu').click()
+        page.get_by_role('button',name='Ödev ekle',exact=True).click()
+        for k,v in {'name':'Tarayıcı ödevi','source':'Tarayıcı kaynak','order':'1','test_no':'1','questions':'5'}.items():page.locator(f'#editor-form input[name={k}]').fill(v)
+        page.locator('#editor-form select[name=course]').select_option('TYT_MAT')
+        page.locator('#editor-form button[type=submit]').click()
+        expect(page.get_by_role('cell',name='Tarayıcı ödevi Tarayıcı kaynak')).to_be_visible()
+        page.get_by_role('link',name='▦ Haftalık Program').click()
+        page.get_by_role('button',name='Ders kuralı',exact=True).click()
+        page.locator('#editor-form select[name=course]').select_option('TYT_MAT')
+        page.get_by_role('checkbox',name='Pazartesi',exact=True).check();page.locator('#editor-form input[name=order]').fill('1')
+        page.locator('#editor-form button[type=submit]').click()
+        page.locator('#week-input').fill('2030-01-07');page.locator('#week-input').dispatch_event('change')
+        page.get_by_role('button',name='Haftayı oluştur',exact=True).click()
+        expect(page.locator('.week-grid .slot')).to_have_count(1)
+        page.get_by_role('link',name='♜ Deneme Kulübü').click();page.get_by_role('button',name='Sınav oluştur').click()
+        page.locator('#editor-form input[name=name]').fill('Tarayıcı TYT')
+        page.locator('#editor-form select[name=kind]').select_option('TYT');page.locator('#editor-form input[name=date]').fill('2026-10-01')
+        page.locator('#editor-form button[type=submit]').click()
+        expect(page.get_by_role('cell',name='Tarayıcı TYT',exact=True)).to_be_visible()
+        page.get_by_role('button',name='Anahtar',exact=True).click()
+        for select in page.locator('#exam-key-form [data-answer]').all():select.select_option('A')
+        page.locator('#exam-key-form button[type=submit]').click()
+        expect(page.get_by_role('cell',name='Hazır',exact=True)).to_be_visible()
+        for route,title in [('assignments','Atamalar'),('submissions','Teslimler'),('ai','AI Değerlendirme'),('whatsapp','WhatsApp'),('reports','Raporlar'),('settings','Ayarlar'),('system','Sistem Yönetimi')]:
+            page.goto(BASE+'/ana-prg/'+route);expect(page.get_by_role('heading',name=title,exact=True)).to_be_visible()
+        for width,height in [(1366,768),(1920,1080),(390,844)]:
+            page.set_viewport_size({'width':width,'height':height});page.goto(BASE+'/ana-prg')
+            expect(page.get_by_role('heading',name='Eğitim yönetimine genel bakış')).to_be_visible()
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+            page.screenshot(path=str(OUT/f'ana-prg-{width}.png'),full_page=True)
+        student_context=browser.new_context(viewport={'width':390,'height':844});student=student_context.new_page()
+        student.goto(BASE+'/ana-prg/student');student.get_by_label('Öğrenci kodu').fill('BROWSER_TEST');student.get_by_label('PIN',exact=True).fill('2468')
+        student.get_by_role('button',name='Giriş yap →').click();expect(student.get_by_role('heading',name='Merhaba, Gerçek Tarayıcı Öğrenci')).to_be_visible()
+        expect(student.get_by_role('cell',name='Tarayıcı ödevi',exact=True)).to_be_visible()
+        assert student_context.request.get(BASE+'/api/ana-prg/students').status==403
+        student.screenshot(path=str(OUT/'ana-student-mobile.png'),full_page=True)
+        assert not errors,errors
+        (OUT/'ana-browser-acceptance.json').write_text(json.dumps(dict(ok=True,errors=errors,teacher_crud=True,weekly_generate=True,
+             exam_key_120=True,student_own_program=True,responsive=[1366,1920,390],provider_tests='separate'),indent=2))
+        print('ANA_REAL_BROWSER_TEACHER_PROGRAM_EXAM_KEY_STUDENT_RESPONSIVE_PASS')
+    finally:
+        page.screenshot(path=str(OUT/'ana-browser-final.png'),full_page=True)
+        browser.close()
