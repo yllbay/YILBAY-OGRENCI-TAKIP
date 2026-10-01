@@ -1,6 +1,8 @@
 """Repository E2E regression suite: disposable full image, real Chromium/UI/API."""
-import json,os
+import hashlib,io,json,os
 from pathlib import Path
+import fitz
+from PIL import Image
 from playwright.sync_api import sync_playwright,expect
 BASE='http://127.0.0.1:18000'
 OUT=Path('/tmp/recovery/snapshot');OUT.mkdir(parents=True,exist_ok=True)
@@ -27,7 +29,12 @@ with sync_playwright() as p:
         page.locator('#editor-form button[type=submit]').click()
         expect(page.get_by_role('cell',name='Gerçek Tarayıcı Öğrenci',exact=True)).to_be_visible()
         page.get_by_role('link',name='▤ Ödev Havuzu').click()
-        page.get_by_role('button',name='Ödev ekle',exact=True).click()
+        document=fitz.open();document.new_page().insert_text((70,80),'Synthetic ANA homework');pdf=document.tobytes();document.close()
+        pdf_path=OUT/'synthetic-homework.pdf';pdf_path.write_bytes(pdf)
+        page.get_by_role('button',name='Dosya yükle',exact=True).click()
+        page.locator('#upload-form input[type=file]').set_input_files(str(pdf_path))
+        page.locator('#upload-form button[type=submit]').click()
+        expect(page.locator('#editor-form')).to_be_visible()
         for k,v in {'name':'Tarayıcı ödevi','source':'Tarayıcı kaynak','order':'1','test_no':'1','questions':'5'}.items():page.locator(f'#editor-form input[name={k}]').fill(v)
         page.locator('#editor-form select[name=course]').select_option('TYT_MAT')
         page.locator('#editor-form button[type=submit]').click()
@@ -46,6 +53,7 @@ with sync_playwright() as p:
         page.locator('#editor-form button[type=submit]').click()
         expect(page.get_by_role('cell',name='Tarayıcı TYT',exact=True)).to_be_visible()
         page.get_by_role('button',name='Anahtar',exact=True).click()
+        expect(page.locator('#exam-key-form [data-answer]')).to_have_count(120)
         for select in page.locator('#exam-key-form [data-answer]').all():select.select_option('A')
         page.locator('#exam-key-form button[type=submit]').click()
         expect(page.get_by_role('cell',name='Hazır',exact=True)).to_be_visible()
@@ -61,9 +69,19 @@ with sync_playwright() as p:
         student.get_by_role('button',name='Giriş yap →').click();expect(student.get_by_role('heading',name='Merhaba, Gerçek Tarayıcı Öğrenci')).to_be_visible()
         expect(student.get_by_role('cell',name='Tarayıcı ödevi',exact=True)).to_be_visible()
         assert student_context.request.get(BASE+'/api/ana-prg/students').status==403
+        download=student.get_by_role('link',name='Dosyayı aç ↗',exact=True)
+        response=student_context.request.get(BASE+download.get_attribute('href'))
+        assert response.status==200 and hashlib.sha256(response.body()).hexdigest()==hashlib.sha256(pdf).hexdigest()
+        student.get_by_role('button',name='Teslim et',exact=True).click()
+        image=Image.new('RGB',(300,500),'white');buffer=io.BytesIO();image.save(buffer,'PNG')
+        submission_path=OUT/'synthetic-submission.png';submission_path.write_bytes(buffer.getvalue())
+        student.locator('#student-submit-form input[type=file]').set_input_files(str(submission_path))
+        student.locator('#student-submit-form button[type=submit]').click()
+        expect(student.get_by_role('cell',name='Teslim edildi',exact=True)).to_be_visible()
         student.screenshot(path=str(OUT/'ana-student-mobile.png'),full_page=True)
         assert not errors,errors
         (OUT/'ana-browser-acceptance.json').write_text(json.dumps(dict(ok=True,errors=errors,teacher_crud=True,weekly_generate=True,
+             homework_upload=True,student_download_sha256=True,student_submission=True,
              exam_key_120=True,student_own_program=True,responsive=[1366,1920,390],provider_tests='separate'),indent=2))
         print('ANA_REAL_BROWSER_TEACHER_PROGRAM_EXAM_KEY_STUDENT_RESPONSIVE_PASS')
     finally:

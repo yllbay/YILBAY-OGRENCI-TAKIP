@@ -74,8 +74,8 @@ try:
             if status==412:raise RuntimeError('ANA_SNAPSHOT_CONFLICT')
             assert status==200,(status,data[:100]);owned.add(key);return next_etag
     for _ in range(20):
-        status,_,_=request('GET',SNAPSHOT_KEY)
-        if status==404:break
+        status,body,_=request('GET','invalid-qa-namespace')
+        if status==400 and body==b'Namespace denied':break
         time.sleep(1)
     else:raise RuntimeError('QA Worker unavailable')
     assert request('GET','DATA/genesis.db')[0]==400,'Protected namespace was accessible'

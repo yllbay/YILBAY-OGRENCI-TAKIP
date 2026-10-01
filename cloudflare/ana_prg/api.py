@@ -339,6 +339,17 @@ def install(app,dist,service=None,teacher_verify=None,genesis_session=None):
         with s.store.lock:s.store.snapshot()
         return s.store.health()
 
+    @router.post('/system/restart')
+    def restart_checkpoint(request:Request):
+        require(request)
+        with s.store.lock:
+            if any(s.store.rows(t,where="active=1 AND status='RUNNING'",limit=1) for t in ('ai_queue','whatsapp_queue')):
+                raise HTTPException(409,'Çalışan dış servis işi bitmeden yeniden başlatılamaz.')
+            s.store.snapshot()
+            # The preserved Worker acts only on this authenticated server response.
+            # This endpoint alone never kills a process or modifies GENESIS data.
+            return dict(restart_allowed=True,ana=s.store.health())
+
     @router.get('/student/me')
     def student_me(request:Request):
         session=require(request,True);sid=session['student_id'];student=s.store.get('students',sid)

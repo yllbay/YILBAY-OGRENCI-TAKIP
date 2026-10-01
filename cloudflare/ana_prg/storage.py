@@ -197,5 +197,9 @@ class Store:
         with self.connect() as c:
             integrity=c.execute('PRAGMA quick_check').fetchone()[0]
             counts={t:c.execute(f'SELECT count(*) FROM ana_{t} WHERE active=1').fetchone()[0] for t in TABLES}
+            hashes={t:hashlib.sha256(encode([list(r) for r in c.execute(
+                f'SELECT id,data,active,created_at,updated_at FROM ana_{t} ORDER BY id')]).encode()).hexdigest() for t in TABLES}
+            settings_hash=hashlib.sha256(encode(self.settings(c)).encode()).hexdigest()
         return dict(ok=integrity=='ok' and self.last_error is None,version=1,counts=counts,
-                    restored=self.restored,last_sync=self.last_sync,last_error=self.last_error,snapshot_key=SNAPSHOT_KEY)
+                    restored=self.restored,last_sync=self.last_sync,last_error=self.last_error,snapshot_key=SNAPSHOT_KEY,
+                    business_fingerprint=hashlib.sha256(encode(dict(tables=hashes,settings=settings_hash)).encode()).hexdigest())

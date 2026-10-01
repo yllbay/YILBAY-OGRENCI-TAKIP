@@ -14,3 +14,4 @@ Save 2026-10-01 exact live v115 image and Worker as encrypted permanent checkpoi
 Native ANA PRG candidate only: no legacy student/PDF import; preserve live Question Studio and run full-image browser/restart acceptance before activation.
 Verify intentional retired coaching 410 responses while retaining every Question Studio durability assertion.
 Add genuine R2 conditional snapshot/file/cold-restore test in an expiring isolated ANA-only QA prefix; honor deferred WhatsApp connection.
+Wait for real QA Worker readiness, verify browser PDF upload/student delivery, and add authorized ANA checkpoint/restart with business fingerprint.

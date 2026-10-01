@@ -63,6 +63,7 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(before,self.store.health()['counts'])
         restored=Store(self.root/'restart',self.objects)
         self.assertTrue(restored.restored);self.assertEqual(restored.health()['counts'],before)
+        self.assertEqual(restored.health()['business_fingerprint'],self.store.health()['business_fingerprint'])
         self.assertEqual(restored.get('students',self.a['id'])['code'],'A_TEST')
         with self.store.connect() as c:self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(),[])
         original=self.objects.put
@@ -80,6 +81,8 @@ class Acceptance(unittest.TestCase):
         anon.post(BASE+'/auth/teacher-login',json={'username':'admin','password':'wrong'})
         student=self.student();self.req('/students',status=403,client=student)
         self.req('/classes','POST',dict(name='Denied'),status=403,client=student)
+        self.req('/system/restart','POST',{},status=403,client=student)
+        self.req('/system/restart','POST',{},status=401,client=anon)
         me=self.req('/student/me',client=student);self.assertEqual(me['student']['id'],self.a['id'])
         self.assertNotIn('pin_hash',me['student']);self.assertNotIn('pin',me['student'])
         other=self.s.upload('b.png','image/png',image_bytes(),'TEST',self.b['id'],'submissions')
