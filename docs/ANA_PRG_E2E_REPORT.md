@@ -21,6 +21,10 @@ eliminate them. All optical reports now require teacher review, followed by
 deterministic recalculation; original raw/normalized output is retained.
 Do not describe raw OCR ground-truth accuracy as PASS for the failing fixtures.
 
-Pending: actual homework key/evaluation provider flow, reviewed optical history
-and browser upload proof, actual Meta controlled delivery, actual R2/cold restart,
+Actual homework key/evaluation calls, independent D/Y/B/net calculation and
+teacher-reviewed optical reports visible through student-owned API history passed.
+WhatsApp connection/delivery was subsequently deferred by the human user; its
+native queue/opt-in/deduplication tests remain included.
+
+Pending: browser upload proof, actual R2/cold restart,
 authenticated production smoke and final Question Studio regression gate.

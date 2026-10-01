@@ -13,3 +13,4 @@ Activate the exact user-owned pool image verified by run 36782971033. Preserve c
 Save 2026-10-01 exact live v115 image and Worker as encrypted permanent checkpoint; do not deploy or replace current data.
 Native ANA PRG candidate only: no legacy student/PDF import; preserve live Question Studio and run full-image browser/restart acceptance before activation.
 Verify intentional retired coaching 410 responses while retaining every Question Studio durability assertion.
+Add genuine R2 conditional snapshot/file/cold-restore test in an expiring isolated ANA-only QA prefix; honor deferred WhatsApp connection.

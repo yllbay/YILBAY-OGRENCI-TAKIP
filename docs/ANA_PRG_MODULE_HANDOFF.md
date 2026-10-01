@@ -35,6 +35,8 @@ WhatsApp requires `ANA_WHATSAPP_ACCESS_TOKEN`, `ANA_WHATSAPP_PHONE_NUMBER_ID`,
 an approved provider template and a dated recipient opt-in. Sending is explicit,
 deduplicated and budget-limited. Default shadow mode blocks external calls and
 WhatsApp is disabled. Secrets are environment/Worker secrets, never form settings.
+The user subsequently deferred WhatsApp connection; real Meta activation/delivery
+is intentionally excluded from the current acceptance, with the native workflow retained.
 
 Use the protected recovery workflow with `[ana-prg] [pool-candidate]` for a
 candidate only. It extracts the exact live image, installs code and runs disposable

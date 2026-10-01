@@ -138,6 +138,7 @@ jobs:
             GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/ana_prg_install.py
             python3 -m pip install --quiet --disable-pip-version-check fastapi==0.116.1 python-multipart==0.0.20 httpx Pillow PyMuPDF
             python3 cloudflare/ana_prg_acceptance.py
+            python3 cloudflare/ana_prg_r2_acceptance.py
             node --check cloudflare/ana_prg/web/ana.js
           fi
           python3 -m compileall -q "$ROOT/APP/backend"
