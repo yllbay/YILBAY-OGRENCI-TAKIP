@@ -171,7 +171,7 @@ jobs:
           jq -e 'type=="array"' /tmp/recovery/canary-tests.json
           docker exec genesis-recovery-canary python -c 'import sqlite3; from pathlib import Path; p=Path("/app/DATA/genesis.db"); assert p.is_file() and not p.parent.is_symlink(); c=sqlite3.connect(p); assert c.execute("PRAGMA quick_check").fetchone()[0]=="ok"; print("LOCAL_SQLITE_INTEGRITY_OK")'
           docker cp cloudflare/question_pool_acceptance.py genesis-recovery-canary:/tmp/question_pool_acceptance.py
-          docker exec genesis-recovery-canary python /tmp/question_pool_acceptance.py
+          docker exec -e ANA_PRG_RELEASE="$ANA_PRG_RELEASE" genesis-recovery-canary python /tmp/question_pool_acceptance.py
           if [ "$ANA_PRG_RELEASE" = "1" ]; then
             docker cp cloudflare/ana_prg_runtime_acceptance.py genesis-recovery-canary:/tmp/ana_prg_runtime_acceptance.py
             docker exec genesis-recovery-canary python /tmp/ana_prg_runtime_acceptance.py
@@ -200,7 +200,7 @@ jobs:
             sleep 1
           done
           docker cp cloudflare/question_pool_acceptance.py genesis-pool-ui:/tmp/question_pool_acceptance.py
-          docker exec genesis-pool-ui python /tmp/question_pool_acceptance.py
+          docker exec -e ANA_PRG_RELEASE="$ANA_PRG_RELEASE" genesis-pool-ui python /tmp/question_pool_acceptance.py
           python3 -m pip install --quiet --disable-pip-version-check playwright
           python3 -m playwright install --with-deps chromium
           python3 cloudflare/question_pool_ui_acceptance.py
