@@ -19,6 +19,8 @@ with sync_playwright() as playwright:
     try:
         page.goto(BASE + '/', wait_until='domcontentloaded', timeout=45000)
         expect(page.locator('#edgeHomeQuestionStudio')).to_be_visible(timeout=20000)
+        expect(page.locator('#edgeHomeCoachingStudio')).to_have_count(0)
+        expect(page.locator('#edgeHomeCreateInstitution')).to_have_count(0)
         before = context.request.get(BASE + '/api/internal/question-studio-fingerprint').json()
         page.locator('#edgeHomeQuestionStudio').click()
         expect(page.locator('#topicPlus')).to_be_visible(timeout=20000)
