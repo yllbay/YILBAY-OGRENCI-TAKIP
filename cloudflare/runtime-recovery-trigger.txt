@@ -23,3 +23,5 @@ Fix R2 binding readiness and explicit answer-key values; rerun full ANA acceptan
 Final ANA repair candidate: R2 readiness, answer-key values, no-op snapshot suppression [ana-prg] [pool-candidate]
 
 Final hardened ANA candidate: R2 ClientError handling and zero-assignment reporting [ana-prg] [pool-candidate]
+
+Deterministic R2 CAS probe after no-op snapshot optimization [ana-prg] [pool-candidate]
