@@ -217,6 +217,22 @@ jobs:
             docker exec genesis-pool-ui python /tmp/ana_prg_runtime_acceptance.py
             python3 cloudflare/ana_prg_ui_acceptance.py
           fi
+      - name: Persist verified candidate activation image
+        if: success() && contains(github.event.head_commit.message, '[pool-candidate]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          IMAGE="$(cat /tmp/recovery/snapshot/verified-candidate-image.txt)"
+          case "$IMAGE" in registry.cloudflare.com/*@sha256:*) ;; *) exit 1 ;; esac
+          PATHNAME=cloudflare/runtime-activation-image.txt
+          CURRENT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/contents/$PATHNAME?ref=cloudflare-release" --jq '.sha')"
+          CONTENT="$(printf '%s\n' "$IMAGE" | base64 -w0)"
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$PATHNAME" \
+            -f message='ci(runtime): activate fully verified candidate image' \
+            -f content="$CONTENT" -f sha="$CURRENT_SHA" -f branch='cloudflare-release'
+          echo "VERIFIED_CANDIDATE_ACTIVATION_POINTER=$IMAGE"
+
       - name: Prepare preserved Worker and deploy recovery
         if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-restore]')
         env:
