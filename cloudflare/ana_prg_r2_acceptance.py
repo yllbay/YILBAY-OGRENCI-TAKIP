@@ -82,11 +82,19 @@ try:
             if status==404 and not data:return None,None
             assert status==200,(status,data[:100]);return data,etag
         def put(self,key,value,etag=None,create=False,mime='application/octet-stream'):
-            # Include uncertain writes in the scoped cleanup manifest.
+            # Include attempted writes in the scoped cleanup manifest.
             owned.add(key)
-            status,data,next_etag=request('PUT',key,value,etag,create,mime)
+            # Cloudflare 1042 without our X-ANA-QA marker is a front-door
+            # rejection before the QA Worker handler executes. Retrying only that
+            # exact pre-handler condition cannot duplicate an accepted R2 write.
+            for attempt in range(20):
+                status,data,next_etag=request('PUT',key,value,etag,create,mime)
+                headers=(root/'headers').read_text(errors='replace').lower()
+                pre_handler_1042=(status==404 and data==b'error code: 1042\n' and 'x-ana-qa: isolated-r2-v1' not in headers)
+                if not pre_handler_1042:break
+                time.sleep(1)
             if status==412:raise RuntimeError('ANA_SNAPSHOT_CONFLICT')
-            assert status==200,(status,data[:100]);owned.add(key);return next_etag
+            assert status==200,(status,data[:100]);return next_etag
     # Readiness must exercise the real R2 binding, not merely the Worker handler.
     # A missing isolated object is the safe readiness probe: 404 + our marker proves
     # the request reached this exact Worker and DATA binding without writing anything.
