@@ -51,3 +51,5 @@ Core-only release retry: use current production v115 image, hide deferred coachi
 Core-only release final retry: worker-only home cleanup, no container rollout, exact rollback semantics, preserve CURRENT question DB/R2 [pool-release] [core-only]
 
 Core-only V2 release: safe home close action, V1->V2 worker upgrade, verified Soru Studio only; preserve CURRENT question DB/R2 [pool-release] [core-only]
+
+Storage candidate: deduplicate post-write sync, 30s idle safety poll, immediate failure retry; preserve all Question Studio invariants [pool-candidate]
