@@ -103,13 +103,20 @@ try:
     image=Image.new('RGB',(300,500),'white');b=io.BytesIO();image.save(b,'PNG')
     f=s.upload('synthetic.png','image/png',b.getvalue(),'QA',st['id'],'submissions')
     raw,_=obj.get(f['key']);assert hashlib.sha256(raw).hexdigest()==f['sha256']
-    before=s.store.health()['counts'];old_etag=s.store.etag
+    before=s.store.health()['counts']
     restored=Service(Store(root/'cold-container',obj));assert restored.store.restored
     assert restored.store.health()['counts']==before
     assert restored.store.get('students',st['id'])['code']=='R2_QA'
-    try:obj.put(SNAPSHOT_KEY,b'not-a-database',etag=old_etag)
+    # Exercise CAS on a disposable object with a deterministically stale ETag.
+    # No-op startup transactions intentionally no longer rewrite the DB snapshot,
+    # so snapshot ETags must not be made stale by artificial startup writes.
+    cas_key='ANA_PRG/_cas-probe.bin'
+    first_etag=obj.put(cas_key,b'v1',create=True)
+    second_etag=obj.put(cas_key,b'v2',etag=first_etag)
+    assert second_etag and second_etag!=first_etag
+    try:obj.put(cas_key,b'v3',etag=first_etag)
     except RuntimeError:pass
-    else:raise AssertionError('Stale ETag overwrote snapshot')
+    else:raise AssertionError('Stale ETag overwrote CAS probe')
     db,_=obj.get(SNAPSHOT_KEY);assert db.startswith(b'SQLite format 3')
     report=dict(ok=True,adapter='actual Cloudflare Worker R2 binding',isolated_prefix=prefix,
        restored=True,counts=before,file_sha256=f['sha256'],conditional_conflict=True,
