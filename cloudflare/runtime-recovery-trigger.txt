@@ -57,3 +57,5 @@ Storage candidate: deduplicate post-write sync, 30s idle safety poll, immediate 
 Core-only V2 final: strict no-op close, V1->V2 edge upgrade, only verified Soru Studio action; preserve CURRENT pool [pool-release] [core-only]
 
 Release verified storage candidate: deduplicated post-write R2 sync, 30s safety poll, immediate failure retry; preserve CURRENT question pool [pool-release]
+
+Final core release: verified storage sync optimization + V3 safe home + correct image-change boot gate; ANA/coaching deferred; preserve CURRENT question DB/R2 [pool-release] [core-scope]
