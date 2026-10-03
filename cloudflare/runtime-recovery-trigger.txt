@@ -45,3 +45,5 @@ Retry verified GENESIS v115 restore after retired-route compatibility fix; prese
 Retry verified GENESIS v115 restore after boot-readiness gate fix; preserve CURRENT question DB/R2 assets [pool-restore]
 
 Core-only home cleanup: hide deferred coaching and unavailable institution actions; preserve v115 image and CURRENT question DB/R2 [pool-release]
+
+Core-only release retry: use current production v115 image, hide deferred coaching/unavailable institution actions, preserve CURRENT question DB/R2 [pool-release] [core-only]
