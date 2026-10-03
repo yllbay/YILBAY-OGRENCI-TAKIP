@@ -35,3 +35,5 @@ Release fully verified ANA repairs to production; preserve current question pool
 Release verified ANA image with self-contained UI acceptance dependencies [ana-prg] [pool-release]
 
 Release verified ANA image with complete Playwright/PDF/image test dependencies [ana-prg] [pool-release]
+
+Re-verify live ANA image using authoritative pool fingerprints and hardened rollback [ana-prg] [pool-release]
