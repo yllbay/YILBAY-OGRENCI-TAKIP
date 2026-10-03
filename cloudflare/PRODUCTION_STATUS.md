@@ -25,6 +25,7 @@ production'da doğrulandı.
 - Production UI gate artık eski sabit cache etiketi yerine versioned JS URL ve güncel
   `GENESIS_QUESTION_POOL_USER_OWNED_V2` / dashboard marker içeriğini doğruluyor.
 - CI'da Playwright Chromium cache eklendi; sonraki doğrulamalarda tekrar indirme maliyeti azaltıldı.
+- Cache/browser gate doğrulama run'ı `37155093991` — **success**; deploy adımları çalışmadan tamamlandı.
 
 # 3 Ekim 2026 — GENESIS çekirdek kapsamı doğrulandı
 
