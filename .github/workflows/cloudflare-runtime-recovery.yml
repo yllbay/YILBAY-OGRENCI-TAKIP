@@ -194,6 +194,13 @@ jobs:
           IMMUTABLE_IMAGE=$(docker image inspect "$IMAGE" --format='{{index .RepoDigests 0}}')
           case "$IMMUTABLE_IMAGE" in registry.cloudflare.com/*@sha256:*) ;; *) exit 1 ;; esac
           printf '%s\n' "$IMMUTABLE_IMAGE" > /tmp/recovery/snapshot/verified-candidate-image.txt
+      - name: Cache Playwright Chromium
+        if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-candidate]') || contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-restore]')
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: genesis-playwright-chromium-${{ runner.os }}-${{ runner.arch }}-v1
+
       - name: Check browser UI on the verified image with disposable data
         if: contains(github.event.head_commit.message, '[pool-ui-check]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-candidate]') || contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-restore]')
         run: |
