@@ -17,7 +17,7 @@ for p in (HTML, JS):
 
 MARK_V1 = 'GENESIS_HOME_DASHBOARD_V1'
 MARK_V2 = 'GENESIS_HOME_DASHBOARD_V2'
-ASSET_VER = '20260923-home-2'
+ASSET_VER = '20261003-home-3'
 CSS_NAME = 'genesis-home-dashboard-0.15.2.css'
 
 html = HTML.read_text(encoding='utf-8')
@@ -37,39 +37,31 @@ HTML.write_text(html, encoding='utf-8')
 
 css = r'''/* GENESIS_HOME_DASHBOARD_V1
    GENESIS_HOME_DASHBOARD_V2
-   Opening dashboard only. Existing GENESIS workspace remains intact and can be
-   reached with ?workspace=1 while the landing page is being developed. */
-.genesis.home-dashboard .workspace{
-  gap:0!important;
+   GENESIS_HOME_DASHBOARD_V3
+   Native opening dashboard only. The Question Studio workspace remains intact
+   and is reached with ?workspace=1. */
+.genesis.home-dashboard .workspace.home-workspace{
+  box-sizing:border-box;
+  display:block!important;
+  padding:18px!important;
+  overflow:hidden!important;
 }
-.genesis.home-dashboard .pane.topics,
-.genesis.home-dashboard .pane.questions,
-.genesis.home-dashboard .pane.tests{
-  flex:1 1 0!important;
-  width:auto!important;
+.genesis.home-dashboard .home-main-pane{
+  box-sizing:border-box;
+  width:100%!important;
+  height:100%!important;
   min-width:0!important;
+  max-width:none!important;
+  flex:none!important;
 }
-.genesis.home-dashboard .pane-body{
-  overflow:visible!important;
+.genesis.home-dashboard .home-main-pane .pane-body{
+  overflow:hidden!important;
 }
-.genesis.home-dashboard .pane-scroll{
+.genesis.home-dashboard .home-main-pane .pane-scroll{
   position:absolute!important;
   inset:0!important;
   padding:0!important;
   overflow:hidden!important;
-}
-.genesis.home-dashboard .home-empty{
-  width:100%;
-  height:100%;
-  display:grid;
-  place-items:center;
-  padding:24px;
-  color:#9aa6c2;
-  font-size:15px;
-  font-weight:400;
-  letter-spacing:.1px;
-  text-align:center;
-  user-select:none;
 }
 .genesis.home-dashboard .home-menu{
   box-sizing:border-box;
@@ -77,13 +69,13 @@ css = r'''/* GENESIS_HOME_DASHBOARD_V1
   height:100%;
   display:flex;
   flex-direction:column;
-  align-items:stretch;
+  align-items:flex-start;
   gap:12px;
   padding:24px;
 }
 .genesis.home-dashboard .home-menu-button{
-  width:100%;
-  min-height:56px;
+  width:min(420px,100%);
+  min-height:60px;
   display:flex;
   align-items:center;
   justify-content:flex-start;
@@ -106,13 +98,11 @@ css = r'''/* GENESIS_HOME_DASHBOARD_V1
   border-color:#7058b3;
   background:linear-gradient(135deg,#1a2c4b,#1c1b3b);
 }
-.genesis.home-dashboard .home-menu-button:active{
-  transform:translateY(1px);
-}
+.genesis.home-dashboard .home-menu-button:active{transform:translateY(1px)}
 .genesis.home-dashboard .home-menu-icon{
-  width:26px;
-  height:26px;
-  flex:0 0 26px;
+  width:28px;
+  height:28px;
+  flex:0 0 28px;
   display:grid;
   place-items:center;
   border:1px solid #4a5f87;
@@ -121,23 +111,24 @@ css = r'''/* GENESIS_HOME_DASHBOARD_V1
   font-size:13px;
   line-height:1;
 }
-.genesis.home-dashboard .head-icon,
-.genesis.home-dashboard .head-btn,
-.genesis.home-dashboard .fab{
-  pointer-events:none!important;
-  cursor:default!important;
+.genesis.home-dashboard .home-main-pane .head-actions,
+.genesis.home-dashboard .home-main-pane .fab,
+.genesis.home-dashboard .splitter,
+.genesis.home-dashboard .home-empty{
+  display:none!important;
 }
-.genesis.home-dashboard .splitter{
-  pointer-events:none!important;
-  cursor:default!important;
+.genesis.home-dashboard .home-main-pane .pane-scroll,
+.genesis.home-dashboard .home-main-pane .pane-body{
+  scrollbar-width:none!important;
 }
-@media(max-width:1100px){
-  .genesis.home-dashboard .head-title{font-size:20px!important}
-  .genesis.home-dashboard .head-sub{font-size:13px!important}
+.genesis.home-dashboard .home-main-pane .pane-scroll::-webkit-scrollbar,
+.genesis.home-dashboard .home-main-pane .pane-body::-webkit-scrollbar{
+  display:none!important;
 }
 @media(max-width:760px){
+  .genesis.home-dashboard .workspace.home-workspace{padding:12px!important}
   .genesis.home-dashboard .home-menu{padding:16px}
-  .genesis.home-dashboard .home-menu-button{min-height:50px;font-size:14px}
+  .genesis.home-dashboard .home-menu-button{width:100%;min-height:54px;font-size:14px}
 }
 '''
 CSS.write_text(css, encoding='utf-8')
@@ -145,25 +136,21 @@ CSS.write_text(css, encoding='utf-8')
 js = JS.read_text(encoding='utf-8')
 helper = r'''// GENESIS_HOME_DASHBOARD_V1
 // GENESIS_HOME_DASHBOARD_V2
+// GENESIS_HOME_DASHBOARD_V3
 function genesisWorkspaceMode(){
  return new URLSearchParams(location.search).get("workspace")==="1";
 }
-function homeHeader(type,title,sub){
- const lead=type==="topics"?icons.hamb:icons.list;
- return `<div class="pane-header"><span class="head-icon" aria-hidden="true">${lead}</span><div class="head-copy"><div class="head-title">${title}</div><div class="head-sub">${sub}</div></div><div class="head-actions"><span class="head-btn dots" aria-hidden="true">⋮</span></div></div>`;
+function homeHeader(title,sub){
+ return `<div class="pane-header"><span class="head-icon" aria-hidden="true">${icons.hamb}</span><div class="head-copy"><div class="head-title">${title}</div><div class="head-sub">${sub}</div></div></div>`;
 }
 function homeDashboardHtml(){
  return `<div class="genesis home-dashboard">
  <div class="titlebar"><div class="brand-logo">${logo()}</div><div class="brand-copy"><div class="brand-name">GENESIS</div><div class="brand-sub">Akıllı Test Bankası Yönetim Sistemi</div></div>
  <div class="window-controls"><button class="win-btn" id="minBtn">−</button><button class="win-btn" id="maxBtn">□</button></div></div>
- <div class="workspace" id="workspace">
- <section class="pane topics home-pane">${homeHeader("topics","Yönetim Paneli","Genel Bakış")}<div class="pane-body"><div class="pane-scroll"><div class="home-menu">
+ <div class="workspace home-workspace" id="workspace">
+ <section class="pane topics home-pane home-main-pane">${homeHeader("Yönetim Paneli","GENESIS")}<div class="pane-body"><div class="pane-scroll"><div class="home-menu">
    <button type="button" class="home-menu-button" id="homeQuestionStudio"><span class="home-menu-icon">▤</span><span>Soru Stüdyosu</span></button>
- </div></div><span class="fab" aria-hidden="true">+</span></div></section>
- <div class="splitter" aria-hidden="true"><span>Ⅱ</span></div>
- <section class="pane questions home-pane">${homeHeader("questions","İşlemler","Seçim Yap")}<div class="pane-body"><div class="pane-scroll"><div class="home-empty">Seçim yapılmadı</div></div><span class="fab" aria-hidden="true">+</span></div></section>
- <div class="splitter" aria-hidden="true"><span>Ⅱ</span></div>
- <section class="pane tests home-pane">${homeHeader("tests","Durum","Sistem")}<div class="pane-body"><div class="pane-scroll"><div class="home-empty">Henüz veri yok</div></div><span class="fab" aria-hidden="true">+</span></div></section>
+ </div></div></div></section>
  </div></div>`;
 }
 function bindHomeDashboard(){
@@ -179,7 +166,7 @@ function bindHomeDashboard(){
 if MARK_V1 in js:
     # Always refresh the dashboard helper to the current implementation. Older
     # images may already carry V2 markers but still contain obsolete handlers.
-    pat = re.compile(r'// GENESIS_HOME_DASHBOARD_V1\n(?:\/\/ GENESIS_HOME_DASHBOARD_V2\n)?function genesisWorkspaceMode\(\)\{.*?\n\}\n(?=function render\(\)\{)', re.S)
+    pat = re.compile(r'// GENESIS_HOME_DASHBOARD_V1\n(?:\/\/ GENESIS_HOME_DASHBOARD_V2\n)?(?:\/\/ GENESIS_HOME_DASHBOARD_V3\n)?function genesisWorkspaceMode\(\)\{.*?\n\}\n(?=function render\(\)\{)', re.S)
     js2, count = pat.subn(helper, js, count=1)
     if count != 1:
         raise SystemExit(f'Existing dashboard helper replacement failed: {count}')
@@ -213,17 +200,15 @@ checks = [
     (MARK_V1 in html and MARK_V2 in html, 'HTML dashboard markers missing'),
     (f'/static/{CSS_NAME}?v={ASSET_VER}' in html, 'home CSS link missing'),
     (f'/static/app-0.10.7.js?v={ASSET_VER}' in html, 'app cache-bust missing'),
-    (MARK_V1 in js and MARK_V2 in js, 'JS dashboard markers missing'),
-    ('Yönetim Paneli' in js and 'Genel Bakış' in js, 'dashboard panel 1 missing'),
-    ('İşlemler' in js and 'Seçim Yap' in js, 'dashboard panel 2 missing'),
-    ('Durum' in js and 'Sistem' in js, 'dashboard panel 3 missing'),
+    (MARK_V1 in js and MARK_V2 in js and 'GENESIS_HOME_DASHBOARD_V3' in js, 'JS dashboard markers missing'),
+    ('Yönetim Paneli' in js and 'GENESIS' in js, 'dashboard heading missing'),
     ('id="homeQuestionStudio"' in js and 'Soru Stüdyosu' in js, 'Soru Stüdyosu button missing'),
-    ('id="homeCoachingStudio"' not in js and 'id="homeCreateInstitution"' not in js, 'Deferred home actions returned'),
-    ('id="closeBtn"' not in helper and '/api/system/shutdown' not in helper, 'Unsafe home close action returned'),
+    ('id="homeCoachingStudio"' not in helper and 'id="homeCreateInstitution"' not in helper, 'Deferred home actions returned'),
+    ('class="splitter"' not in helper and 'class="fab"' not in helper and 'dots' not in helper, 'Workspace controls leaked into home'),
+    ('İşlemler' not in helper and 'Durum' not in helper and 'Seçim yapılmadı' not in helper and 'Henüz veri yok' not in helper, 'Empty workspace panels leaked into home'),
     ('location.assign("/?workspace=1")' in js, 'Soru Stüdyosu navigation missing'),
     ('genesisWorkspaceMode()?refresh():render()' in js, 'dashboard bootstrap missing'),
-    (MARK_V2 in css and '.home-menu-button' in css, 'dashboard V2 CSS missing'),
-    ('?workspace=1' in css, 'workspace preservation note missing'),
+    ('GENESIS_HOME_DASHBOARD_V3' in css and '.home-main-pane' in css, 'dashboard V3 CSS missing'),
 ]
 for ok,msg in checks:
     if not ok:
