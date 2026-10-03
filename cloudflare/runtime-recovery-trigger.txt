@@ -43,3 +43,5 @@ Defer ANA PRG and coaching work; restore verified GENESIS v115 runtime while pre
 Retry verified GENESIS v115 restore after retired-route compatibility fix; preserve CURRENT question DB/R2 assets [pool-restore]
 
 Retry verified GENESIS v115 restore after boot-readiness gate fix; preserve CURRENT question DB/R2 assets [pool-restore]
+
+Core-only home cleanup: hide deferred coaching and unavailable institution actions; preserve v115 image and CURRENT question DB/R2 [pool-release]
