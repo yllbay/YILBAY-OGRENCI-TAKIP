@@ -41,7 +41,7 @@ source=r'''export default {async fetch(request,env){try{
   return new Response('Method denied',{status:405,headers});
 }catch(error){return Response.json({code:error.name,message:error.message},{status:500});}}};'''
 (root/'index.mjs').write_text(source)
-metadata={'main_module':'index.mjs','compatibility_date':'2026-09-10','bindings':[
+metadata={'main_module':'index.mjs','compatibility_date':'2026-09-10','compatibility_flags':['global_fetch_strictly_public'],'bindings':[
  {'name':'DATA','type':'r2_bucket','bucket_name':'genesis-web-0152-data'},
  {'name':'QA_TOKEN','type':'secret_text','text':token},
  {'name':'QA_PREFIX','type':'plain_text','text':prefix},
@@ -87,11 +87,15 @@ try:
             status,data,next_etag=request('PUT',key,value,etag,create,mime)
             if status==412:raise RuntimeError('ANA_SNAPSHOT_CONFLICT')
             assert status==200,(status,data[:100]);owned.add(key);return next_etag
-    for _ in range(20):
-        status,body,_=request('GET','invalid-qa-namespace')
-        if status==400 and body==b'Namespace denied':break
+    # Readiness must exercise the real R2 binding, not merely the Worker handler.
+    # A missing isolated object is the safe readiness probe: 404 + our marker proves
+    # the request reached this exact Worker and DATA binding without writing anything.
+    for _ in range(30):
+        status,body,_=request('GET','ANA_PRG/_binding-readiness')
+        headers=(root/'headers').read_text(errors='replace').lower()
+        if status==404 and body==b'' and 'x-ana-qa: isolated-r2-v1' in headers:break
         time.sleep(1)
-    else:raise RuntimeError('QA Worker unavailable')
+    else:raise RuntimeError('QA Worker/R2 binding unavailable')
     assert request('GET','DATA/genesis.db')[0]==400,'Protected namespace was accessible'
     obj=ActualR2();s=Service(Store(root/'first-container',obj))
     cls=s.save('classes',dict(name='Ephemeral real R2 QA'),'QA')
