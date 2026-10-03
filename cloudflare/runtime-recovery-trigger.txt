@@ -41,3 +41,5 @@ Re-verify live ANA image using authoritative pool fingerprints and hardened roll
 Defer ANA PRG and coaching work; restore verified GENESIS v115 runtime while preserving CURRENT question DB/R2 assets [pool-restore]
 
 Retry verified GENESIS v115 restore after retired-route compatibility fix; preserve CURRENT question DB/R2 assets [pool-restore]
+
+Retry verified GENESIS v115 restore after boot-readiness gate fix; preserve CURRENT question DB/R2 assets [pool-restore]
