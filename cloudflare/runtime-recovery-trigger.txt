@@ -71,3 +71,5 @@ Validate fixed native Soru Studio binding plus verified storage optimization; AN
 Validate idempotent native dashboard refresh, Soru Studio binding and storage optimization; ANA/coaching deferred [pool-candidate] [core-scope]
 
 Release verified candidate sha256:756f364a... with idempotent native home and deduplicated storage sync; ANA/coaching deferred [pool-release] [core-scope]
+
+Re-release already verified candidate with content-based production JS validation; ANA/coaching deferred [pool-release] [core-scope]
