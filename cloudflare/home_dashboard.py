@@ -167,7 +167,7 @@ function homeDashboardHtml(){
  </div></div>`;
 }
 function bindHomeDashboard(){
- document.getElementById("closeBtn").onclick=()=>notice("Bu bir web uygulamasıdır. Sekmeyi tarayıcıdan kapatabilirsiniz.");
+ document.getElementById("closeBtn").onclick=()=>{};
  document.getElementById("minBtn").onclick=()=>notice("Tarayıcı penceresini küçültmek için işletim sistemi düğmesini kullanın.");
  document.getElementById("maxBtn").onclick=async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch{}};
  const question=document.getElementById("homeQuestionStudio");
