@@ -81,3 +81,4 @@ Validate cached browser gate against active verified core image; no deployment, 
 Validate single native home, no edge overlay/workspace chrome, preserve CURRENT question DB/R2 [pool-candidate] [core-scope]
 
 Release verified single-native-home candidate; disable edge overlay; preserve CURRENT question DB/R2 [pool-release] [core-scope]
+Validate hardened production gate: edge overlay disabled, native V3 home only, no production mutation [pool-ui-check] [core-scope]
