@@ -61,3 +61,5 @@ Release verified storage candidate: deduplicated post-write R2 sync, 30s safety 
 Final core release: verified storage sync optimization + V3 safe home + correct image-change boot gate; ANA/coaching deferred; preserve CURRENT question DB/R2 [pool-release] [core-scope]
 
 Final retry: persist selected image across smoke, wait real new boot, stabilized V3 Soru Studio overlay, optimized storage; ANA/coaching deferred [pool-release] [core-scope]
+
+V4 final core release: body-level stable Soru Studio launcher + verified storage optimization + exact rollback; ANA/coaching deferred [pool-release] [core-scope]
