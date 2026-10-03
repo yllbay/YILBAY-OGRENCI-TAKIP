@@ -18,13 +18,14 @@ with sync_playwright() as playwright:
     page.on('request', request_seen)
     try:
         page.goto(BASE + '/', wait_until='domcontentloaded', timeout=45000)
-        expect(page.locator('#edgeHomeQuestionStudio')).to_be_visible(timeout=20000)
-        expect(page.locator('#edgeHomeCoachingStudio')).to_have_count(0)
-        expect(page.locator('#edgeHomeCreateInstitution')).to_have_count(0)
+        launcher = page.locator('#homeQuestionStudio, #edgeHomeQuestionStudio').first
+        expect(launcher).to_be_visible(timeout=20000)
+        expect(page.locator('#homeCoachingStudio, #edgeHomeCoachingStudio')).to_have_count(0)
+        expect(page.locator('#homeCreateInstitution, #edgeHomeCreateInstitution')).to_have_count(0)
         expect(page.locator('#closeBtn')).to_have_count(0)
         assert '/api/system/shutdown' not in mutations, mutations
         before = context.request.get(BASE + '/api/internal/question-studio-fingerprint').json()
-        page.locator('#edgeHomeQuestionStudio').click()
+        launcher.click()
         expect(page.locator('#topicPlus')).to_be_visible(timeout=20000)
         page.wait_for_function('typeof genesisPoolRevision!=="undefined"&&genesisPoolRevision!==null')
         script = page.locator('script[src*="app-0.10.7.js"]')
@@ -50,7 +51,7 @@ with sync_playwright() as playwright:
                    for path in mutations), mutations
         assert not errors, errors
         (OUT / 'production-ui-acceptance.json').write_text(json.dumps({
-            'ok': True, 'real_edge_home_navigation': True, 'pool_revision_ready': True,
+            'ok': True, 'real_home_navigation': True, 'pool_revision_ready': True,
             'splitter_width': box['width'], 'splitter_drag_delta': new_width-old_width,
             'fingerprint_unchanged': before['sha256'], 'page_errors': errors,
             'operational_mutations_only': mutations
