@@ -41,14 +41,14 @@ replacement=r'''      const upstream = await container.fetch(forwarded);
 #closeBtn{display:none!important;pointer-events:none!important}\n</style>
 <script id="genesisHomeDashboardEdgeScript">
 /* GENESIS_HOME_DASHBOARD_EDGE_V1 */
-(()=>{const install=()=>{if(document.getElementById("homeQuestionStudio")||document.getElementById("edgeHomeQuestionStudio"))return true;
+(()=>{const install=()=>{if(document.getElementById("edgeHomeQuestionStudio"))return true;
 const pane=document.querySelector(".genesis.home-dashboard .pane.topics .pane-scroll");if(!pane)return false;
 pane.innerHTML='<div class="edge-home-menu"><button type="button" id="edgeHomeQuestionStudio"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></button></div>';
 document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");
 const close=document.getElementById("closeBtn");
 if(close){close.onclick=()=>{};close.title="Web uygulamasında kapatma devre dışı";};
 return true};
-if(!install()){const o=new MutationObserver(()=>{if(install())o.disconnect()});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),15000)}})();
+install();const t=setInterval(install,250);setTimeout(()=>clearInterval(t),15000)})();
 </script>`;
           html = html.includes("</body>") ? html.replace("</body>", overlay + "</body>") : html + overlay;
           headers.delete("content-length");
@@ -75,5 +75,5 @@ assert "Soru Stüdyosu" in out
 assert "Koçluk Stüdyosu" not in out
 assert "Kurum Açma" not in out
 assert 'location.assign("/?workspace=1")' in out
-assert '/api/system/shutdown' not in out\nassert 'close.remove()' in out
+assert '/api/system/shutdown' not in out\nassert 'close.remove()' in out\nassert 'setInterval(install,250)' in out
 print("GENESIS dashboard edge overlay patch: OK")
