@@ -279,7 +279,7 @@ jobs:
             npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
           fi
       - name: Verify production and persistence
-        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-restore]')
+        if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-restore]') || contains(github.event.head_commit.message, '[pool-ui-check]')
         env:
           RESTORE_REQUEST: ${{ contains(github.event.head_commit.message, '[pool-restore]') }}
         run: |
