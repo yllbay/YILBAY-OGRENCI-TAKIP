@@ -38,7 +38,7 @@ replacement=r'''      const upstream = await container.fetch(forwarded);
 .genesis.home-dashboard .edge-home-menu button:active{transform:translateY(1px)}
 .genesis.home-dashboard .edge-home-menu .edge-icon{width:26px;height:26px;flex:0 0 26px;display:grid;place-items:center;border:1px solid #4a5f87;border-radius:8px;color:#b7c6e4;font-size:13px;line-height:1}
 @media(max-width:760px){.genesis.home-dashboard .edge-home-menu{padding:16px}.genesis.home-dashboard .edge-home-menu button{min-height:50px;font-size:14px}}
-</style>
+#closeBtn{display:none!important;pointer-events:none!important}\n</style>
 <script id="genesisHomeDashboardEdgeScript">
 /* GENESIS_HOME_DASHBOARD_EDGE_V1 */
 (()=>{const install=()=>{if(document.getElementById("homeQuestionStudio")||document.getElementById("edgeHomeQuestionStudio"))return true;
@@ -75,5 +75,5 @@ assert "Soru Stüdyosu" in out
 assert "Koçluk Stüdyosu" not in out
 assert "Kurum Açma" not in out
 assert 'location.assign("/?workspace=1")' in out
-assert '/api/system/shutdown' not in out
+assert '/api/system/shutdown' not in out\nassert 'close.remove()' in out
 print("GENESIS dashboard edge overlay patch: OK")
