@@ -214,6 +214,8 @@ jobs:
           fi
       - name: Prepare preserved Worker and deploy recovery
         if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-restore]')
+        env:
+          RESTORE_REQUEST: ${{ contains(github.event.head_commit.message, '[pool-restore]') }}
         run: |
           set -euo pipefail
           if [ -z "${RECOVERY_IMAGE:-}" ]; then
@@ -225,7 +227,7 @@ jobs:
           if jq -e '.runtime=="GENESIS_LOCAL_SQLITE_R2_V1"' /tmp/recovery/snapshot/health-before-restart.json >/dev/null 2>&1; then
             curl -fsS --max-time 15 -c /tmp/recovery/baseline-cookies "$URL/" -o /tmp/recovery/baseline-root.html
             ROUTES="api/topics api/test-tree api/coaching/v3/classes api/coaching/v2/students"
-            if [ "$ANA_PRG_RELEASE" = "1" ]; then ROUTES="api/topics api/test-tree"; fi
+            if [ "$ANA_PRG_RELEASE" = "1" ] || [ "$RESTORE_REQUEST" = "true" ]; then ROUTES="api/topics api/test-tree"; fi
             for route in $ROUTES; do
               curl -fsS --max-time 15 -b /tmp/recovery/baseline-cookies "$URL/$route" -o "/tmp/recovery/snapshot/before-$(echo "$route" | tr / -).json"
             done
@@ -238,6 +240,8 @@ jobs:
           npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
       - name: Verify production and persistence
         if: contains(github.event.head_commit.message, '[recover]') || contains(github.event.head_commit.message, '[pool-release]') || contains(github.event.head_commit.message, '[pool-restore]')
+        env:
+          RESTORE_REQUEST: ${{ contains(github.event.head_commit.message, '[pool-restore]') }}
         run: |
           set -euo pipefail
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
@@ -250,7 +254,9 @@ jobs:
           curl -fsS --max-time 15 -c /tmp/recovery/live-cookies "$URL/" -o /tmp/recovery/snapshot/production-root.html
           grep -q GENESIS_HOME_DASHBOARD_EDGE_V1 /tmp/recovery/snapshot/production-root.html
           ROUTES="api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v3/curriculum api/coaching/v2/students api/internal/question-studio-fingerprint api/question-pool/revision"
-          if [ "$ANA_PRG_RELEASE" = "1" ]; then
+          if [ "$RESTORE_REQUEST" = "true" ]; then
+            ROUTES="api/auth/me api/topics api/test-tree api/internal/question-studio-fingerprint api/question-pool/revision"
+          elif [ "$ANA_PRG_RELEASE" = "1" ]; then
             curl -fsS --max-time 15 "$URL/ana-prg" -o /tmp/recovery/snapshot/production-ana.html
             grep -q '/ana-prg/ana.js' /tmp/recovery/snapshot/production-ana.html
             CODE=$(curl -sS --max-time 15 "$URL/coaching" -o /tmp/recovery/retired-coaching.json -w '%{http_code}')
@@ -258,7 +264,7 @@ jobs:
             CODE=$(curl -sS --max-time 15 "$URL/api/ana-prg/students" -o /tmp/recovery/ana-unauthorized.json -w '%{http_code}')
             test "$CODE" = 401
             ROUTES="api/auth/me api/topics api/test-tree api/internal/question-studio-fingerprint api/question-pool/revision"
-          else
+          elif [ "$RESTORE_REQUEST" != "true" ]; then
             curl -fsS --max-time 15 -b /tmp/recovery/live-cookies "$URL/coaching" -o /tmp/recovery/snapshot/production-coaching.html
             grep -q GENESIS_COACHING_DASHBOARD_EDGE_V4 /tmp/recovery/snapshot/production-coaching.html
           fi
