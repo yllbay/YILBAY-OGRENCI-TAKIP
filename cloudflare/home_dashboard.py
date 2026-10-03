@@ -155,12 +155,10 @@ function homeHeader(type,title,sub){
 function homeDashboardHtml(){
  return `<div class="genesis home-dashboard">
  <div class="titlebar"><div class="brand-logo">${logo()}</div><div class="brand-copy"><div class="brand-name">GENESIS</div><div class="brand-sub">Akıllı Test Bankası Yönetim Sistemi</div></div>
- <div class="window-controls"><button class="win-btn" id="minBtn">−</button><button class="win-btn" id="maxBtn">□</button><button class="win-btn close" id="closeBtn">×</button></div></div>
+ <div class="window-controls"><button class="win-btn" id="minBtn">−</button><button class="win-btn" id="maxBtn">□</button><button class="win-btn close" id="closeBtn" title="Sekmeyi kapat">×</button></div></div>
  <div class="workspace" id="workspace">
  <section class="pane topics home-pane">${homeHeader("topics","Yönetim Paneli","Genel Bakış")}<div class="pane-body"><div class="pane-scroll"><div class="home-menu">
    <button type="button" class="home-menu-button" id="homeQuestionStudio"><span class="home-menu-icon">▤</span><span>Soru Stüdyosu</span></button>
-   <button type="button" class="home-menu-button" id="homeCoachingStudio"><span class="home-menu-icon">◈</span><span>Koçluk Stüdyosu</span></button>
-   <button type="button" class="home-menu-button" id="homeCreateInstitution"><span class="home-menu-icon">＋</span><span>Kurum Açma</span></button>
  </div></div><span class="fab" aria-hidden="true">+</span></div></section>
  <div class="splitter" aria-hidden="true"><span>Ⅱ</span></div>
  <section class="pane questions home-pane">${homeHeader("questions","İşlemler","Seçim Yap")}<div class="pane-body"><div class="pane-scroll"><div class="home-empty">Seçim yapılmadı</div></div><span class="fab" aria-hidden="true">+</span></div></section>
@@ -169,18 +167,11 @@ function homeDashboardHtml(){
  </div></div>`;
 }
 function bindHomeDashboard(){
- document.getElementById("closeBtn").onclick=async()=>{try{await api("/api/system/shutdown",{method:"POST"})}catch{}};
- document.getElementById("minBtn").onclick=()=>notice("Tarayıcı penceresini küçültmek için Windows düğmesini kullanın.");
+ document.getElementById("closeBtn").onclick=()=>notice("Bu bir web uygulamasıdır. Sekmeyi tarayıcıdan kapatabilirsiniz.");
+ document.getElementById("minBtn").onclick=()=>notice("Tarayıcı penceresini küçültmek için işletim sistemi düğmesini kullanın.");
  document.getElementById("maxBtn").onclick=async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch{}};
  const question=document.getElementById("homeQuestionStudio");
- const coaching=document.getElementById("homeCoachingStudio");
- const institution=document.getElementById("homeCreateInstitution");
  if(question)question.onclick=()=>location.assign("/?workspace=1");
- if(coaching)coaching.onclick=()=>location.assign("/coaching");
- if(institution)institution.onclick=()=>{
-   if(typeof window.genesisCreateInstitution==="function"){window.genesisCreateInstitution();return}
-   notice("Kurum Açma ekranı şu anda kullanılamıyor.");
- };
 }
 '''
 
@@ -225,11 +216,7 @@ checks = [
     ('İşlemler' in js and 'Seçim Yap' in js, 'dashboard panel 2 missing'),
     ('Durum' in js and 'Sistem' in js, 'dashboard panel 3 missing'),
     ('id="homeQuestionStudio"' in js and 'Soru Stüdyosu' in js, 'Soru Stüdyosu button missing'),
-    ('id="homeCoachingStudio"' in js and 'Koçluk Stüdyosu' in js, 'Koçluk Stüdyosu button missing'),
-    ('id="homeCreateInstitution"' in js and 'Kurum Açma' in js, 'Kurum Açma button missing'),
     ('location.assign("/?workspace=1")' in js, 'Soru Stüdyosu navigation missing'),
-    ('location.assign("/coaching")' in js, 'Koçluk Stüdyosu navigation missing'),
-    ('window.genesisCreateInstitution()' in js, 'Kurum Açma action missing'),
     ('genesisWorkspaceMode()?refresh():render()' in js, 'dashboard bootstrap missing'),
     (MARK_V2 in css and '.home-menu-button' in css, 'dashboard V2 CSS missing'),
     ('?workspace=1' in css, 'workspace preservation note missing'),
