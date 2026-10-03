@@ -45,8 +45,8 @@ replacement=r'''      const upstream = await container.fetch(forwarded);
 const pane=document.querySelector(".genesis.home-dashboard .pane.topics .pane-scroll");if(!pane)return false;
 pane.innerHTML='<div class="edge-home-menu"><button type="button" id="edgeHomeQuestionStudio"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></button></div>';
 document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");
-document.getElementById("edgeHomeCoachingStudio").onclick=()=>location.assign("/coaching");
-document.getElementById("edgeHomeCreateInstitution").onclick=()=>{if(typeof window.genesisCreateInstitution==="function"){window.genesisCreateInstitution();return}if(typeof window.notice==="function")window.notice("Kurum Açma ekranı şu anda kullanılamıyor.");};
+const close=document.getElementById("closeBtn");
+if(close)close.onclick=()=>{if(typeof window.notice==="function")window.notice("Bu bir web uygulamasıdır. Sekmeyi tarayıcıdan kapatabilirsiniz.");};
 return true};
 if(!install()){const o=new MutationObserver(()=>{if(install())o.disconnect()});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),15000)}})();
 </script>`;
@@ -72,9 +72,8 @@ p.write_text(src.replace(needle,replacement,1),encoding="utf-8")
 out=p.read_text(encoding="utf-8")
 assert MARK in out
 assert "Soru Stüdyosu" in out
-assert "Koçluk Stüdyosu" in out
-assert "Kurum Açma" in out
+assert "Koçluk Stüdyosu" not in out
+assert "Kurum Açma" not in out
 assert 'location.assign("/?workspace=1")' in out
-assert 'location.assign("/coaching")' in out
-assert 'window.genesisCreateInstitution' in out
+assert '/api/system/shutdown' not in out
 print("GENESIS dashboard edge overlay patch: OK")
