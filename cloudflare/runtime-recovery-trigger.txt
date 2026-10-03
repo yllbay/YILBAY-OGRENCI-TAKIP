@@ -47,3 +47,5 @@ Retry verified GENESIS v115 restore after boot-readiness gate fix; preserve CURR
 Core-only home cleanup: hide deferred coaching and unavailable institution actions; preserve v115 image and CURRENT question DB/R2 [pool-release]
 
 Core-only release retry: use current production v115 image, hide deferred coaching/unavailable institution actions, preserve CURRENT question DB/R2 [pool-release] [core-only]
+
+Core-only release final retry: worker-only home cleanup, no container rollout, exact rollback semantics, preserve CURRENT question DB/R2 [pool-release] [core-only]
