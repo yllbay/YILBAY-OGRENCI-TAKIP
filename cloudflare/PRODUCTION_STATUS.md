@@ -1,3 +1,24 @@
+# 3 Ekim 2026 — Ana ekran tek-native düzeltmesi production
+
+Kullanıcı ekran görüntüsünde görülen çift ana ekran / floating edge launcher problemi
+düzeltildi. Native home artık tek UI kaynağıdır; legacy edge home overlay görünür
+UI üretmez.
+
+- Candidate run: `37156668998` — **success**.
+- Production release run: `37156828072` — **success**.
+- Worker version: `4baac88d-5cbb-4da6-a6fa-189a5d6a2913`.
+- Aktif container image:
+  `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:dc5bcf4f03c543b4528da417b139b94bb86a91ce93c423b4cec562fb6de364ba`.
+- Root ana ekran: tek native Yönetim Paneli + Soru Stüdyosu.
+- Edge launcher / floating overlay: kaldırıldı.
+- Ana ekranda splitter, `+`, `⋮`, boş orta/sağ workspace panelleri ve home scrollbar yok.
+- Production browser screenshot `production-home-clean.png` görsel olarak kontrol edildi.
+- Soru Stüdyosu workspace screenshot `production-question-studio.png` ayrıca kontrol edildi.
+- Container restart doğrulandı.
+- Protected SQLite ve R2 fingerprint'leri değişmedi.
+- Production ana ekran → Soru Stüdyosu navigation/splitter/revision testi geçti.
+- Rollback tetiklenmedi.
+
 # 3 Ekim 2026 — GENESIS çekirdek V4 production doğrulaması
 
 ANA PRG ve Koçluk kapsam dışı kalmaya devam ediyor. GENESIS çekirdek + Soru
