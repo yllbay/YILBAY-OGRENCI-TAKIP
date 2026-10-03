@@ -306,7 +306,10 @@ jobs:
           test "$READY" = "1"
           jq -e '.ok and .pool_policy=="GENESIS_QUESTION_POOL_USER_OWNED_V2" and .pool_revision!=null and .restored and .last_sync!=null and .last_error==null and .boot_id!=null' /tmp/recovery/snapshot/production-health.json
           curl -fsS --max-time 15 -c /tmp/recovery/live-cookies "$URL/" -o /tmp/recovery/snapshot/production-root.html
-          grep -q GENESIS_HOME_DASHBOARD_EDGE_V1 /tmp/recovery/snapshot/production-root.html
+          grep -q GENESIS_EDGE_HOME_OVERLAY_DISABLED_V5 /tmp/recovery/snapshot/production-root.html
+          grep -q GENESIS_HOME_DASHBOARD_V3 /tmp/recovery/snapshot/production-root.html
+          ! grep -q 'id="genesisCoreHomeLauncher"' /tmp/recovery/snapshot/production-root.html
+          ! grep -q 'id="edgeHomeQuestionStudio"' /tmp/recovery/snapshot/production-root.html
           ROUTES="api/auth/me api/topics api/test-tree api/coaching/v3/classes api/coaching/v3/curriculum api/coaching/v2/students api/internal/question-studio-fingerprint api/question-pool/revision"
           if [ "$RESTORE_REQUEST" = "true" ] || [ "$CORE_SCOPE" = "1" ]; then
             ROUTES="api/auth/me api/topics api/test-tree api/internal/question-studio-fingerprint api/question-pool/revision"
