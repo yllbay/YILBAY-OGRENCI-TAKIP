@@ -1,3 +1,31 @@
+# 3 Ekim 2026 — GENESIS çekirdek V4 production doğrulaması
+
+ANA PRG ve Koçluk kapsam dışı kalmaya devam ediyor. GENESIS çekirdek + Soru
+Stüdyosu için native ana ekran, edge ana ekran ve storage sync onarımları
+production'da doğrulandı.
+
+- Production release run: `37154751125` — **success**.
+- Worker version: `c83de3ff-0627-4715-9b38-98aa9428b676`.
+- Aktif container image:
+  `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:756f364a2babe47248e0b5ff2e837eb306c27e0dd4d8e67a35b57f6c45a154c5`.
+- Native home installer mevcut V1/V2 helper'ı idempotent olarak güncelliyor; kaldırılmış
+  close handler nedeniyle Soru Stüdyosu binding'i artık kırılmıyor.
+- Edge home overlay V4'e yükseltildi; eski V1/V2/V3 payload'daki çift
+  `const close` bildirimi tamamen kaldırıldı.
+- Ana ekranda yalnız doğrulanmış Soru Stüdyosu aksiyonu gösteriliyor.
+- Background storage taraması 30 saniyeye çıkarıldı; başarılı kullanıcı yazısı
+  sonrasında gereksiz ikinci tam-tree taraması yapılmıyor, hata durumunda anlık retry korunuyor.
+- Değişmemiş dosyalar stat signature ile hash/R2 işinden atlanıyor.
+- Candidate run `37153671999` — **success**; gerçek PDF upload → crop → bbox →
+  save-one/finalize, CRUD, iki oturum, splitter, narrow viewport ve storage retry testleri geçti.
+- Production: container restart doğrulandı.
+- Production: SQLite + R2 protected fingerprints değişmedi.
+- Production: gerçek ana ekran → Soru Stüdyosu navigation/splitter/revision browser testi geçti.
+- Rollback tetiklenmedi.
+- Production UI gate artık eski sabit cache etiketi yerine versioned JS URL ve güncel
+  `GENESIS_QUESTION_POOL_USER_OWNED_V2` / dashboard marker içeriğini doğruluyor.
+- CI'da Playwright Chromium cache eklendi; sonraki doğrulamalarda tekrar indirme maliyeti azaltıldı.
+
 # 3 Ekim 2026 — GENESIS çekirdek kapsamı doğrulandı
 
 ANA PRG ve Koçluk geliştirmeleri kullanıcı talimatıyla ertelendi. Production,
