@@ -18,7 +18,7 @@ def patch(module: bytes) -> bytes:
     text = text.replace(old_buttons, new_buttons, 1)
 
     old_handlers = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");\ndocument.getElementById("edgeHomeCoachingStudio").onclick=()=>location.assign("/coaching");\ndocument.getElementById("edgeHomeCreateInstitution").onclick=()=>{if(typeof window.genesisCreateInstitution==="function"){window.genesisCreateInstitution();return}if(typeof window.notice==="function")window.notice("Kurum Açma ekranı şu anda kullanılamıyor.");};'
-    new_handlers = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");'
+    new_handlers = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");\nconst close=document.getElementById("closeBtn");if(close)close.onclick=()=>{if(typeof window.notice==="function")window.notice("Bu bir web uygulamasıdır. Sekmeyi tarayıcıdan kapatabilirsiniz.");};'
     if old_handlers not in text:
         raise RuntimeError("GENESIS home edge handler block changed")
     text = text.replace(old_handlers, new_handlers, 1)
@@ -32,4 +32,6 @@ def patch(module: bytes) -> bytes:
     assert "edgeHomeQuestionStudio" in text
     assert "edgeHomeCoachingStudio" not in text
     assert "edgeHomeCreateInstitution" not in text
+    assert 'api("/api/system/shutdown"' not in text
+    assert 'close.onclick' in text
     return text.encode("utf-8")
