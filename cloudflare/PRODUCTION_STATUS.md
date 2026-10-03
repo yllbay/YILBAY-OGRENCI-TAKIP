@@ -1,3 +1,25 @@
+# 3 Ekim 2026 — GENESIS çekirdek kapsamı doğrulandı
+
+ANA PRG ve Koçluk geliştirmeleri kullanıcı talimatıyla ertelendi. Production,
+doğrulanmış v115 container image üzerinde tutuluyor; ana ekranda yalnız
+doğrulanmış **Soru Stüdyosu** aksiyonu gösteriliyor. Ertelenmiş Koçluk ve
+backend karşılığı olmayan Kurum Açma butonları ana ekrandan kaldırıldı.
+
+- Core-only production run: Actions `37148350994` — **success**.
+- Worker version: `72ea2ddd-b09a-46b6-84ca-627b2c2e6586`.
+- Container image değişmedi:
+  `registry.cloudflare.com/25fb323918fd4c2d4794fe7a98da6800/genesis-web-0152-genesiscontainer@sha256:520be26036aede569368ed985a114e4220b022baf7bf7a8679579e0fd4d822d6`.
+- Disposable kullanıcı klasör/soru/sınav düzenleme-silme + iki oturum: geçti.
+- Chromium splitter/iki profil/refresh testi: geçti.
+- Core-only Worker değişikliğinde container restart zorunluluğu kaldırıldı.
+- Production SQLite ve R2 fingerprint'leri önce/sonra aynı kaldı.
+- Production Soru Stüdyosu navigation/splitter/revision testi geçti.
+- Rollback tetiklenmedi.
+- Restore sonrası stale activation-image işaretçisi v115'e düzeltildi;
+  gelecekte başarılı restore, activation pointer'ını otomatik senkronlar.
+- Core-only release mevcut production image'ını kullanır; ANA image veya
+  ertelenmiş Koçluk endpoint'leri release gate'i değildir.
+
 # Güncel üretim — kullanıcıya ait soru havuzu
 
 **01.10.2026 geri yükleme noktası kaydedildi:**
