@@ -29,3 +29,5 @@ Deterministic R2 CAS probe after no-op snapshot optimization [ana-prg] [pool-can
 Retry only verified pre-handler Cloudflare 1042 writes in isolated ANA QA [ana-prg] [pool-candidate]
 
 Lazy-load botocore ClientError after transport-safe R2 acceptance [ana-prg] [pool-candidate]
+
+Release fully verified ANA repairs to production; preserve current question pool [ana-prg] [pool-release]
