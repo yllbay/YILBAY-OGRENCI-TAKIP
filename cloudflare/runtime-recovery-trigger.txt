@@ -79,3 +79,5 @@ Release verified candidate with V4 edge overlay replacing duplicate close declar
 Validate cached browser gate against active verified core image; no deployment, no production mutation [pool-ui-check] [core-scope]
 
 Validate single native home, no edge overlay/workspace chrome, preserve CURRENT question DB/R2 [pool-candidate] [core-scope]
+
+Release verified single-native-home candidate; disable edge overlay; preserve CURRENT question DB/R2 [pool-release] [core-scope]
