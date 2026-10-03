@@ -2,6 +2,7 @@
 from __future__ import annotations
 import contextlib, hashlib, json, os, sqlite3, threading, time, uuid
 from pathlib import Path
+from botocore.exceptions import ClientError
 
 TABLES = ('classes students homework_pool assignments submissions answer_keys '
           'ai_evaluations ai_queue guardians whatsapp_queue whatsapp_templates '
@@ -66,7 +67,7 @@ class R2Objects:
         try:
             r=self.client.get_object(Bucket=self.bucket,Key=key)
             return r['Body'].read(),r['ETag']
-        except self.client.exceptions.ClientError as e:
+        except ClientError as e:
             if e.response.get('Error',{}).get('Code') in ('NoSuchKey','404'): return None,None
             raise
     def put(self,key,value,etag=None,create=False,mime='application/octet-stream'):
