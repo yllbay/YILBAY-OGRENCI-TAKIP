@@ -37,3 +37,5 @@ Release verified ANA image with self-contained UI acceptance dependencies [ana-p
 Release verified ANA image with complete Playwright/PDF/image test dependencies [ana-prg] [pool-release]
 
 Re-verify live ANA image using authoritative pool fingerprints and hardened rollback [ana-prg] [pool-release]
+
+Defer ANA PRG and coaching work; restore verified GENESIS v115 runtime while preserving CURRENT question DB/R2 assets [pool-restore]
