@@ -31,3 +31,5 @@ Retry only verified pre-handler Cloudflare 1042 writes in isolated ANA QA [ana-p
 Lazy-load botocore ClientError after transport-safe R2 acceptance [ana-prg] [pool-candidate]
 
 Release fully verified ANA repairs to production; preserve current question pool [ana-prg] [pool-release]
+
+Release verified ANA image with self-contained UI acceptance dependencies [ana-prg] [pool-release]
