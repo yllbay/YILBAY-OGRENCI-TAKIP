@@ -29,7 +29,13 @@ with sync_playwright() as playwright:
         expect(page.locator('#topicPlus')).to_be_visible(timeout=20000)
         page.wait_for_function('typeof genesisPoolRevision!=="undefined"&&genesisPoolRevision!==null')
         script = page.locator('script[src*="app-0.10.7.js"]')
-        assert 'pool-user-owned-20261001' in script.get_attribute('src')
+        script_src = script.get_attribute('src') or ''
+        assert script_src.startswith('/static/app-0.10.7.js?v='), script_src
+        asset = context.request.get(BASE + script_src)
+        assert asset.ok, (script_src, asset.status)
+        asset_body = asset.text()
+        assert 'GENESIS_QUESTION_POOL_USER_OWNED_V2' in asset_body
+        assert 'GENESIS_HOME_DASHBOARD_V2' in asset_body
         response = context.request.get(BASE + '/api/topics')
         assert response.ok and 'no-store' in response.headers.get('cache-control', '')
         splitter = page.locator('#split1')
