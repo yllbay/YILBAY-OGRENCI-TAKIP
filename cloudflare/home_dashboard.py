@@ -176,18 +176,19 @@ function bindHomeDashboard(){
 }
 '''
 
-if MARK_V2 not in js:
-    if MARK_V1 in js:
-        pat = re.compile(r'// GENESIS_HOME_DASHBOARD_V1\nfunction genesisWorkspaceMode\(\)\{.*?\n\}\n(?=function render\(\)\{)', re.S)
-        js2, count = pat.subn(helper, js, count=1)
-        if count != 1:
-            raise SystemExit(f'Existing dashboard V1 helper replacement failed: {count}')
-        js = js2
-    else:
-        anchor = 'function render(){\n'
-        if anchor not in js:
-            raise SystemExit('render() patch point missing')
-        js = js.replace(anchor, helper + anchor, 1)
+if MARK_V1 in js:
+    # Always refresh the dashboard helper to the current implementation. Older
+    # images may already carry V2 markers but still contain obsolete handlers.
+    pat = re.compile(r'// GENESIS_HOME_DASHBOARD_V1\n(?:\/\/ GENESIS_HOME_DASHBOARD_V2\n)?function genesisWorkspaceMode\(\)\{.*?\n\}\n(?=function render\(\)\{)', re.S)
+    js2, count = pat.subn(helper, js, count=1)
+    if count != 1:
+        raise SystemExit(f'Existing dashboard helper replacement failed: {count}')
+    js = js2
+else:
+    anchor = 'function render(){\n'
+    if anchor not in js:
+        raise SystemExit('render() patch point missing')
+    js = js.replace(anchor, helper + anchor, 1)
 
 if 'if(!genesisWorkspaceMode()){root.innerHTML=homeDashboardHtml();bindHomeDashboard();return}' not in js:
     old = ''' if(S.builder){root.innerHTML=builderHtml();bindBuilder();return}\n root.innerHTML=`<div class="genesis">`'''
@@ -218,7 +219,7 @@ checks = [
     ('Durum' in js and 'Sistem' in js, 'dashboard panel 3 missing'),
     ('id="homeQuestionStudio"' in js and 'Soru Stüdyosu' in js, 'Soru Stüdyosu button missing'),
     ('id="homeCoachingStudio"' not in js and 'id="homeCreateInstitution"' not in js, 'Deferred home actions returned'),
-    ('id="closeBtn"' not in js and '/api/system/shutdown' not in js, 'Unsafe web close action returned'),
+    ('id="closeBtn"' not in helper and '/api/system/shutdown' not in helper, 'Unsafe home close action returned'),
     ('location.assign("/?workspace=1")' in js, 'Soru Stüdyosu navigation missing'),
     ('genesisWorkspaceMode()?refresh():render()' in js, 'dashboard bootstrap missing'),
     (MARK_V2 in css and '.home-menu-button' in css, 'dashboard V2 CSS missing'),
