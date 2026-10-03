@@ -334,6 +334,21 @@ jobs:
           python3 cloudflare/question_pool_production_ui.py
           npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/container-after.json
           echo 'GENESIS_RUNTIME_RECOVERY_VERIFIED'
+      - name: Persist restored activation image
+        if: success() && contains(github.event.head_commit.message, '[pool-restore]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -n "${RECOVERY_IMAGE:-}"
+          PATHNAME=cloudflare/runtime-activation-image.txt
+          CURRENT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/contents/$PATHNAME?ref=cloudflare-release" --jq '.sha')"
+          CONTENT="$(printf '%s\n' "$RECOVERY_IMAGE" | base64 -w0)"
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$PATHNAME" \
+            -f message='fix(runtime): sync activation pointer after verified restore' \
+            -f content="$CONTENT" -f sha="$CURRENT_SHA" -f branch='cloudflare-release'
+          echo "RESTORE_ACTIVATION_POINTER_SYNCED=$RECOVERY_IMAGE"
+
       - name: Automatic rollback after failed production gate
         if: failure() && env.RECOVERY_DEPLOYED == '1'
         run: |
