@@ -1,2 +1,50 @@
+# Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node / JavaScript
+node_modules/
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage/
+.cache/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+client_secret*.json
+secrets*.json
+token*.json
+
+# Local databases / user data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# Logs / temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+~$*
+
+# OS / IDE local state
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
