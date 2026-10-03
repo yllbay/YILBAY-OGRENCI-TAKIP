@@ -2,7 +2,6 @@
 from __future__ import annotations
 import contextlib, hashlib, json, os, sqlite3, threading, time, uuid
 from pathlib import Path
-from botocore.exceptions import ClientError
 
 TABLES = ('classes students homework_pool assignments submissions answer_keys '
           'ai_evaluations ai_queue guardians whatsapp_queue whatsapp_templates '
@@ -64,6 +63,7 @@ class R2Objects:
             region_name='auto',config=Config(connect_timeout=10,read_timeout=45,retries={'max_attempts':2}))
     def get(self,key):
         if not key.startswith('ANA_PRG/'): raise ValueError('ANA object namespace required')
+        from botocore.exceptions import ClientError
         try:
             r=self.client.get_object(Bucket=self.bucket,Key=key)
             return r['Body'].read(),r['ETag']
