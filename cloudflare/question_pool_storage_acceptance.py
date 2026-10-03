@@ -259,4 +259,16 @@ with tempfile.TemporaryDirectory() as folder:
         con.commit()
         con.close()
         storage.sync_once(pool_write=True)
+# Background sync performance contract: successful writes do not schedule a
+# duplicate full-tree scan, but failed persistence retries immediately.
+assert storage.BACKGROUND_SYNC_INTERVAL == 30
+storage._wake.clear()
+storage._user_requests = 1
+storage.user_request_finished()
+assert storage._user_requests == 0
+assert not storage._wake.is_set(), 'Successful write scheduled duplicate background scan'
+storage.persistence_failed(RuntimeError('disposable'))
+assert storage._wake.is_set(), 'Persistence failure did not schedule immediate retry'
+storage._wake.clear()
+print('POOL_BACKGROUND_SYNC_DEDUP_RETRY_OK')
 print('POOL_USER_EDITS_DELETES_AUDIT_AUTOMATION_BLOCKED_R2_RESTART_OK')
