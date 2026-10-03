@@ -167,9 +167,10 @@ function homeDashboardHtml(){
  </div></div>`;
 }
 function bindHomeDashboard(){
- document.getElementById("closeBtn").onclick=()=>{};
- document.getElementById("minBtn").onclick=()=>notice("Tarayıcı penceresini küçültmek için işletim sistemi düğmesini kullanın.");
- document.getElementById("maxBtn").onclick=async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch{}};
+ const min=document.getElementById("minBtn");
+ const max=document.getElementById("maxBtn");
+ if(min)min.onclick=()=>notice("Tarayıcı penceresini küçültmek için işletim sistemi düğmesini kullanın.");
+ if(max)max.onclick=async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch{}};
  const question=document.getElementById("homeQuestionStudio");
  if(question)question.onclick=()=>location.assign("/?workspace=1");
 }
@@ -216,6 +217,8 @@ checks = [
     ('İşlemler' in js and 'Seçim Yap' in js, 'dashboard panel 2 missing'),
     ('Durum' in js and 'Sistem' in js, 'dashboard panel 3 missing'),
     ('id="homeQuestionStudio"' in js and 'Soru Stüdyosu' in js, 'Soru Stüdyosu button missing'),
+    ('id="homeCoachingStudio"' not in js and 'id="homeCreateInstitution"' not in js, 'Deferred home actions returned'),
+    ('id="closeBtn"' not in js and '/api/system/shutdown' not in js, 'Unsafe web close action returned'),
     ('location.assign("/?workspace=1")' in js, 'Soru Stüdyosu navigation missing'),
     ('genesisWorkspaceMode()?refresh():render()' in js, 'dashboard bootstrap missing'),
     (MARK_V2 in css and '.home-menu-button' in css, 'dashboard V2 CSS missing'),
