@@ -21,6 +21,12 @@ with sync_playwright() as playwright:
         expect(page.locator('#edgeHomeQuestionStudio')).to_be_visible(timeout=20000)
         expect(page.locator('#edgeHomeCoachingStudio')).to_have_count(0)
         expect(page.locator('#edgeHomeCreateInstitution')).to_have_count(0)
+        close = page.locator('#closeBtn')
+        if close.count():
+            close.click()
+            page.wait_for_timeout(150)
+            assert '/api/system/shutdown' not in mutations, mutations
+            expect(page.locator('#edgeHomeQuestionStudio')).to_be_visible()
         before = context.request.get(BASE + '/api/internal/question-studio-fingerprint').json()
         page.locator('#edgeHomeQuestionStudio').click()
         expect(page.locator('#topicPlus')).to_be_visible(timeout=20000)
