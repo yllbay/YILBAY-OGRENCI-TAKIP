@@ -17,3 +17,5 @@ Add genuine R2 conditional snapshot/file/cold-restore test in an expiring isolat
 Wait for real QA Worker readiness, verify browser PDF upload/student delivery, and add authorized ANA checkpoint/restart with business fingerprint.
 Handle transient newly-created R2 binding route propagation on reads only; retain strict mutation gates and log exceptions.
 Verify real R2 transport error classification and immutable digest; validate teacher password changes and re-login on disposable data.
+
+Fix R2 binding readiness and explicit answer-key values; rerun full ANA acceptance [ana-prg] [pool-candidate]
