@@ -28,7 +28,7 @@ STABLE_OVERLAY = r'''<style id="genesisHomeDashboardEdgeStyle">
 <script id="genesisHomeDashboardEdgeScript">
 /* GENESIS_HOME_DASHBOARD_EDGE_V1 */
 /* GENESIS_CORE_SCOPE_HOME_V4 */
-(()=>{const launcher=document.getElementById("genesisCoreHomeLauncher");const sync=()=>{const home=!!document.querySelector(".genesis.home-dashboard");if(launcher)launcher.hidden=!home;const close=document.getElementById("closeBtn");if(close)close.remove()};sync();const o=new MutationObserver(sync);o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),15000)})();
+(()=>{const launcher=document.getElementById("genesisCoreHomeLauncher");const sync=()=>{const home=!!document.querySelector(".genesis.home-dashboard");if(launcher)launcher.hidden=!home;const genesisCloseControl=document.getElementById("closeBtn");if(genesisCloseControl)genesisCloseControl.remove()};sync();const o=new MutationObserver(sync);o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),15000)})();
 </script>'''
 
 def patch(module: bytes) -> bytes:
@@ -65,5 +65,7 @@ def patch(module: bytes) -> bytes:
     assert 'id="closeBtn"' not in STABLE_OVERLAY
     assert '#closeBtn{display:none!important;pointer-events:none!important}' in text
     assert 'MutationObserver(sync)' in text
+    assert STABLE_OVERLAY.count('const genesisCloseControl=') == 1
+    assert 'const close=' not in STABLE_OVERLAY
     assert 'url.searchParams.get("workspace") !== "1"' in text
     return text.encode("utf-8")
