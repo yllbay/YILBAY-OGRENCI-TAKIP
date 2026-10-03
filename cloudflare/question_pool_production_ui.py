@@ -18,11 +18,20 @@ with sync_playwright() as playwright:
     page.on('request', request_seen)
     try:
         page.goto(BASE + '/', wait_until='domcontentloaded', timeout=45000)
-        launcher = page.locator('#homeQuestionStudio, #edgeHomeQuestionStudio').first
+        launcher = page.locator('#homeQuestionStudio')
         expect(launcher).to_be_visible(timeout=20000)
+        expect(page.locator('#edgeHomeQuestionStudio')).to_have_count(0)
+        expect(page.locator('#genesisCoreHomeLauncher')).to_have_count(0)
         expect(page.locator('#homeCoachingStudio, #edgeHomeCoachingStudio')).to_have_count(0)
         expect(page.locator('#homeCreateInstitution, #edgeHomeCreateInstitution')).to_have_count(0)
         expect(page.locator('#closeBtn')).to_have_count(0)
+        expect(page.locator('.home-dashboard .home-pane')).to_have_count(1)
+        expect(page.locator('.home-dashboard .splitter')).to_have_count(0)
+        expect(page.locator('.home-dashboard .fab')).to_have_count(0)
+        expect(page.locator('.home-dashboard .dots')).to_have_count(0)
+        expect(page.locator('.home-dashboard .home-empty')).to_have_count(0)
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+        page.screenshot(path=str(OUT / 'production-home-clean.png'), full_page=True)
         assert '/api/system/shutdown' not in mutations, mutations
         before = context.request.get(BASE + '/api/internal/question-studio-fingerprint').json()
         launcher.click()
@@ -35,7 +44,7 @@ with sync_playwright() as playwright:
         assert asset.ok, (script_src, asset.status)
         asset_body = asset.text()
         assert 'GENESIS_QUESTION_POOL_USER_OWNED_V2' in asset_body
-        assert 'GENESIS_HOME_DASHBOARD_V2' in asset_body
+        assert 'GENESIS_HOME_DASHBOARD_V3' in asset_body
         response = context.request.get(BASE + '/api/topics')
         assert response.ok and 'no-store' in response.headers.get('cache-control', '')
         splitter = page.locator('#split1')
