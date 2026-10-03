@@ -149,14 +149,20 @@ class Store:
             c=self.connect()
             try:
                 c.execute('BEGIN IMMEDIATE')
+                before_changes=c.total_changes
                 yield c
-                c.execute('INSERT INTO ana_audit_log(actor,event,entity_id,detail,created_at) VALUES(?,?,?,?,?)',
-                          (actor,event,entity_id,'{}',now()))
-                # Persist the consistent serialized transaction before acknowledging
-                # or committing locally. Failed R2 writes roll back ANA rows.
-                self.snapshot(c)
+                # No-op transactions must not create an audit row merely to force
+                # a full R2 snapshot. This removes startup/readiness write churn
+                # while preserving before-ack durability for every real mutation.
+                changed=c.total_changes>before_changes
+                if changed:
+                    c.execute('INSERT INTO ana_audit_log(actor,event,entity_id,detail,created_at) VALUES(?,?,?,?,?)',
+                              (actor,event,entity_id,'{}',now()))
+                    # Persist the consistent serialized transaction before acknowledging
+                    # or committing locally. Failed R2 writes roll back ANA rows.
+                    self.snapshot(c)
                 c.commit()
-            except Exception as e:
+            except Exception:
                 c.rollback()
                 raise
             finally: c.close()
