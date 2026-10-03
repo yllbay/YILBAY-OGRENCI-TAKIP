@@ -1,79 +1,11 @@
-from pathlib import Path
+"""Retired GENESIS home edge-overlay installer.
 
-p=Path("cloudflare/package-runtime/index.js")
-src=p.read_text(encoding="utf-8")
-MARK="GENESIS_HOME_DASHBOARD_EDGE_V1"
-if MARK in src:
-    print("dashboard edge overlay already present")
-    raise SystemExit(0)
+The opening dashboard is native to the container image. Re-introducing a Worker
+HTML/JS overlay causes duplicate controls, stale launchers and split-workspace
+chrome. Keep this file only as an explicit guard for historical workflows.
+"""
 
-needle='''      const upstream = await container.fetch(forwarded);
-      const headers = new Headers(upstream.headers);
-      headers.set("X-Request-ID", requestId);
-      headers.set("X-Content-Type-Options", "nosniff");
-      return new Response(upstream.body, {
-        status: upstream.status,
-        statusText: upstream.statusText,
-        headers
-      });'''
-
-replacement=r'''      const upstream = await container.fetch(forwarded);
-      const headers = new Headers(upstream.headers);
-      headers.set("X-Request-ID", requestId);
-      headers.set("X-Content-Type-Options", "nosniff");
-
-      // GENESIS_HOME_DASHBOARD_EDGE_V1
-      // UI-only overlay: keep the current verified container image untouched.
-      const url = new URL(request.url);
-      const contentType = headers.get("content-type") || "";
-      if (request.method === "GET" && url.pathname === "/" && contentType.includes("text/html")) {
-        let html = await upstream.text();
-        if (!html.includes("GENESIS_HOME_DASHBOARD_EDGE_V1")) {
-          const overlay = String.raw`
-<style id="genesisHomeDashboardEdgeStyle">
-/* GENESIS_HOME_DASHBOARD_EDGE_V1 */
-.genesis.home-dashboard .edge-home-menu{box-sizing:border-box;width:100%;height:100%;display:flex;flex-direction:column;align-items:stretch;gap:12px;padding:24px}
-.genesis.home-dashboard .edge-home-menu button{width:100%;min-height:56px;display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:0 18px;border:1px solid #334a73;border-radius:12px;background:linear-gradient(135deg,#15233d,#101b31);color:#eef3ff;font:inherit;font-size:15px;font-weight:750;letter-spacing:.1px;text-align:left;cursor:pointer;box-shadow:inset 0 1px 0 #ffffff0a;transition:border-color .15s ease,background .15s ease,transform .15s ease}
-.genesis.home-dashboard .edge-home-menu button:hover{border-color:#7058b3;background:linear-gradient(135deg,#1a2c4b,#1c1b3b)}
-.genesis.home-dashboard .edge-home-menu button:active{transform:translateY(1px)}
-.genesis.home-dashboard .edge-home-menu .edge-icon{width:26px;height:26px;flex:0 0 26px;display:grid;place-items:center;border:1px solid #4a5f87;border-radius:8px;color:#b7c6e4;font-size:13px;line-height:1}
-@media(max-width:760px){.genesis.home-dashboard .edge-home-menu{padding:16px}.genesis.home-dashboard .edge-home-menu button{min-height:50px;font-size:14px}}
-#closeBtn{display:none!important;pointer-events:none!important}\n</style>
-<script id="genesisHomeDashboardEdgeScript">
-/* GENESIS_HOME_DASHBOARD_EDGE_V1 */
-(()=>{const install=()=>{if(document.getElementById("edgeHomeQuestionStudio"))return true;
-const pane=document.querySelector(".genesis.home-dashboard .pane.topics .pane-scroll");if(!pane)return false;
-pane.innerHTML='<div class="edge-home-menu"><button type="button" id="edgeHomeQuestionStudio"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></button></div>';
-document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");
-const close=document.getElementById("closeBtn");
-if(close){close.onclick=()=>{};close.title="Web uygulamasında kapatma devre dışı";};
-return true};
-install();const t=setInterval(install,250);setTimeout(()=>clearInterval(t),15000)})();
-</script>`;
-          html = html.includes("</body>") ? html.replace("</body>", overlay + "</body>") : html + overlay;
-          headers.delete("content-length");
-        }
-        headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        return new Response(html, {
-          status: upstream.status,
-          statusText: upstream.statusText,
-          headers
-        });
-      }
-      return new Response(upstream.body, {
-        status: upstream.status,
-        statusText: upstream.statusText,
-        headers
-      });'''
-
-if needle not in src:
-    raise SystemExit("Worker fetch patch point not found")
-p.write_text(src.replace(needle,replacement,1),encoding="utf-8")
-out=p.read_text(encoding="utf-8")
-assert MARK in out
-assert "Soru Stüdyosu" in out
-assert "Koçluk Stüdyosu" not in out
-assert "Kurum Açma" not in out
-assert 'location.assign("/?workspace=1")' in out
-assert '/api/system/shutdown' not in out\nassert 'close.remove()' in out\nassert 'setInterval(install,250)' in out
-print("GENESIS dashboard edge overlay patch: OK")
+raise SystemExit(
+    "RETIRED: home_dashboard_edge.py must not patch production. "
+    "Use cloudflare/home_dashboard.py for the native GENESIS home."
+)
