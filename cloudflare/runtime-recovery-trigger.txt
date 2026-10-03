@@ -63,3 +63,5 @@ Final core release: verified storage sync optimization + V3 safe home + correct 
 Final retry: persist selected image across smoke, wait real new boot, stabilized V3 Soru Studio overlay, optimized storage; ANA/coaching deferred [pool-release] [core-scope]
 
 V4 final core release: body-level stable Soru Studio launcher + verified storage optimization + exact rollback; ANA/coaching deferred [pool-release] [core-scope]
+
+Native core candidate: bake Soru Studio-only home into image + storage sync optimization; no edge dependency; ANA/coaching deferred [pool-candidate] [core-scope]
