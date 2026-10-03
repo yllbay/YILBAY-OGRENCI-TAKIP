@@ -67,3 +67,5 @@ V4 final core release: body-level stable Soru Studio launcher + verified storage
 Native core candidate: bake Soru Studio-only home into image + storage sync optimization; no edge dependency; ANA/coaching deferred [pool-candidate] [core-scope]
 
 Validate fixed native Soru Studio binding plus verified storage optimization; ANA/coaching deferred [pool-candidate] [core-scope]
+
+Validate idempotent native dashboard refresh, Soru Studio binding and storage optimization; ANA/coaching deferred [pool-candidate] [core-scope]
