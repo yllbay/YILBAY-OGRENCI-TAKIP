@@ -386,6 +386,7 @@ jobs:
           unset RECOVERY_WORKER_PACKAGE
           export ANA_PRG_RELEASE=0
           export CORE_ONLY=0
+          export CORE_SCOPE=0
           # Restore both the previous image and its rollout grace so rollback is
           # a real control-plane change even when Cloudflare is eventually consistent.
           export RECOVERY_ROLLOUT_GRACE="$(jq -r '.rollout_active_grace_period // 1' /tmp/recovery/snapshot/container.json)"
