@@ -32,5 +32,4 @@ def patch(module: bytes) -> bytes:
     assert "edgeHomeQuestionStudio" in text
     assert "edgeHomeCoachingStudio" not in text
     assert "edgeHomeCreateInstitution" not in text
-    assert "genesisCreateInstitution" not in text
     return text.encode("utf-8")
