@@ -155,7 +155,7 @@ function homeHeader(type,title,sub){
 function homeDashboardHtml(){
  return `<div class="genesis home-dashboard">
  <div class="titlebar"><div class="brand-logo">${logo()}</div><div class="brand-copy"><div class="brand-name">GENESIS</div><div class="brand-sub">Akıllı Test Bankası Yönetim Sistemi</div></div>
- <div class="window-controls"><button class="win-btn" id="minBtn">−</button><button class="win-btn" id="maxBtn">□</button><button class="win-btn close" id="closeBtn" title="Sekmeyi kapat">×</button></div></div>
+ <div class="window-controls"><button class="win-btn" id="minBtn">−</button><button class="win-btn" id="maxBtn">□</button></div></div>
  <div class="workspace" id="workspace">
  <section class="pane topics home-pane">${homeHeader("topics","Yönetim Paneli","Genel Bakış")}<div class="pane-body"><div class="pane-scroll"><div class="home-menu">
    <button type="button" class="home-menu-button" id="homeQuestionStudio"><span class="home-menu-icon">▤</span><span>Soru Stüdyosu</span></button>
