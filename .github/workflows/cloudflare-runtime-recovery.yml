@@ -136,6 +136,9 @@ jobs:
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/runtime_recovery_install.py
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/question_pool_protection_install.py
           GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/question_pool_user_permissions_install.py
+          if [ "$CORE_SCOPE" = "1" ]; then
+            GENESIS_APP_ROOT="$ROOT/APP" python3 cloudflare/home_dashboard.py
+          fi
           if [ "$ANA_PRG_RELEASE" = "1" ]; then
             GENESIS_CONTAINER_ROOT="$ROOT" python3 cloudflare/ana_prg_install.py
             python3 -m pip install --quiet --disable-pip-version-check fastapi==0.116.1 python-multipart==0.0.20 httpx Pillow PyMuPDF
