@@ -53,3 +53,5 @@ Core-only release final retry: worker-only home cleanup, no container rollout, e
 Core-only V2 release: safe home close action, V1->V2 worker upgrade, verified Soru Studio only; preserve CURRENT question DB/R2 [pool-release] [core-only]
 
 Storage candidate: deduplicate post-write sync, 30s idle safety poll, immediate failure retry; preserve all Question Studio invariants [pool-candidate]
+
+Core-only V2 final: strict no-op close, V1->V2 edge upgrade, only verified Soru Studio action; preserve CURRENT pool [pool-release] [core-only]
