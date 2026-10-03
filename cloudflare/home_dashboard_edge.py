@@ -46,7 +46,7 @@ const pane=document.querySelector(".genesis.home-dashboard .pane.topics .pane-sc
 pane.innerHTML='<div class="edge-home-menu"><button type="button" id="edgeHomeQuestionStudio"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></button></div>';
 document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");
 const close=document.getElementById("closeBtn");
-if(close)close.onclick=()=>{if(typeof window.notice==="function")window.notice("Bu bir web uygulamasıdır. Sekmeyi tarayıcıdan kapatabilirsiniz.");};
+if(close){close.onclick=()=>{};close.title="Web uygulamasında kapatma devre dışı";};
 return true};
 if(!install()){const o=new MutationObserver(()=>{if(install())o.disconnect()});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),15000)}})();
 </script>`;
