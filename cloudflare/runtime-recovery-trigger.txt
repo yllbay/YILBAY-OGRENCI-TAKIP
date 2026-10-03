@@ -21,3 +21,5 @@ Verify real R2 transport error classification and immutable digest; validate tea
 Fix R2 binding readiness and explicit answer-key values; rerun full ANA acceptance [ana-prg] [pool-candidate]
 
 Final ANA repair candidate: R2 readiness, answer-key values, no-op snapshot suppression [ana-prg] [pool-candidate]
+
+Final hardened ANA candidate: R2 ClientError handling and zero-assignment reporting [ana-prg] [pool-candidate]
