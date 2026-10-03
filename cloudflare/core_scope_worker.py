@@ -20,6 +20,16 @@ def patch(module: bytes) -> bytes:
     elif core_button not in text:
         raise RuntimeError("GENESIS home edge button block changed")
 
+    # Normalize the installer itself so the edge menu wins over late native rerenders.
+    text = text.replace(
+        'if(document.getElementById("homeQuestionStudio")||document.getElementById("edgeHomeQuestionStudio"))return true;',
+        'if(document.getElementById("edgeHomeQuestionStudio"))return true;'
+    )
+    text = text.replace(
+        'if(!install()){const o=new MutationObserver(()=>{if(install())o.disconnect()});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),15000)}})();',
+        'install();const t=setInterval(install,250);setTimeout(()=>clearInterval(t),15000)})();'
+    )
+
     legacy_handlers = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");\ndocument.getElementById("edgeHomeCoachingStudio").onclick=()=>location.assign("/coaching");\ndocument.getElementById("edgeHomeCreateInstitution").onclick=()=>{if(typeof window.genesisCreateInstitution==="function"){window.genesisCreateInstitution();return}if(typeof window.notice==="function")window.notice("Kurum Açma ekranı şu anda kullanılamıyor.");};'
     q_handler = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");'
     v2_handlers = q_handler + '\nconst close=document.getElementById("closeBtn");if(close)close.onclick=()=>{if(typeof window.notice==="function")window.notice("Bu bir web uygulamasıdır. Sekmeyi tarayıcıdan kapatabilirsiniz.");};'
@@ -59,6 +69,7 @@ def patch(module: bytes) -> bytes:
     assert "edgeHomeCreateInstitution" not in text
     assert 'api("/api/system/shutdown"' not in text
     assert 'close.remove()' in text
+    assert 'setInterval(install,250)' in text
     assert '#closeBtn{display:none!important;pointer-events:none!important}' in text
     assert MARKER in text
     return text.encode("utf-8")
