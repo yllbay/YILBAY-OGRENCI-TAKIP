@@ -213,4 +213,4 @@ checks = [
 for ok,msg in checks:
     if not ok:
         raise SystemExit(msg)
-print('GENESIS opening dashboard V2 patch: OK')
+print('GENESIS opening dashboard V3 patch: OK')
