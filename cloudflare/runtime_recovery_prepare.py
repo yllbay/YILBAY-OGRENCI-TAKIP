@@ -11,7 +11,7 @@ saved_package = os.environ.get('RECOVERY_WORKER_PACKAGE')
 source = Path(saved_package) if saved_package else snapshot
 module = worker_module((source/'worker.bin').read_bytes())
 # Core GENESIS scope: deferred/unimplemented launch actions must not appear as live features.
-if os.environ.get('CORE_ONLY')=='1':
+if os.environ.get('CORE_ONLY')=='1' or os.environ.get('CORE_SCOPE')=='1':
     from core_scope_worker import patch as patch_core_scope
     module = patch_core_scope(module)
 if os.environ.get('ANA_PRG_RELEASE')=='1':
