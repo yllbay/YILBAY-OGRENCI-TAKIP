@@ -22,7 +22,7 @@ def patch(module: bytes) -> bytes:
 
     legacy_handlers = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");\ndocument.getElementById("edgeHomeCoachingStudio").onclick=()=>location.assign("/coaching");\ndocument.getElementById("edgeHomeCreateInstitution").onclick=()=>{if(typeof window.genesisCreateInstitution==="function"){window.genesisCreateInstitution();return}if(typeof window.notice==="function")window.notice("Kurum Açma ekranı şu anda kullanılamıyor.");};'
     v1_handlers = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");'
-    v2_handlers = v1_handlers + '\nconst close=document.getElementById("closeBtn");if(close)close.onclick=()=>{if(typeof window.notice==="function")window.notice("Bu bir web uygulamasıdır. Sekmeyi tarayıcıdan kapatabilirsiniz.");};'
+    v2_handlers = v1_handlers + '\nconst close=document.getElementById("closeBtn");if(close){close.onclick=()=>{};close.title="Web uygulamasında kapatma devre dışı";};'
     if legacy_handlers in text:
         text = text.replace(legacy_handlers, v2_handlers, 1)
     elif v2_handlers not in text:
