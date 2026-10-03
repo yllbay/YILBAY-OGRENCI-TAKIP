@@ -1,10 +1,35 @@
 """Keep the GENESIS edge home limited to verified core actions.
 
-Pure Worker-source transform. Does not touch DB, R2 or container data.
-Supports upgrading deployed V1/V2 overlays to V3.
+V4 replaces the fragile pane mutation with a body-level launcher that survives
+native root re-renders. Pure Worker-source transform; no DB/R2 mutation.
 """
-MARKER = "GENESIS_CORE_SCOPE_HOME_V3"
-OLD_MARKERS = ("GENESIS_CORE_SCOPE_HOME_V1", "GENESIS_CORE_SCOPE_HOME_V2")
+import re
+
+MARKER = "GENESIS_CORE_SCOPE_HOME_V4"
+OLD_MARKERS = (
+    "GENESIS_CORE_SCOPE_HOME_V1",
+    "GENESIS_CORE_SCOPE_HOME_V2",
+    "GENESIS_CORE_SCOPE_HOME_V3",
+)
+
+STABLE_OVERLAY = r'''<style id="genesisHomeDashboardEdgeStyle">
+/* GENESIS_HOME_DASHBOARD_EDGE_V1 */
+/* GENESIS_CORE_SCOPE_HOME_V4 */
+#genesisCoreHomeLauncher{position:fixed;z-index:2147483000;left:24px;top:118px;width:min(340px,calc(100vw - 48px));box-sizing:border-box;padding:18px;border:1px solid #334a73;border-radius:14px;background:#101b31;box-shadow:0 14px 40px #0008}
+#genesisCoreHomeLauncher[hidden]{display:none!important}
+#genesisCoreHomeLauncher .edge-home-title{margin:0 0 12px;color:#9aa6c2;font:600 12px/1.2 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+#genesisCoreHomeLauncher a{box-sizing:border-box;width:100%;min-height:56px;display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:0 18px;border:1px solid #4a5f87;border-radius:12px;background:linear-gradient(135deg,#15233d,#101b31);color:#eef3ff;text-decoration:none;font:750 15px/1 system-ui,sans-serif}
+#genesisCoreHomeLauncher a:hover{border-color:#7058b3;background:linear-gradient(135deg,#1a2c4b,#1c1b3b)}
+#genesisCoreHomeLauncher .edge-icon{width:26px;height:26px;flex:0 0 26px;display:grid;place-items:center;border:1px solid #4a5f87;border-radius:8px;color:#b7c6e4;font-size:13px}
+#closeBtn{display:none!important;pointer-events:none!important}
+@media(max-width:760px){#genesisCoreHomeLauncher{left:16px;top:104px;width:calc(100vw - 32px);padding:14px}}
+</style>
+<div id="genesisCoreHomeLauncher" hidden aria-label="GENESIS ana menü"><div class="edge-home-title">Yönetim Paneli</div><a id="edgeHomeQuestionStudio" href="/?workspace=1"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></a></div>
+<script id="genesisHomeDashboardEdgeScript">
+/* GENESIS_HOME_DASHBOARD_EDGE_V1 */
+/* GENESIS_CORE_SCOPE_HOME_V4 */
+(()=>{const launcher=document.getElementById("genesisCoreHomeLauncher");const sync=()=>{const home=!!document.querySelector(".genesis.home-dashboard");if(launcher)launcher.hidden=!home;const close=document.getElementById("closeBtn");if(close)close.remove()};sync();const o=new MutationObserver(sync);o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),15000)})();
+</script>'''
 
 def patch(module: bytes) -> bytes:
     text = module.decode("utf-8")
@@ -13,63 +38,32 @@ def patch(module: bytes) -> bytes:
     if "GENESIS_HOME_DASHBOARD_EDGE_V1" not in text:
         raise RuntimeError("GENESIS home edge overlay marker missing")
 
-    legacy_buttons = '<button type="button" id="edgeHomeQuestionStudio"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></button><button type="button" id="edgeHomeCoachingStudio"><span class="edge-icon">◈</span><span>Koçluk Stüdyosu</span></button><button type="button" id="edgeHomeCreateInstitution"><span class="edge-icon">＋</span><span>Kurum Açma</span></button>'
-    core_button = '<button type="button" id="edgeHomeQuestionStudio"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></button>'
-    if legacy_buttons in text:
-        text = text.replace(legacy_buttons, core_button, 1)
-    elif core_button not in text:
-        raise RuntimeError("GENESIS home edge button block changed")
-
-    # Normalize the installer itself so the edge menu wins over late native rerenders.
-    text = text.replace(
-        'if(document.getElementById("homeQuestionStudio")||document.getElementById("edgeHomeQuestionStudio"))return true;',
-        'if(document.getElementById("edgeHomeQuestionStudio"))return true;'
+    # The overlay lives inside a String.raw template. Replace its complete
+    # style/launcher/script payload so previous V1-V3 timing assumptions cannot leak.
+    pattern = re.compile(
+        r'<style id="genesisHomeDashboardEdgeStyle">.*?</script>',
+        re.S,
     )
-    text = text.replace(
-        'if(!install()){const o=new MutationObserver(()=>{if(install())o.disconnect()});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),15000)}})();',
-        'install();const t=setInterval(install,250);setTimeout(()=>clearInterval(t),15000)})();'
-    )
+    text, count = pattern.subn(STABLE_OVERLAY, text, count=1)
+    if count != 1:
+        raise RuntimeError(f"GENESIS edge overlay replacement failed: {count}")
 
-    legacy_handlers = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");\ndocument.getElementById("edgeHomeCoachingStudio").onclick=()=>location.assign("/coaching");\ndocument.getElementById("edgeHomeCreateInstitution").onclick=()=>{if(typeof window.genesisCreateInstitution==="function"){window.genesisCreateInstitution();return}if(typeof window.notice==="function")window.notice("Kurum Açma ekranı şu anda kullanılamıyor.");};'
-    q_handler = 'document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");'
-    v2_handlers = q_handler + '\nconst close=document.getElementById("closeBtn");if(close)close.onclick=()=>{if(typeof window.notice==="function")window.notice("Bu bir web uygulamasıdır. Sekmeyi tarayıcıdan kapatabilirsiniz.");};'
-    v3_handlers = q_handler + '\nconst close=document.getElementById("closeBtn");if(close)close.remove();'
-    if legacy_handlers in text:
-        text = text.replace(legacy_handlers, v3_handlers, 1)
-    elif v2_handlers in text:
-        text = text.replace(v2_handlers, v3_handlers, 1)
-    elif v3_handlers not in text:
-        if q_handler not in text:
-            raise RuntimeError("GENESIS home edge handler block changed")
-        text = text.replace(q_handler, v3_handlers, 1)
+    # Do not inject the launcher into workspace mode; the native workspace owns that page.
+    condition = 'request.method === "GET" && url.pathname === "/" && contentType.includes("text/html")'
+    scoped = 'request.method === "GET" && url.pathname === "/" && url.searchParams.get("workspace") !== "1" && contentType.includes("text/html")'
+    if scoped not in text:
+        if condition not in text:
+            raise RuntimeError("GENESIS root overlay condition changed")
+        text = text.replace(condition, scoped, 1)
 
-    # Defense in depth: even if native code re-renders the titlebar, the close
-    # control remains invisible and cannot receive pointer events.
-    style_anchor = '</style>'
-    if '#closeBtn{display:none!important;pointer-events:none!important}' not in text:
-        if style_anchor not in text:
-            raise RuntimeError("GENESIS edge style block missing")
-        text = text.replace(style_anchor, '#closeBtn{display:none!important;pointer-events:none!important}\n</style>', 1)
-
-    inserted = False
     for old in OLD_MARKERS:
-        marker = f"/* {old} */"
-        if marker in text:
-            text = text.replace(marker, marker + f"\n/* {MARKER} */", 1)
-            inserted = True
-            break
-    if not inserted:
-        anchor = '/* GENESIS_HOME_DASHBOARD_EDGE_V1 */\n(()=>{'
-        if anchor not in text:
-            raise RuntimeError("GENESIS edge script anchor missing")
-        text = text.replace(anchor, f'/* GENESIS_HOME_DASHBOARD_EDGE_V1 */\n/* {MARKER} */\n(()=>{{', 1)
-
-    assert "edgeHomeQuestionStudio" in text
+        text = text.replace(f"/* {old} */", f"/* {old} */")
+    assert MARKER in text
+    assert 'id="edgeHomeQuestionStudio"' in text
     assert "edgeHomeCoachingStudio" not in text
     assert "edgeHomeCreateInstitution" not in text
-    assert 'api("/api/system/shutdown"' not in text
-    assert 'close.remove()' in text
-    assert 'setInterval(install,250)' in text
+    assert 'id="closeBtn"' not in STABLE_OVERLAY
     assert '#closeBtn{display:none!important;pointer-events:none!important}' in text
-    assert MARKER in text
+    assert 'MutationObserver(sync)' in text
+    assert 'url.searchParams.get("workspace") !== "1"' in text
     return text.encode("utf-8")
