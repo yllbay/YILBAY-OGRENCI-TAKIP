@@ -14,6 +14,16 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True)
+    home_context = browser.new_context(viewport={'width': 1440, 'height': 900})
+    home_page = home_context.new_page()
+    home_page.goto(BASE + '/', wait_until='domcontentloaded')
+    expect(home_page.locator('#homeQuestionStudio')).to_be_visible(timeout=20000)
+    expect(home_page.locator('#homeCoachingStudio')).to_have_count(0)
+    expect(home_page.locator('#homeCreateInstitution')).to_have_count(0)
+    expect(home_page.locator('#closeBtn')).to_have_count(0)
+    home_page.locator('#homeQuestionStudio').click()
+    expect(home_page.locator('#topicPlus')).to_be_visible(timeout=20000)
+    home_context.close()
     contexts = [browser.new_context(viewport={'width': 1440, 'height': 900}) for _ in range(2)]
     pages = []
     errors = []
