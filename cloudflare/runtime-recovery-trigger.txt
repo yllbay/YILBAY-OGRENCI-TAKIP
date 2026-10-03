@@ -27,3 +27,5 @@ Final hardened ANA candidate: R2 ClientError handling and zero-assignment report
 Deterministic R2 CAS probe after no-op snapshot optimization [ana-prg] [pool-candidate]
 
 Retry only verified pre-handler Cloudflare 1042 writes in isolated ANA QA [ana-prg] [pool-candidate]
+
+Lazy-load botocore ClientError after transport-safe R2 acceptance [ana-prg] [pool-candidate]
