@@ -25,3 +25,5 @@ Final ANA repair candidate: R2 readiness, answer-key values, no-op snapshot supp
 Final hardened ANA candidate: R2 ClientError handling and zero-assignment reporting [ana-prg] [pool-candidate]
 
 Deterministic R2 CAS probe after no-op snapshot optimization [ana-prg] [pool-candidate]
+
+Retry only verified pre-handler Cloudflare 1042 writes in isolated ANA QA [ana-prg] [pool-candidate]
