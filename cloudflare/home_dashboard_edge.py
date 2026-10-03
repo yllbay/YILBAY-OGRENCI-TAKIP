@@ -43,7 +43,7 @@ replacement=r'''      const upstream = await container.fetch(forwarded);
 /* GENESIS_HOME_DASHBOARD_EDGE_V1 */
 (()=>{const install=()=>{if(document.getElementById("homeQuestionStudio")||document.getElementById("edgeHomeQuestionStudio"))return true;
 const pane=document.querySelector(".genesis.home-dashboard .pane.topics .pane-scroll");if(!pane)return false;
-pane.innerHTML='<div class="edge-home-menu"><button type="button" id="edgeHomeQuestionStudio"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></button><button type="button" id="edgeHomeCoachingStudio"><span class="edge-icon">◈</span><span>Koçluk Stüdyosu</span></button><button type="button" id="edgeHomeCreateInstitution"><span class="edge-icon">＋</span><span>Kurum Açma</span></button></div>';
+pane.innerHTML='<div class="edge-home-menu"><button type="button" id="edgeHomeQuestionStudio"><span class="edge-icon">▤</span><span>Soru Stüdyosu</span></button></div>';
 document.getElementById("edgeHomeQuestionStudio").onclick=()=>location.assign("/?workspace=1");
 document.getElementById("edgeHomeCoachingStudio").onclick=()=>location.assign("/coaching");
 document.getElementById("edgeHomeCreateInstitution").onclick=()=>{if(typeof window.genesisCreateInstitution==="function"){window.genesisCreateInstitution();return}if(typeof window.notice==="function")window.notice("Kurum Açma ekranı şu anda kullanılamıyor.");};
