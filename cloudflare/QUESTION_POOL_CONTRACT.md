@@ -47,6 +47,19 @@ soru tabloları içe aktarılmaz. Ana snapshot güncellemesinde R2 ETag koşulu,
 başka bir havuz revizyonunun eski kopyayla üzerine yazılmasını engeller.
 Drive varsa ikincil kopyadır; eski silinmiş soru havuzu geri getirilmez.
 
+## GENESIS çekirdek-only yayın kuralı
+
+ANA PRG veya Koçluk kapsam dışı bırakıldığında `[core-only]` yayın yolu
+kullanılır. Bu yol yeni bir container image seçmez; o anda gerçekten production'da
+çalışan doğrulanmış image'ı korur ve yalnız Worker/UI katmanındaki çekirdek değişikliği
+yayınlar. Ertelenmiş Koçluk endpoint'leri core release gate'ine dahil edilmez.
+Worker-only değişiklik container restart/boot-id değişimi gerektirmez.
+
+Rollback, core patch'i yeniden uygulamaz; yayın öncesi Worker kaynağına geri döner.
+Başarılı `[pool-restore]` sonrasında `runtime-activation-image.txt` doğrulanmış
+restore image digest'iyle otomatik senkronlanır. Böylece eski candidate image'ın
+sonraki yayında yanlışlıkla seçilmesi engellenir.
+
 ## Geliştirme ve yayın
 
 Tek etkin üretim yolu `.github/workflows/cloudflare-runtime-recovery.yml`'dir.
