@@ -120,7 +120,8 @@ assert not request(second,'/api/test-tree')
 test_folder=request(first,'/api/classes',{'name':'Gecici Sinif Dosyasi','parent_id':None})
 assert request(second,'/api/test-tree')[0]['id']==test_folder['id']
 assert 'GENESIS_QUESTION_POOL_USER_OWNED_V2' in request(first,'/static/app-0.10.7.js').decode()
-for route in ('/api/coaching/v3/classes', '/api/coaching/v3/curriculum', '/api/coaching/v2/students'):
-    request(first, route, expected=410 if os.environ.get('ANA_PRG_RELEASE')=='1' else 200)
+if os.environ.get('CORE_ONLY')!='1':
+    for route in ('/api/coaching/v3/classes', '/api/coaching/v3/curriculum', '/api/coaching/v2/students'):
+        request(first, route, expected=410 if os.environ.get('ANA_PRG_RELEASE')=='1' else 200)
 request(first, '/api/online/internet-test/genesis-audit-invalid-token', expected=404)
 print('DISPOSABLE_USER_FOLDER_QUESTION_EXAM_EDITS_DELETES_TWO_SESSIONS_OK')
