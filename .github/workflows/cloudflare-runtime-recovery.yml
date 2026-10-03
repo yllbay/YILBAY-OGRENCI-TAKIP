@@ -204,7 +204,7 @@ jobs:
           done
           docker cp cloudflare/question_pool_acceptance.py genesis-pool-ui:/tmp/question_pool_acceptance.py
           docker exec -e ANA_PRG_RELEASE="$ANA_PRG_RELEASE" genesis-pool-ui python /tmp/question_pool_acceptance.py
-          python3 -m pip install --quiet --disable-pip-version-check playwright
+          python3 -m pip install --quiet --disable-pip-version-check playwright PyMuPDF
           python3 -m playwright install --with-deps chromium
           python3 cloudflare/question_pool_ui_acceptance.py
           if [ "$ANA_PRG_RELEASE" = "1" ]; then
