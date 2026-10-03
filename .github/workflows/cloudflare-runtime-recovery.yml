@@ -247,6 +247,7 @@ jobs:
             RECOVERY_IMAGE="$(cat cloudflare/runtime-activation-image.txt)"
             export RECOVERY_IMAGE
           fi
+          echo "RECOVERY_IMAGE=$RECOVERY_IMAGE" >> "$GITHUB_ENV"
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
           curl -fsS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/health-before-restart.json || true
           if jq -e '.runtime=="GENESIS_LOCAL_SQLITE_R2_V1"' /tmp/recovery/snapshot/health-before-restart.json >/dev/null 2>&1; then
