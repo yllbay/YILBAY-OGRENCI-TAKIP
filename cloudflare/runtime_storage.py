@@ -31,8 +31,9 @@ _journal_seq = 0
 _asset_deletions = set()
 _user_requests = 0
 OPERATIONS_KEY = '_runtime/operations.db'
+BACKGROUND_SYNC_INTERVAL = 30
 _status = {'mode': 'local-r2', 'restored': False, 'last_sync': None, 'last_error': None,
-           'boot_id': uuid.uuid4().hex}
+           'boot_id': uuid.uuid4().hex, 'background_sync_interval': BACKGROUND_SYNC_INTERVAL}
 
 
 def _safe_path(key):
@@ -405,15 +406,21 @@ def sync_once(pool_write=False):
 
 
 def _run():
+    first = True
     while not _stop.is_set():
+        if first:
+            first = False
+        else:
+            _wake.wait(BACKGROUND_SYNC_INTERVAL)
+            _wake.clear()
+            if _stop.is_set():
+                break
         try:
             sync_once()
         except Exception as error:
             code = getattr(error, 'response', {}).get('Error', {}).get('Code')
             _status['last_error'] = code or type(error).__name__
             print(MARKER, 'sync_error', _status['last_error'], flush=True)
-        _wake.wait(3)
-        _wake.clear()
 
 
 def start():
@@ -435,11 +442,14 @@ def user_request_started():
 def user_request_finished():
     global _user_requests
     _user_requests -= 1
-    changed()
+    # Successful user mutations are already synchronously persisted by middleware.
+    # Do not immediately rescan the whole DATA tree a second time.
 
 
 def persistence_failed(error):
     _status['last_error'] = type(error).__name__
+    # Failed persistence must retry without waiting for the safety interval.
+    _wake.set()
 
 
 def stop():
