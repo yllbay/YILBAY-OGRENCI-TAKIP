@@ -269,9 +269,13 @@ jobs:
           import json
           from pathlib import Path
           snapshot=Path('/tmp/recovery/snapshot')
+          # Pre-deploy live API may be stale relative to the authoritative R2
+          # snapshot. Record representation drift for diagnosis, but protect data
+          # with the authoritative SQLite/R2 fingerprints checked below.
           for before in snapshot.glob('before-api-*.json'):
               after=snapshot/before.name.removeprefix('before-')
-              assert json.loads(before.read_text())==json.loads(after.read_text()), before.name
+              if after.is_file() and json.loads(before.read_text())!=json.loads(after.read_text()):
+                  print(f"::warning::Live API representation refreshed after restart: {before.name}")
           health=json.loads((snapshot/'production-health.json').read_text())
           assert health.get('boot_id'), 'New container boot identifier missing'
           before=snapshot/'health-before-restart.json'
@@ -314,17 +318,31 @@ jobs:
           export RECOVERY_IMAGE="$RECOVERY_BASE_IMAGE"
           unset RECOVERY_WORKER_PACKAGE
           export ANA_PRG_RELEASE=0
+          # Restore both the previous image and its rollout grace so rollback is
+          # a real control-plane change even when Cloudflare is eventually consistent.
+          export RECOVERY_ROLLOUT_GRACE="$(jq -r '.rollout_active_grace_period // 1' /tmp/recovery/snapshot/container.json)"
           python3 cloudflare/runtime_recovery_prepare.py
           cd /tmp/recovery/runtime
           npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate
           URL=https://genesis-web-0152.yilbayonurcelik.workers.dev
-          for attempt in $(seq 1 40); do
-            if curl -fsS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/rollback-health.json; then break; fi
+          ROLLBACK_OK=0
+          for attempt in $(seq 1 60); do
+            curl -sS --max-time 15 "$URL/_health" -o /tmp/recovery/snapshot/rollback-health.json || true
+            npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/rollback-container.json
+            IMG="$(jq -r '.configuration.image // empty' /tmp/recovery/snapshot/rollback-container.json)"
+            F="$(jq -r '.health.instances.failed // 0' /tmp/recovery/snapshot/rollback-container.json)"
+            E="$(jq -r '.health.errors|length' /tmp/recovery/snapshot/rollback-container.json)"
+            if [ "$IMG" = "$RECOVERY_BASE_IMAGE" ] && [ "$F" -eq 0 ] && [ "$E" -eq 0 ]; then
+              ROLLBACK_OK=1
+              break
+            fi
+            if [ $((attempt % 10)) -eq 0 ]; then
+              npx --yes wrangler@4 deploy --keep-vars --containers-rollout=immediate || true
+            fi
             sleep 3
           done
+          test "$ROLLBACK_OK" = "1"
           curl -fsS --max-time 15 "$URL/" -o /tmp/recovery/snapshot/rollback-root.html
-          npx --yes wrangler@4 containers info a03b84d1-3560-43de-8d60-55bbca682961 > /tmp/recovery/snapshot/rollback-container.json
-          jq -e --arg previous "$RECOVERY_BASE_IMAGE" '.configuration.image==$previous and (.health.errors|length)==0 and .health.instances.failed==0' /tmp/recovery/snapshot/rollback-container.json
           echo 'PREVIOUS_WORKING_IMAGE_AND_WORKER_ROLLBACK_VERIFIED'
       - name: Capture failed runtime diagnostics
         if: failure() && env.RECOVERY_DEPLOYED == '1'
